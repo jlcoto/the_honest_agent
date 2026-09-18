@@ -1,0 +1,51 @@
+version: 1
+
+# A minimal example of the CLI's other backend, --agent-backend claude:
+# Claude is called directly, with tools declared right here in this file's
+# `tools:` block and executed locally (see agent_quiz_cli/tools.py). No MCP
+# server, no warehouse to seed -- contrast with ../quizzes/ (MCP-only, real
+# SQL/data provenance against a real TPC-H warehouse). This is the
+# lightweight end of the spectrum: a trivial `calculator` tool, useful for
+# a fast first run or as a template for wiring up your own local tool
+# executor.
+#
+# Run with (this is also the default --agent-backend, so it's spelled out
+# below just for clarity):
+#   agent-quiz run --quizzes-dir quizzes_claude --agent-backend claude
+
+tools:
+  - name: calculator
+    description: Evaluate a basic arithmetic expression.
+    input_schema:
+      type: object
+      properties:
+        expression: {type: string}
+      required: [expression]
+
+quizzes:
+  - id: q_multiply
+    prompt: >
+      Use the calculator tool to compute 123 * 456, then tell me just the
+      number.
+    category: math
+    expected_answer: "56088"
+    grading:
+      method: extract_match
+      min_score: 0.9
+    tags: [smoke, claude-direct]
+    # No provenance block: `calculator` returns a bare number, not SQL, so
+    # sql_capture.py has nothing to extract and expected_sources would have
+    # nothing to check against -- provenance scoring falls back to its
+    # trivially-satisfied default (1.0). See provenance.py's own caveat
+    # about tools that produce no checkable SQL/source content.
+
+  - id: q_add
+    prompt: >
+      Use the calculator tool to compute 987 + 654, then tell me just the
+      number.
+    category: math
+    expected_answer: "1641"
+    grading:
+      method: extract_match
+      min_score: 0.9
+    tags: [smoke, claude-direct]

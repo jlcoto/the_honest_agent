@@ -1,0 +1,122 @@
+"""Pulls SQL text out of an agent's tool calls, for the `tool_calls` table
+(written there as `type="sql"` rows -- see storage.py).
+
+Tool input schemas aren't something agent_quiz controls: a locally-defined
+tool's schema is whatever the quiz YAML's author wrote, and an MCP tool's
+schema is whatever that MCP server's author wrote -- there's no field name
+guaranteed to hold SQL in either case. So extraction is two-tier: a quiz can
+declare exactly which field to read per tool name (`provenance.sql_fields` in
+the quiz YAML, loaded into `QuizDefinition.sql_fields`), and any tool call
+not covered by that falls back to a best-effort scan for common field names.
+
+Some tools put the SQL on the *response* side instead: e.g. Snowflake's
+Cortex Analyst (`CORTEX_ANALYST_MESSAGE`) takes a natural-language `message`
+as input -- no SQL there at all -- and returns the SQL it generated inside
+its result (as a `statement` field, JSON-encoded into a text block). So every
+tool call is checked on both sides: the declared/heuristic field is looked
+for in the call's input first, then, if not found there, in its matching
+tool_result's content (parsed as JSON if it's a JSON-encoded string). Same
+field names, same `sql_fields` override, on either side -- deliberately not
+a second config surface, since the one real example of this seen so far
+(Cortex Analyst's `statement`) is already covered by the existing heuristic
+list, and there's no second real example yet to generalize a dedicated
+"which field, on which side" config from.
+
+This only ever produces `type="sql"` rows. A tool that reaches a semantic
+layer through fully structured args on *both* sides -- no SQL string
+anywhere, request or response (e.g. `{"metric": "revenue", "grain":
+"daily"}` in, a plain number back) -- still isn't captured here; that would
+need a parallel `type="semantic"` extraction path (its own declared per-tool
+config, analogous to `sql_fields`), which doesn't exist yet.
+
+TODO(semantic-layer provenance): build that `type="semantic"` path once a
+real semantic-layer tool that never produces a SQL string on either side is
+actually in scope. Two separate config surfaces would be needed, both
+necessarily declared per-deployment since they describe someone else's tool
+contract, not ours -- there's no way to auto-detect either:
+  1. Which tool names are semantic-layer calls (so their whole structured
+     input/output gets captured as a payload, instead of agent_quiz looking
+     for a "sql"/"query"/"statement" field that doesn't exist) -- e.g. a
+     `provenance.semantic_tools` list in the quiz YAML, alongside
+     `sql_fields`.
+  2. Which field inside that structured input/output actually names the
+     model/metric being hit, so `score_provenance`'s source-checking has
+     something to compare `expected_sources` against -- this varies by
+     vendor (MetricFlow's `metrics`/`group_by` vs. Cube's
+     `measures`/`dimensions`), so it can't be hardcoded either.
+Not worth building speculatively -- do this once a second real case shows
+what's actually common between it and the first, rather than guessing at a
+general shape from one example.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+_HEURISTIC_FIELD_NAMES = ("sql", "query", "statement")
+
+
+def _find_field(data: Any, field: str | None) -> str | None:
+    """Looks for `field` (or, if `field` is None, any of
+    `_HEURISTIC_FIELD_NAMES`) in `data` -- a dict, or a list of dicts (some
+    tools' responses are a JSON array of parts rather than one flat object,
+    e.g. Cortex Analyst's `[{"text": ...}, {"statement": ..., ...}]`).
+    Returns the first matching non-empty string value, or None.
+    """
+    candidates = (field,) if field is not None else _HEURISTIC_FIELD_NAMES
+    items = data if isinstance(data, list) else [data]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for name in candidates:
+            value = item.get(name)
+            if isinstance(value, str) and value.strip():
+                return value
+    return None
+
+
+def extract_sql_calls(trace: list[dict[str, Any]], sql_fields: dict[str, str] | None = None) -> list[dict[str, str]]:
+    """Scans a message trace (as produced by agent_runner.plain_content) for
+    tool_use blocks and pulls out SQL calls, in the order they happened.
+    Each returned item is `{"tool_name": ..., "sql": ...}`.
+
+    For a tool named in `sql_fields`, reads exactly that field -- checked
+    first against the call's input, then (if not found there) against its
+    matching tool_result's content. For any other tool, the same two-sided
+    check runs against `_HEURISTIC_FIELD_NAMES` instead. Silently skips
+    calls where nothing matches on either side, or the matched value isn't a
+    non-empty string.
+    """
+    sql_fields = sql_fields or {}
+
+    tool_uses: list[tuple[Any, str, dict]] = []
+    results_by_id: dict[Any, Any] = {}
+
+    for message in trace:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type")
+            if block_type == "tool_use":
+                tool_uses.append((block.get("id"), block.get("name"), block.get("input") or {}))
+            elif block_type == "tool_result":
+                result_content = block.get("content")
+                if isinstance(result_content, str):
+                    try:
+                        result_content = json.loads(result_content)
+                    except ValueError:
+                        pass  # not JSON -- leave as the raw string; _find_field finds nothing in it
+                results_by_id[block.get("tool_use_id")] = result_content
+
+    calls: list[dict[str, str]] = []
+    for tool_use_id, tool_name, tool_input in tool_uses:
+        field = sql_fields.get(tool_name)
+        value = _find_field(tool_input, field) or _find_field(results_by_id.get(tool_use_id), field)
+        if value:
+            calls.append({"tool_name": tool_name, "sql": value})
+
+    return calls

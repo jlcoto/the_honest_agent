@@ -1,0 +1,16 @@
+[project]
+name = "agent-quiz-demo"
+version = "0.1.0"
+description = "Demo project consuming the agent-quiz CLI via a local path (not meant for publishing)."
+requires-python = ">=3.9"
+dependencies = [
+    "agent-quiz",
+]
+
+[project.optional-dependencies]
+# Re-exports the CLI's own mcp extra; needs Python >=3.10 (the mcp package's
+# own floor) -- sync this one with `uv sync --extra mcp --python 3.11` (see README).
+mcp = ["agent-quiz[mcp]"]
+
+[tool.uv.sources]
+agent-quiz = { path = "../cli", editable = true }

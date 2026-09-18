@@ -1,0 +1,60 @@
+version: 1
+
+# Path A of testing the TPC-H semantic view (agent_quiz_demo.public.tpch_semantic_view --
+# see README.md's Snowflake section): the agent still only has access to the plain
+# query_warehouse (SYSTEM_EXECUTE_SQL) tool -- no new MCP tool, no code changes. It's free
+# to answer either by joining raw tables itself (as it did in example_quiz.yml) or by
+# querying the semantic view directly (`select * from semantic_view(...)`), which is just
+# SQL text either way, so sql_capture.py already sees it. expected_sources checks *which*
+# path it actually took.
+#
+# Path B (a real Cortex Analyst tool exposing the semantic view over a non-SQL interface)
+# is a separate, bigger test -- not this file.
+#
+# No expected_tools declared: query_warehouse gets called in nearly every trace regardless
+# of whether the semantic view was actually used (it's what executes the final query either
+# way), so it doesn't discriminate anything here -- expected_sources is what's actually doing
+# the check.
+#
+# Run with (MCP_URL/MCP_BEARER_TOKEN read from .env automatically):
+#   agent-quiz run --quizzes-dir quizzes_snowflake --agent-backend mcp --select semantic_view
+
+quizzes:
+  - id: q_revenue_1996_semantic_view
+    prompt: >
+      What was our total revenue in 1996? Query the warehouse to find out,
+      and give me just the number. If there's a pre-built semantic view
+      available for this data, prefer it over joining raw tables yourself.
+    category: finance
+    expected_answer: "311928357.78"
+    grading:
+      method: extract_match
+      min_score: 0.8
+      tolerance: 0.01
+    provenance:
+      expected_sources: [tpch_semantic_view]
+      expected_database: agent_quiz_demo
+      expected_schema: public
+      sql_fields:
+        query_warehouse: sql
+      min_score: 0.7
+    tags: [provenance, snowflake, semantic_view]
+
+  - id: q_order_count_1996_semantic_view
+    prompt: >
+      How many orders were placed in 1996? Query the warehouse to find out,
+      and give me just the number. If there's a pre-built semantic view
+      available for this data, prefer it over joining raw tables yourself.
+    category: finance
+    expected_answer: "2297"
+    grading:
+      method: extract_match
+      min_score: 0.8
+    provenance:
+      expected_sources: [tpch_semantic_view]
+      expected_database: agent_quiz_demo
+      expected_schema: public
+      sql_fields:
+        query_warehouse: sql
+      min_score: 0.7
+    tags: [provenance, snowflake, semantic_view]

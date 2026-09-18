@@ -1,0 +1,49 @@
+version: 1
+
+# No `tools:` block here -- unlike the Claude-direct backend, the MCP
+# backend sources its tools live from the connected MCP server (see
+# ../mcp_server/server.py's query_warehouse), so a locally-declared tool
+# schema would just be unused. This project is MCP-only: run with
+# `--agent-backend mcp --mcp-command "python mcp_server/server.py"` (see
+# README.md) after seeding the warehouse with `uv run python warehouse/seed.py`.
+#
+# The warehouse is DuckDB's own TPC-H generator (see ../warehouse/seed.py) --
+# order dates always fall in 1992-01-01..1998-08-02 regardless of when this
+# demo actually runs, which is why these ask about a fixed historical year
+# (1996) rather than anything relative to "today".
+
+quizzes:
+  - id: q_revenue_1996
+    prompt: >
+      What was our total revenue in 1996? Query the warehouse to find out,
+      and give me just the number.
+    category: finance
+    expected_answer: "311928357.78"
+    grading:
+      method: extract_match
+      min_score: 0.8
+      # fct_revenue_by_year.revenue is an unrounded raw sum (...7805); the
+      # agent faithfully reporting that isn't a real accuracy failure.
+      tolerance: 0.01
+    provenance:
+      expected_sources: [fct_revenue_by_year]
+      sql_fields:
+        query_warehouse: sql
+      min_score: 0.7
+    tags: [smoke, provenance]
+
+  - id: q_order_count_1996
+    prompt: >
+      How many orders were placed in 1996? Query the warehouse to find out,
+      and give me just the number.
+    category: finance
+    expected_answer: "2297"
+    grading:
+      method: extract_match
+      min_score: 0.8
+    provenance:
+      expected_sources: [orders]
+      sql_fields:
+        query_warehouse: sql
+      min_score: 0.7
+    tags: [smoke, provenance]
