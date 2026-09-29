@@ -10,14 +10,6 @@ from agent_quiz_cli.quiz_loader import (
 
 QUIZ_YAML = """
 version: 1
-tools:
-  - name: calculator
-    description: Evaluate a basic arithmetic expression.
-    input_schema:
-      type: object
-      properties:
-        expression: {type: string}
-      required: [expression]
 quizzes:
   - id: q_capital
     prompt: "What is the capital of France?"
@@ -50,7 +42,6 @@ def test_load_quizzes_parses_yaml(tmp_path: Path):
 
     assert {d.quiz_id for d in definitions} == {"q_capital", "q_calc"}
     calc = next(d for d in definitions if d.quiz_id == "q_calc")
-    assert calc.tools[0]["name"] == "calculator"
     assert calc.sql_fields == {"query_warehouse": "sql_text"}
     assert calc.expected_database == "agent_quiz_demo"
     assert calc.expected_schema == "public"

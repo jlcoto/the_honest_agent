@@ -36,7 +36,6 @@ class QuizDefinition:
     # None (default, both) keeps exact matching.
     tolerance: float | None = None
     tolerance_percent: float | None = None
-    tools: list[dict] = field(default_factory=list)  # Anthropic tool schemas available to this quiz
     # Maps a tool name to the input field of its calls that holds SQL text,
     # e.g. {"query_warehouse": "sql"} -- declared per-quiz because the field
     # name is whatever that tool's author (local YAML author, or an MCP
@@ -50,7 +49,6 @@ def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
 
     for yml_path in sorted(quizzes_dir.glob("*.yml")):
         doc = yaml.safe_load(yml_path.read_text()) or {}
-        shared_tools = doc.get("tools", [])
 
         for item in doc.get("quizzes", []):
             quiz_id = item["id"]
@@ -74,7 +72,6 @@ def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
                     tolerance=grading.get("tolerance"),
                     tolerance_percent=grading.get("tolerance_percent"),
                     provenance_min_score=provenance.get("min_score", DEFAULT_PROVENANCE_MIN_SCORE),
-                    tools=shared_tools,
                     sql_fields=provenance.get("sql_fields", {}),
                     expected_database=provenance.get("expected_database"),
                     expected_schema=provenance.get("expected_schema"),

@@ -43,7 +43,7 @@ async def _quiz_loop(
     rows: list[dict] = []
     for definition in definitions:
         click.echo(f"  - {definition.quiz_id}: {definition.prompt!r}")
-        result = await agent.run(definition.prompt, tools=definition.tools)
+        result = await agent.run(definition.prompt)
 
         accuracy_score, rationale, grading_input_tokens, grading_output_tokens = await grade_accuracy(
             definition.grading_method,

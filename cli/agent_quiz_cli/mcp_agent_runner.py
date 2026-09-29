@@ -96,8 +96,7 @@ class MCPAgentClient(AgentClient):
             self._tools_cache = [_mcp_tool_to_anthropic_schema(t) for t in result.tools]
         return self._tools_cache
 
-    async def run(self, prompt: str, tools: list[dict] | None = None) -> AgentRunResult:
-        # `tools` (from the quiz YAML) is ignored here on purpose -- see module docstring.
+    async def run(self, prompt: str) -> AgentRunResult:
         start = time.monotonic()
         available_tools = await self._list_tools()
         messages: list[dict] = [{"role": "user", "content": prompt}]
