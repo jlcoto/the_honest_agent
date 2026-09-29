@@ -33,7 +33,7 @@ def _row(**overrides) -> dict:
         "expected_sources": [],
         "provenance_min_score": 0.7,
         "model_name": "claude-sonnet-5",
-        "agent_backend": "claude",
+        "agent_backend": "mcp",
         "latency_ms": 120,
         "agent_trace": json.dumps([{"role": "user", "content": "What is 2+2?"}]),
         "sql_calls": [],

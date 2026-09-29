@@ -1,12 +1,12 @@
 """A minimal MCP server exposing a `query_warehouse` tool backed by the
 seeded `warehouse.duckdb` (see ../warehouse/seed.py -- DuckDB's own TPC-H
-generator, a real multi-table schema), so `agent-quiz run --agent-backend
-mcp` has something real -- actual data, actual joins, actual SQL -- to
-connect to without needing a company MCP endpoint.
+generator, a real multi-table schema), so `agent-quiz run` has something
+real -- actual data, actual joins, actual SQL -- to connect to without
+needing a company MCP endpoint.
 
 Run standalone with: python mcp_server/server.py (stdio transport).
 Point agent-quiz at it with:
-  agent-quiz run --agent-backend mcp --mcp-command "python mcp_server/server.py" ...
+  agent-quiz run --mcp-command "python mcp_server/server.py" ...
 
 Requires the CLI's `mcp` extra: pip install -e "../cli[mcp]" (Python >=3.10).
 """

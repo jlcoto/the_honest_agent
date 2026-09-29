@@ -12,14 +12,13 @@ from dotenv import load_dotenv
 
 from . import notify as notify_mod
 from . import report as report_mod
-from .agent_runner import AgentClient, ClaudeAgentClient
+from .agent_runner import AgentClient
 from .grading import grade_accuracy
 from .provenance import score_provenance
 from .quiz_loader import QuizDefinition, filter_by_tags, load_quizzes
 from .sql_capture import extract_sql_calls
 from .storage import export_to_s3_parquet, read_agent_logs, read_tool_calls, write_run_results
 from .thresholds import failing_rows
-from .tools import BUILTIN_TOOL_EXECUTORS
 
 # picks up a .env from the cwd or any parent directory (e.g. the repo root's), if
 # one exists -- never overrides variables already set in the environment.
@@ -40,7 +39,6 @@ async def _quiz_loop(
     judge_client,
     model: str,
     run_id: str,
-    agent_backend: str,
 ) -> list[dict]:
     rows: list[dict] = []
     for definition in definitions:
@@ -89,7 +87,7 @@ async def _quiz_loop(
                 "expected_schema": definition.expected_schema,
                 "provenance_min_score": definition.provenance_min_score,
                 "model_name": result.model_name,
-                "agent_backend": agent_backend,
+                "agent_backend": "mcp",
                 "latency_ms": result.latency_ms,
                 "agent_input_tokens": result.input_tokens,
                 "agent_output_tokens": result.output_tokens,
@@ -122,7 +120,6 @@ async def _run_async(
     quizzes_dir_p: Path,
     results_path: str,
     model: str,
-    agent_backend: str,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -139,39 +136,33 @@ async def _run_async(
 
     import anthropic
 
+    from .mcp_agent_runner import MCPAgentClient, build_mcp_client
+
     judge_client = anthropic.AsyncAnthropic()
     run_id = str(uuid.uuid4())
-    click.echo(f"Starting quiz run {run_id} ({len(definitions)} quizzes, backend={agent_backend})...")
+    click.echo(f"Starting quiz run {run_id} ({len(definitions)} quizzes)...")
 
-    if agent_backend == "claude":
-        agent = ClaudeAgentClient(model=model, tool_executors=BUILTIN_TOOL_EXECUTORS)
-        rows = await _quiz_loop(agent, definitions, judge_client, model, run_id, agent_backend)
-    elif agent_backend == "mcp":
-        from .mcp_agent_runner import MCPAgentClient, build_mcp_client
-
-        mcp_client = build_mcp_client(command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token)
-        # Deliberately split from the quiz loop below: a failure *here* means
-        # the MCP handshake itself never completed (wrong token, unreachable
-        # server, server crashed on startup, ...) -- every quiz would fail
-        # identically for a reason that has nothing to do with the agent, so
-        # this fails the whole run loudly instead of grading N unusable
-        # results. A tool call failing *during* a quiz (bad SQL, a query the
-        # agent got wrong) is a different, legitimate grading failure and is
-        # deliberately NOT caught here -- see _quiz_loop.
-        try:
-            connected = await mcp_client.__aenter__()
-        except Exception as exc:
-            raise click.ClickException(
-                "Could not establish the MCP connection -- no quizzes were run, nothing was graded.\n"
-                f"{_describe_mcp_connection_error(exc)}"
-            ) from exc
-        try:
-            agent = MCPAgentClient(connected, model=model)
-            rows = await _quiz_loop(agent, definitions, judge_client, model, run_id, agent_backend)
-        finally:
-            await mcp_client.__aexit__(None, None, None)
-    else:
-        raise click.ClickException(f"Unknown --agent-backend {agent_backend!r}")
+    mcp_client = build_mcp_client(command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token)
+    # Deliberately split from the quiz loop below: a failure *here* means
+    # the MCP handshake itself never completed (wrong token, unreachable
+    # server, server crashed on startup, ...) -- every quiz would fail
+    # identically for a reason that has nothing to do with the agent, so
+    # this fails the whole run loudly instead of grading N unusable
+    # results. A tool call failing *during* a quiz (bad SQL, a query the
+    # agent got wrong) is a different, legitimate grading failure and is
+    # deliberately NOT caught here -- see _quiz_loop.
+    try:
+        connected = await mcp_client.__aenter__()
+    except Exception as exc:
+        raise click.ClickException(
+            "Could not establish the MCP connection -- no quizzes were run, nothing was graded.\n"
+            f"{_describe_mcp_connection_error(exc)}"
+        ) from exc
+    try:
+        agent = MCPAgentClient(connected, model=model)
+        rows = await _quiz_loop(agent, definitions, judge_client, model, run_id)
+    finally:
+        await mcp_client.__aexit__(None, None, None)
 
     written_path = write_run_results(results_path, run_id, rows)
     click.echo(f"Wrote {len(rows)} result(s) to {written_path}")
@@ -202,32 +193,25 @@ async def _run_async(
 @click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
 @click.option("--model", default="claude-haiku-4-5-20251001", help="Claude model to quiz, and to use as the LLM judge.")
 @click.option(
-    "--agent-backend",
-    type=click.Choice(["claude", "mcp"]),
-    default="claude",
-    help="'claude' calls Claude directly with tools defined in the quiz YAML (and executed locally). "
-    "'mcp' calls Claude with tools sourced live from an MCP server -- use this to test the actual "
-    "agent employees connect to, not a local stand-in. Requires the 'mcp' extra.",
-)
-@click.option(
     "--mcp-command",
     envvar="MCP_COMMAND",
     default=None,
-    help="[--agent-backend mcp] Shell command launching a local MCP server over stdio, "
-    'e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url.',
+    help="Shell command launching a local MCP server over stdio, "
+    'e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url. Requires the '
+    "'mcp' extra.",
 )
 @click.option(
     "--mcp-url",
     envvar="MCP_URL",
     default=None,
-    help="[--agent-backend mcp] URL of a remote MCP server's streamable-HTTP endpoint. "
-    "Mutually exclusive with --mcp-command.",
+    help="URL of a remote MCP server's streamable-HTTP endpoint. "
+    "Mutually exclusive with --mcp-command. Requires the 'mcp' extra.",
 )
 @click.option(
     "--mcp-bearer-token",
     envvar="MCP_BEARER_TOKEN",
     default=None,
-    help="[--agent-backend mcp, --mcp-url only] Bearer token sent as the Authorization header.",
+    help="[--mcp-url only] Bearer token sent as the Authorization header.",
 )
 @click.option(
     "--select",
@@ -247,7 +231,6 @@ def run(
     quizzes_dir: str,
     results_path: str,
     model: str,
-    agent_backend: str,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -260,15 +243,14 @@ def run(
             "ANTHROPIC_API_KEY is not set. Export it before running `agent-quiz run` "
             "(it's needed both to quiz the agent and, for llm_judge-graded quizzes, to grade it)."
         )
-    if agent_backend == "mcp" and not (mcp_command or mcp_url):
-        raise click.ClickException("--agent-backend mcp requires --mcp-command or --mcp-url.")
+    if not (mcp_command or mcp_url):
+        raise click.ClickException("--mcp-command or --mcp-url is required.")
 
     asyncio.run(
         _run_async(
             Path(quizzes_dir).resolve(),
             results_path,
             model,
-            agent_backend,
             mcp_command,
             mcp_url,
             mcp_bearer_token,

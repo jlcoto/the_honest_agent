@@ -1,16 +1,16 @@
 """An AgentClient backed by a live MCP server, for the case where the agent
-employees actually use is connected via MCP rather than called directly.
+employees actually use is connected via MCP.
 
-This intentionally does *not* take a `tools`/tool_executors argument the way
-ClaudeAgentClient does -- tools are listed from the live MCP server at run
-time, so `tools_used` (and provenance's SQL-source checking) reflects exactly
-what a real MCP-connected agent can call, not a locally re-implemented
-stand-in.
+This intentionally does *not* take a `tools`/tool_executors argument --
+tools are listed from the live MCP server at run time, so `tools_used` (and
+provenance's SQL-source checking) reflects exactly what a real MCP-connected
+agent can call, not a locally re-implemented stand-in whose behavior could
+drift out of sync with the real tool.
 
 Requires the optional `mcp` extra (`pip install "agent-quiz[mcp]"`), and
 Python >=3.10 (the `mcp` package's own requirement). Imports of `mcp` are
 kept inside functions so the base `agent-quiz` install stays lightweight for
-users who only need the Claude-direct backend.
+commands that don't need it (`report`, `notify`, `export`, `logs`).
 """
 
 from __future__ import annotations

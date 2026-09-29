@@ -9,7 +9,7 @@ version: 1
 # land side by side in the same results.duckdb, comparable by quiz_id.
 #
 # Run with (MCP_URL/MCP_BEARER_TOKEN read from .env automatically):
-#   agent-quiz run --quizzes-dir quizzes_snowflake --agent-backend mcp
+#   agent-quiz run --quizzes-dir quizzes_snowflake
 
 quizzes:
   - id: q_revenue_1996

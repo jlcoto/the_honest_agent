@@ -72,7 +72,7 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("expected_schema", "VARCHAR"),
     ("provenance_min_score", "DOUBLE"),
     ("model_name", "VARCHAR"),
-    ("agent_backend", "VARCHAR"),  # "claude" (direct API) or "mcp"
+    ("agent_backend", "VARCHAR"),  # always "mcp" today; kept for a possible future backend
     ("latency_ms", "INTEGER"),
     # Two cost centers, kept separate rather than one combined total: the
     # agent's own tool-use loop (one or more `messages.create` calls) vs. the

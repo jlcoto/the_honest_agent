@@ -7,23 +7,17 @@ Python dependencies here are managed with [`uv`](https://docs.astral.sh/uv/);
 `agent-quiz` is pulled in as an **editable local path dependency** on `../cli`
 (see `pyproject.toml`'s `[tool.uv.sources]`) rather than published to PyPI.
 
-This demo covers both of the CLI's agent backends, in two separate quiz
-directories:
-
-- **`quizzes/` (and `quizzes_motherduck/`, `quizzes_snowflake/`) — MCP.**
-  Real questions against a warehouse (`warehouse.duckdb`) seeded from
-  DuckDB's own built-in TPC-H generator — a standard multi-table schema
-  (`orders`, `lineitem`, `customer`, `part`, `supplier`, `nation`, `region`,
-  ...) with real joins, not a single flat table. The tool that answers them
-  (`query_warehouse`) is only exposed by the bundled demo MCP server
-  (`mcp_server/server.py`), or by a real MotherDuck/Snowflake MCP server —
-  this is what demonstrates provenance checking against *real* SQL and
-  *real* data.
-- **`quizzes_claude/` — Claude-direct.** A lightweight `calculator` tool,
-  declared right in the quiz YAML and executed locally (no MCP server, no
-  warehouse to seed) — see `quizzes_claude/example_quiz.yml`. Good for a
-  fast first run, or as a template for wiring up your own local tool
-  executor.
+This demo's example quizzes (`quizzes/`, and `quizzes_motherduck/`,
+`quizzes_snowflake/` for pointing at real warehouses) ask real questions
+against a warehouse (`warehouse.duckdb`) seeded from DuckDB's own built-in
+TPC-H generator — a standard multi-table schema (`orders`, `lineitem`,
+`customer`, `part`, `supplier`, `nation`, `region`, ...) with real joins, not
+a single flat table. The tool that answers them (`query_warehouse`) is
+exposed by the bundled demo MCP server (`mcp_server/server.py`), or by a
+real MotherDuck/Snowflake MCP server — this is what demonstrates provenance
+checking against *real* SQL and *real* data: `agent-quiz` calls Claude with
+tools sourced live from that MCP server, so it's testing the actual agent
+employees would connect to, not a locally reimplemented stand-in.
 
 ## Setup
 
@@ -41,28 +35,10 @@ export ANTHROPIC_API_KEY=...                     # needed for the agent + the ex
 # export/--env-file needed.
 ```
 
-## Quickest path: Claude-direct backend
-
-No MCP extra, no Python 3.11, no warehouse seeding — just base deps:
-
-```bash
-cd example_project
-uv sync                                          # base deps only
-export ANTHROPIC_API_KEY=...                     # or put it in a .env at the repo root
-uv run agent-quiz run --quizzes-dir quizzes_claude --agent-backend claude
-uv run agent-quiz report --out agent_quiz_report.html
-```
-
-This calls Claude directly with the `calculator` tool declared in
-`quizzes_claude/example_quiz.yml`, executed locally by
-`agent_quiz_cli/tools.py` — no server process, nothing to connect to. Good
-for confirming the CLI itself works end to end before setting up MCP.
-
-## Run the quiz end to end (MCP backend)
+## Run the quiz end to end
 
 ```bash
 uv run agent-quiz run --quizzes-dir quizzes \
-  --agent-backend mcp \
   --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
 uv run agent-quiz report --out agent_quiz_report.html
 uv run agent-quiz notify --webhook-url https://hooks.slack.com/services/...
@@ -165,7 +141,6 @@ instead, using your normal token:
 
 ```bash
 agent-quiz run --quizzes-dir quizzes_motherduck \
-  --agent-backend mcp \
   --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo"
 ```
 
@@ -290,21 +265,3 @@ Get `<account_identifier>` in the right format with
 [pat-guide]: https://docs.snowflake.com/en/user-guide/programmatic-access-tokens
 [network-policy-guide]: https://docs.snowflake.com/en/user-guide/network-policies
 [alter-user-pat]: https://docs.snowflake.com/en/sql-reference/sql/alter-user-add-programmatic-access-token
-
-## Note on the Claude-direct backend (`--agent-backend claude`)
-
-Demonstrated by `quizzes_claude/example_quiz.yml` (see "Quickest path"
-above) — Claude called directly, with tools defined right in the quiz
-YAML's `tools:` block and executed locally (see `agent_quiz_cli/tools.py`).
-Its `calculator` tool is a minimal stand-in; real usage means registering
-your own tool executors for whatever your agent actually calls (a warehouse
-query tool, a metrics-layer lookup, etc.) in `BUILTIN_TOOL_EXECUTORS`.
-
-One real limitation this example surfaces: `calculator` returns a bare
-number, not SQL, so `provenance.py`'s `expected_sources` check (which only
-inspects captured SQL text) has nothing to check against here — provenance
-scoring on `quizzes_claude`'s quizzes falls back to its trivially-satisfied
-default (1.0) rather than meaningfully verifying anything. Provenance
-checking as currently built is really aimed at SQL-producing tools; a
-non-SQL tool needs its own way of asserting "used the right underlying
-data" if that matters for your use case.

@@ -15,7 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
-# The MCP SDK itself requires Python >=3.10; only needed for --agent-backend mcp.
+# The MCP SDK itself requires Python >=3.10; only needed for `agent-quiz run`
+# (report/notify/export/logs don't need it).
 mcp = ["mcp>=1.0; python_version >= '3.10'"]
 lint = [
     "ruff>=0.16.7",

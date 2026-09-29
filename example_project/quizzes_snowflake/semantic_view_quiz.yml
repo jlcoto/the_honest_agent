@@ -17,7 +17,7 @@ version: 1
 # the check.
 #
 # Run with (MCP_URL/MCP_BEARER_TOKEN read from .env automatically):
-#   agent-quiz run --quizzes-dir quizzes_snowflake --agent-backend mcp --select semantic_view
+#   agent-quiz run --quizzes-dir quizzes_snowflake --select semantic_view
 
 quizzes:
   - id: q_revenue_1996_semantic_view

@@ -21,12 +21,12 @@ never a hand-rolled `venv`/`pip install`.
   everything else (Slack notifications, the static HTML report). Results
   storage is a local DuckDB file by default; `agent-quiz export` can push a
   Parquet snapshot to S3 (via DuckDB's own `httpfs` extension) for sharing
-  with a team, but that's an explicit, optional step. Two agent backends:
-  `--agent-backend claude` (default,
-  tools defined in quiz YAML, executed locally) or `--agent-backend mcp`
-  (tools sourced live from an MCP server, for testing the actual agent
-  employees connect to — needs the `mcp` extra, Python >=3.10, see
-  `example_project/README.md`).
+  with a team, but that's an explicit, optional step. `agent-quiz run` calls
+  Claude with tools sourced live from an MCP server (`--mcp-command`/
+  `--mcp-url`) — this tests the actual agent employees connect to, not a
+  locally reimplemented stand-in whose behavior can drift out of sync with
+  the real tool. Needs the `mcp` extra, Python >=3.10 — see
+  `example_project/README.md`.
 - **`example_project/`** — a real-world-shaped consumer of the CLI: its own
   example quiz YAML and a README showing the actual install/run flow. This
   is the only place example data lives.
@@ -35,27 +35,27 @@ never a hand-rolled `venv`/`pip install`.
 
 ```bash
 cd example_project
-uv sync                                                      # installs agent-quiz, editable, from ../cli
+uv python install 3.11                                       # one-time; the mcp package needs Python >=3.10
+uv sync --extra mcp --python 3.11                             # installs agent-quiz + mcp, editable, from ../cli
+uv run python warehouse/seed.py                               # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                                 # or put it in a .env at the repo root -- auto-loaded
-uv run agent-quiz run --quizzes-dir quizzes_claude --agent-backend claude  # calls Claude directly, no MCP server needed
+uv run agent-quiz run --quizzes-dir quizzes \
+  --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
 uv run agent-quiz report                                     # static HTML dashboard
 uv run agent-quiz notify --webhook-url ...                   # Slack alert on regressions
 ```
 
-This runs the lightweight `quizzes_claude/` example (a local `calculator`
-tool, no MCP server or warehouse needed). By default results land in
+This calls Claude with the `query_warehouse` tool sourced live from the
+bundled demo MCP server (`mcp_server/server.py`), against a real seeded
+TPC-H warehouse — real SQL, real data, real provenance checking (does the
+agent's SQL actually hit the table we expect). By default results land in
 `./agent_quiz_results/results.duckdb`. Run `agent-quiz export --s3-path
 s3://...` afterward if you want a Parquet snapshot in S3 too — see
-`example_project/README.md` for details.
-
-`agent-quiz run` with no `--quizzes-dir`/`--agent-backend` defaults to
-`quizzes/` + `--agent-backend claude`, which won't work as-is: `quizzes/`
-is an MCP-only example (no `tools:` block, so the claude-direct backend
-would have nothing to call) — it needs `--agent-backend mcp
---mcp-command ...` instead. See `example_project/README.md` for the full
-MCP setup (real SQL/data provenance against a seeded warehouse), and
-`example_project/quizzes/example_quiz.yml` for how each quiz declares its own
-accuracy/provenance thresholds (`grading.min_score` / `provenance.min_score`).
+`example_project/README.md` for details, including how to point at a real
+MCP server (MotherDuck, Snowflake, or your own) instead of the bundled demo
+one, and `example_project/quizzes/example_quiz.yml` for how each quiz
+declares its own accuracy/provenance thresholds (`grading.min_score` /
+`provenance.min_score`).
 
 ## Developing the CLI
 
