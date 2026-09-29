@@ -128,9 +128,7 @@ def test_grade_llm_judge_returns_token_usage():
 def test_grade_accuracy_dispatches_extract_match_and_forwards_client():
     client = _FakeClient(extracted_answer="4")
 
-    score, rationale, _, _ = asyncio.run(
-        grade_accuracy("extract_match", "It's 4.", "4", "What is 2+2?", client=client)
-    )
+    score, rationale, _, _ = asyncio.run(grade_accuracy("extract_match", "It's 4.", "4", "What is 2+2?", client=client))
 
     assert score == 1.0
 
