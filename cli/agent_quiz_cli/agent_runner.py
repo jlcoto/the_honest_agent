@@ -17,6 +17,10 @@ class AgentRunResult:
     # more than once) -- not just the final turn's usage.
     input_tokens: int
     output_tokens: int
+    # True if the tool-use loop hit its max_tool_turns cap while the agent
+    # was still requesting tools -- i.e. there was no final, text-only turn
+    # to report as `answer`. See MCPAgentClient.run's `for...else`.
+    hit_turn_limit: bool = False
 
 
 def plain_content(content: Any) -> Any:

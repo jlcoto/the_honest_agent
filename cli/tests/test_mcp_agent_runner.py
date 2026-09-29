@@ -113,14 +113,14 @@ class _FakeMCP:
         return _FakeCallToolResult(content=[_FakeToolResultBlock(type="text", text="2")])
 
 
-def _make_client(responses: list[_FakeResponse]) -> MCPAgentClient:
+def _make_client(responses: list[_FakeResponse], max_tool_turns: int = 5) -> MCPAgentClient:
     # Bypasses __init__ (which builds a real anthropic.AsyncAnthropic()) so
     # this stays a pure unit test of the loop, no real API key needed.
     client = MCPAgentClient.__new__(MCPAgentClient)
     client._anthropic = type("_FakeAnthropicClient", (), {"messages": _FakeMessages(responses)})()
     client._mcp = _FakeMCP()
     client._model = "claude-test"
-    client._max_tool_turns = 5
+    client._max_tool_turns = max_tool_turns
     client._tools_cache = []  # skip list_tools() -- no real MCP tool schema needed for these tests
     return client
 
@@ -136,6 +136,7 @@ def test_run_appends_final_text_only_turn_to_raw_trace():
     result = asyncio.run(client.run("What is 1+1?"))
 
     assert result.answer == "The answer is 2."
+    assert result.hit_turn_limit is False
     assert len(result.raw_trace) == 4  # user, assistant(tool_use), user(tool_result), assistant(text)
     assert result.raw_trace[-1] == {
         "role": "assistant",
@@ -157,3 +158,34 @@ def test_run_sums_tokens_across_every_turn():
 
     assert result.input_tokens == 250
     assert result.output_tokens == 30
+
+
+def test_run_reports_error_when_max_tool_turns_exhausted():
+    """If Claude is still requesting tools on the very last allowed turn,
+    the loop has no further `messages.create` call to let it respond -- so
+    `hit_turn_limit` should be set and `answer` should clearly say why,
+    rather than silently coming back empty (see the `for...else` in
+    MCPAgentClient.run).
+    """
+    tool_call_1 = _FakeToolUseBlock(type="tool_use", id="call_1", name="calculator", input={"expression": "1+1"})
+    tool_call_2 = _FakeToolUseBlock(type="tool_use", id="call_2", name="calculator", input={"expression": "2+2"})
+    client = _make_client(
+        [_FakeResponse(content=[tool_call_1]), _FakeResponse(content=[tool_call_2])],
+        max_tool_turns=2,
+    )
+
+    result = asyncio.run(client.run("What is 1+1, then 2+2?"))
+
+    assert result.hit_turn_limit is True
+    assert "max_tool_turns=2" in result.answer
+    assert result.tools_used == ["calculator", "calculator"]
+
+
+def test_run_hit_turn_limit_false_when_within_budget():
+    final_text = _FakeTextBlock(type="text", text="Paris.")
+    client = _make_client([_FakeResponse(content=[final_text])], max_tool_turns=1)
+
+    result = asyncio.run(client.run("What is the capital of France?"))
+
+    assert result.hit_turn_limit is False
+    assert result.answer == "Paris."

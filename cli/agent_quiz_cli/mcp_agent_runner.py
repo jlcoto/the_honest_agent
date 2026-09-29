@@ -104,6 +104,7 @@ class MCPAgentClient(AgentClient):
         response = None
         input_tokens = 0
         output_tokens = 0
+        hit_turn_limit = False
 
         for _ in range(self._max_tool_turns):
             response = await self._anthropic.messages.create(
@@ -136,8 +137,21 @@ class MCPAgentClient(AgentClient):
                     }
                 )
             messages.append({"role": "user", "content": tool_results})
+        else:
+            # The `for` loop's `else` runs only when the loop completes without
+            # hitting `break` -- i.e. `max_tool_turns` was exhausted and Claude
+            # was still requesting tools on the last turn. The tool_use/
+            # tool_result turns above are still recorded in `messages`, but
+            # there was no further `messages.create` call to let Claude respond
+            # to that last result, so there's no real final answer to report.
+            hit_turn_limit = True
 
         final_text = "".join(block.text for block in (response.content if response else []) if block.type == "text")
+        if hit_turn_limit:
+            final_text = (
+                f"[agent_quiz error] Exceeded max_tool_turns={self._max_tool_turns} without a final answer -- "
+                "the agent was still requesting tools on the last turn. See agent_trace for detail."
+            )
         latency_ms = int((time.monotonic() - start) * 1000)
 
         return AgentRunResult(
@@ -148,4 +162,5 @@ class MCPAgentClient(AgentClient):
             latency_ms=latency_ms,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            hit_turn_limit=hit_turn_limit,
         )

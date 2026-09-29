@@ -17,7 +17,7 @@ from .grading import grade_accuracy
 from .provenance import score_provenance
 from .quiz_loader import QuizDefinition, filter_by_tags, load_quizzes
 from .sql_capture import extract_sql_calls
-from .storage import export_to_s3_parquet, read_agent_logs, read_tool_calls, write_run_results
+from .storage import export_to_s3_parquet, read_agent_logs, read_all_results, read_tool_calls, write_run_results
 from .thresholds import failing_rows
 
 # picks up a .env from the cwd or any parent directory (e.g. the repo root's), if
@@ -44,6 +44,8 @@ async def _quiz_loop(
     for definition in definitions:
         click.echo(f"  - {definition.quiz_id}: {definition.prompt!r}")
         result = await agent.run(definition.prompt)
+        if result.hit_turn_limit:
+            click.echo(f"    WARNING: {definition.quiz_id} hit the tool-turn limit without a final answer.")
 
         accuracy_score, rationale, grading_input_tokens, grading_output_tokens = await grade_accuracy(
             definition.grading_method,
@@ -120,6 +122,7 @@ async def _run_async(
     quizzes_dir_p: Path,
     results_path: str,
     model: str,
+    max_tool_turns: int,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -159,7 +162,7 @@ async def _run_async(
             f"{_describe_mcp_connection_error(exc)}"
         ) from exc
     try:
-        agent = MCPAgentClient(connected, model=model)
+        agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
         rows = await _quiz_loop(agent, definitions, judge_client, model, run_id)
     finally:
         await mcp_client.__aexit__(None, None, None)
@@ -192,6 +195,14 @@ async def _run_async(
 )
 @click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
 @click.option("--model", default="claude-haiku-4-5-20251001", help="Claude model to quiz, and to use as the LLM judge.")
+@click.option(
+    "--max-tool-turns",
+    type=click.IntRange(min=1),
+    default=5,
+    help="Max rounds of tool calls per quiz before giving up (each round is one Claude API call). "
+    "If Claude is still requesting tools when this is hit, that quiz fails with a clear error "
+    "instead of silently returning an empty answer.",
+)
 @click.option(
     "--mcp-command",
     envvar="MCP_COMMAND",
@@ -231,6 +242,7 @@ def run(
     quizzes_dir: str,
     results_path: str,
     model: str,
+    max_tool_turns: int,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -251,6 +263,7 @@ def run(
             Path(quizzes_dir).resolve(),
             results_path,
             model,
+            max_tool_turns,
             mcp_command,
             mcp_url,
             mcp_bearer_token,
@@ -311,12 +324,22 @@ def logs(results_path: str, run_id: str | None, quiz_id: str | None):
     if not rows:
         click.echo("No matching logs found.")
         return
+    # Looked up per row below (not passed through read_agent_logs) so `agent_logs`
+    # stays a pure trace table -- `results` already carries the answer/scores.
+    results_by_id = {r["result_id"]: r for r in read_all_results(results_path)}
     calls_by_result: dict[str, list[dict]] = {}
     for call_row in read_tool_calls(results_path, run_id=run_id, quiz_id=quiz_id):
         calls_by_result.setdefault(call_row["result_id"], []).append(call_row)
 
     for row in rows:
         click.echo(f"=== quiz {row['quiz_id']} (run {row['run_id']}, result {row['result_id']}) ===")
+        result_row = results_by_id.get(row["result_id"])
+        if result_row:
+            click.echo(f"Answer: {result_row['agent_answer']}")
+            click.echo(
+                f"Accuracy: {result_row['accuracy_score']:.2f} (min {result_row['accuracy_min_score']:.2f})  |  "
+                f"Provenance: {result_row['provenance_score']:.2f} (min {result_row['provenance_min_score']:.2f})"
+            )
         call_rows = calls_by_result.get(row["result_id"], [])
         if call_rows:
             click.echo("Tool calls:")
