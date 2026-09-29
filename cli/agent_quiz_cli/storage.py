@@ -10,17 +10,23 @@ Three tables, kept deliberately separate:
   for people who want to dig into *why* -- the agent's full turn-by-turn
   trace. Nothing reads this by default; it's there to be explored on demand
   (see `read_agent_logs` / `agent-quiz logs`).
-- `tool_calls`: one row per tool call that produced something worth
-  auditing (a quiz can produce zero, one, or many), normalized so it's
-  directly queryable -- "which quizzes touched `fct_orders`", "how many
-  calls did run X issue" -- without unnesting a list column or parsing
-  `agent_logs.agent_trace`'s JSON. `type` says what kind of call it was
-  (currently only `"sql"`; a future `"semantic"` for structured
+- `tool_calls`: **today, this only ever contains SQL calls** -- despite the
+  name, a tool call that doesn't produce a SQL string anywhere (no field
+  matching `provenance.sql_fields`/the `sql`/`query`/`statement` heuristic --
+  see sql_capture.py) leaves zero rows here, even though it's still recorded
+  in `results.tools_used` and the full `agent_logs.agent_trace`. One row per
+  *SQL* call that produced something worth auditing (a quiz can produce
+  zero, one, or many), normalized so it's directly queryable -- "which
+  quizzes touched `fct_orders`", "how many calls did run X issue" -- without
+  unnesting a list column or parsing `agent_logs.agent_trace`'s JSON. The
+  `type` column exists for a future `"semantic"` call kind (structured
   semantic-layer calls like `{"metric": "revenue", "grain": "daily"}` that
   never produce a SQL string at all -- see sql_capture.py's module
-  docstring). `payload` is JSON for both, so the column doesn't need
-  reshaping as new call types show up: `{"sql": "..."}` today,
-  `{"metric": ..., "grain": ...}` whenever semantic capture is built.
+  docstring and TODO.md's "Semantic-layer provenance checking"), but no code
+  path writes anything besides `"sql"` yet -- that's deliberately not built
+  until a real semantic-layer tool is actually in scope, not an oversight.
+  `payload` is JSON for both, so the column doesn't need reshaping once that
+  lands: `{"sql": "..."}` today, `{"metric": ..., "grain": ...}` later.
   Carries `run_id`/`quiz_id` alongside `result_id` (denormalized on purpose,
   same reasoning as `agent_logs`: convenience filtering without a join).
 
@@ -101,12 +107,14 @@ _AGENT_LOGS_COLUMNS: list[tuple[str, str]] = [
 ]
 _AGENT_LOGS_COLUMN_NAMES = [name for name, _ in _AGENT_LOGS_COLUMNS]
 
-# One row per auditable tool call captured from the trace (see
-# sql_capture.py). A single graded quiz can contribute zero, one, or many
-# rows here. `payload` is JSON, shaped according to `type` -- e.g.
-# {"sql": "..."} for type="sql" -- so new call types (e.g. a future
-# type="semantic" for structured semantic-layer args) don't need a schema
-# change, just a new payload shape.
+# One row per auditable SQL call captured from the trace (see
+# sql_capture.py) -- despite the table name, only `type="sql"` is ever
+# written today; a tool call with no SQL-shaped field anywhere contributes
+# zero rows here. A single graded quiz can contribute zero, one, or many
+# rows. `payload` is JSON, shaped according to `type` -- e.g. {"sql": "..."}
+# for type="sql" -- so a future type="semantic" for structured
+# semantic-layer args (not built yet -- see module docstring) won't need a
+# schema change, just a new payload shape.
 _TOOL_CALLS_COLUMNS: list[tuple[str, str]] = [
     ("result_id", "VARCHAR"),
     ("run_id", "VARCHAR"),
