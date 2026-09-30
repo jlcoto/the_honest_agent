@@ -42,6 +42,7 @@ export ANTHROPIC_API_KEY=...                                 # or put it in a .e
 uv run agent-quiz run --quizzes-dir quizzes \
   --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
 uv run agent-quiz report                                     # static HTML dashboard
+uv run agent-quiz serve                                      # opens the report in your browser, like `dbt docs serve`
 uv run agent-quiz notify --webhook-url ...                   # Slack alert on regressions
 ```
 

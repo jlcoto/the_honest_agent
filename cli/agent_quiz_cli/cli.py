@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 from . import notify as notify_mod
 from . import report as report_mod
+from . import serve as serve_mod
 from .agent_runner import AgentClient
 from .grading import grade_accuracy
 from .provenance import score_provenance
@@ -280,6 +281,17 @@ def report(results_path: str, out: str):
     """Generate a static HTML report from all stored results."""
     report_mod.generate(results_path, Path(out))
     click.echo(f"Wrote {out}")
+
+
+@main.command()
+@click.option("--out", default="agent_quiz_report.html", type=click.Path(exists=True, dir_okay=False))
+@click.option("--port", default=8000, type=int)
+@click.option("--open-browser/--no-open-browser", default=True)
+def serve(out: str, port: int, open_browser: bool):
+    """Serve a generated HTML report locally, the same way `dbt docs serve` does."""
+    report_path = Path(out)
+    click.echo(f"Serving {report_path} at http://127.0.0.1:{port}/{report_path.name} (Ctrl+C to stop)")
+    serve_mod.serve(report_path, port, open_browser=open_browser)
 
 
 @main.command()

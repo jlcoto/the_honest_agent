@@ -37,9 +37,41 @@ they describe someone else's tool contract, not ours:
    `metrics`/`group_by` vs. Cube's `measures`/`dimensions`), so it can't be
    hardcoded.
 
+**Design constraint for when this gets built: no per-vendor "used the
+semantic layer" boolean.** The temptation once a second/third provider is in
+scope is to add a dedicated flag (e.g. `used_semantic_view`) to `results` so
+it's easy to see whether the semantic layer actually got used. Don't --
+`expected_sources` + `provenance_score` already answer that generically for
+any SQL-producing semantic layer (a named view/model that shows up in
+captured SQL, e.g. Snowflake's `tpch_semantic_view`), and once `type="semantic"`
+exists, the *same* recall mechanism should extend to structured payloads too
+(matching `expected_sources` against the declared model/metric field) rather
+than a separate flag per vendor. Keeping "is the semantic layer working" as a
+recall score against `expected_sources` -- not a boolean -- is what lets one
+mechanism cover every provider, SQL-shaped or structured-shaped, without the
+column list growing one flag per vendor integrated.
+
 **Not worth building speculatively.** Do this once a real semantic-layer tool
 and its actual schema are in scope -- right now there's nothing concrete to
 design against.
+
+**Candidates to extend quiz coverage to, once picked up:** SLayer
+(https://github.com/MotleyAI/slayer) and the dbt Semantic Layer (MetricFlow).
+Neither has been wired into `example_project` yet -- this is a pointer for
+future work, not a confirmed schema to design against.
+
+- **SLayer**: not the fully-structured-only case described above -- it
+  actually generates real SQL under the hood, so `type="sql"` capture may
+  already mostly work. But its `query` tool only includes the generated SQL
+  in the response when the caller passes `show_sql=true` (opt-in per call,
+  not guaranteed to happen unless the quiz prompt or tool description nudges
+  the agent to ask for it), and the exact response field name holding that
+  SQL isn't documented -- needs confirming against a real response before
+  assuming the existing `sql`/`query`/`statement` heuristic (or a
+  `sql_fields` override) actually catches it.
+- **dbt Semantic Layer / MetricFlow**: expected to be the fully-structured
+  case this section was written for (`metrics`/`group_by` args, no SQL
+  string) -- not yet verified against a real MCP tool schema.
 
 ## Migrate S3 export from plain Parquet to DuckLake
 
