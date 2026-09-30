@@ -101,6 +101,49 @@ another DuckDB (anyone's laptop, a scheduled job) can query directly with
 in this project requires it, and if you never run it nothing ever touches
 S3.
 
+## Choosing a grading method
+
+Each quiz picks exactly one `grading.method` in its YAML entry — there's no
+blending or fallback between them (see `agent_quiz_cli/grading.py`):
+
+- **`contains`** (default) — a plain string check, no LLM call at all: does
+  `expected_answer` (case/whitespace-insensitive) appear anywhere in the
+  agent's answer? Free, deterministic, strictly binary (1.0 or 0.0). Best
+  for a short, distinctive phrase you expect verbatim (a name, a fixed
+  label). Not a good fit for numbers — it can't tell "4" from "400" if one
+  contains the other's digits, and there's no partial credit for close-but-
+  wrong.
+- **`extract_match`** — a cheap LLM call extracts and normalizes the agent's
+  stated value (explicitly told *not* to judge correctness, only extract),
+  then compares it deterministically against `expected_answer`. Still
+  binary, but tolerant of how the agent phrases things ("The answer is 4."
+  / "4" / "It's four" all extract to the same value). Best for a single
+  literal answer — a number, a name, a short fact. If the expected value
+  might legitimately differ slightly (an unrounded raw query result vs. a
+  rounded `expected_answer`, e.g. `q_revenue_1996` in
+  `quizzes/example_quiz.yml`), add `tolerance` (an absolute delta) or
+  `tolerance_percent` (relative to `expected_answer`'s magnitude) so a
+  numeric answer within that range still scores 1.0 instead of failing on a
+  precision mismatch. One caveat: this relies on the extraction call
+  correctly identifying which value is the "final" one if the agent's
+  answer mentions more than one candidate — usually reliable when the
+  answer clearly signals its conclusion, not guaranteed otherwise.
+- **`llm_judge`** — Claude reads the question, expected answer, and given
+  answer, and scores correctness holistically from 0.0 to 1.0 with a
+  rationale. The only method that can give real partial credit, not just
+  pass/fail. Best for open-ended or multi-part answers where there's no
+  single literal value to extract and compare — an explanation, a summary,
+  a judgment call on quality. Also the least deterministic and most
+  expensive of the three (a full reasoning call, not just extraction), so
+  reach for it only when `contains`/`extract_match` genuinely can't express
+  what "correct" means for that quiz.
+
+| If the expected answer is...                          | Use              |
+|---------------------------------------------------------|------------------|
+| A short, exact phrase (a name, a label)                  | `contains`       |
+| A single number or literal value (possibly rounded)      | `extract_match`  |
+| Free text — an explanation, summary, or judgment call     | `llm_judge`      |
+
 ## Pointing at a real MCP server instead of the bundled demo one
 
 Swap `--mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"` for
