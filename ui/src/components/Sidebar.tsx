@@ -186,11 +186,12 @@ export function Sidebar({
           <>
             <Switch checked={theme === 'dark'} onChange={(v) => setTheme(v ? 'dark' : 'light')} label="Dark mode" />
             {generatedAt ? (
-              <span style={{ font: '400 12px/1.4 var(--font-mono)', color: 'var(--fg-3)' }}>
-                Generated
-                <br />
-                {formatRunTime(generatedAt.slice(0, 16).replace('T', ' '))} UTC
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ font: '400 12px/1.4 var(--font-sans)', color: 'var(--fg-3)' }}>Generated</span>
+                <span style={{ font: '400 12px/1.4 var(--font-mono)', color: 'var(--fg-2)', whiteSpace: 'nowrap' }}>
+                  {formatRunTime(generatedAt.slice(0, 16).replace('T', ' '))} UTC
+                </span>
+              </div>
             ) : null}
           </>
         )}

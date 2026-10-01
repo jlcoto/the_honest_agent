@@ -1,29 +1,112 @@
-import type { CSSProperties, ReactNode } from 'react'
+// Follows the design system's ui_kits/dashboard/Detail.jsx.
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { accuracyPasses, agentOf, formatRunTime, pct, provenancePasses, quizTitles, toolCallsFor } from '../data/derive'
+import {
+  accuracyPasses,
+  agentOf,
+  formatRunTime,
+  pct,
+  provenancePasses,
+  quizTitles,
+  stripMarkdown,
+  toolCallsFor,
+} from '../data/derive'
 import type { ReportData } from '../data/types'
 import { Badge, Button, Card, ScoreStat } from '../ds'
 
+const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
 const codeBlock: CSSProperties = {
   margin: 0,
-  padding: '10px 12px',
+  padding: '12px 14px',
   borderRadius: 'var(--radius-sm)',
   background: 'var(--bg-sunken)',
   border: '1px solid var(--border-1)',
-  font: 'var(--type-data)',
+  font: '400 12.5px/1.55 var(--font-mono)',
   color: 'var(--fg-1)',
   whiteSpace: 'pre-wrap',
-  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+  overflowX: 'auto',
 }
-const label: CSSProperties = { font: 'var(--type-label)', color: 'var(--fg-2)' }
-const prose: CSSProperties = { margin: 0, font: 'var(--type-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }
+const para: CSSProperties = { margin: 0, font: 'var(--type-body)', color: 'var(--fg-1)', textWrap: 'pretty' }
+const stack = (gap: number): CSSProperties => ({ display: 'flex', flexDirection: 'column', gap })
 
-function Field({ name, children }: { name: string; children: ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-      <span style={label}>{name}</span>
+    <div style={{ ...stack(8), minWidth: 0 }}>
+      <span style={{ font: 'var(--type-label)', color: 'var(--fg-2)' }}>{label}</span>
       {children}
     </div>
+  )
+}
+
+function Num({ n, label }: { n: number; label: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ font: '500 12px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 18 }}>{n}</span>
+      <span style={{ font: '500 13px/1 var(--font-sans)', color: 'var(--fg-2)' }}>{label}</span>
+    </div>
+  )
+}
+
+const COLLAPSED_LINES = 12
+
+/** A code block that collapses past 12 lines, with a fade and a "Show all N lines" toggle. */
+function Code({ text, color }: { text: string; color?: string }) {
+  const [open, setOpen] = useState(false)
+  const lines = text.split('\n')
+  const long = lines.length > COLLAPSED_LINES
+  return (
+    <div style={{ ...stack(6), minWidth: 0 }}>
+      <div style={{ position: 'relative' }}>
+        <pre style={{ ...codeBlock, color: color ?? codeBlock.color }}>
+          {long && !open ? lines.slice(0, COLLAPSED_LINES).join('\n') : text}
+        </pre>
+        {long && !open ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: 1,
+              right: 1,
+              bottom: 1,
+              height: 56,
+              borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
+              background: 'linear-gradient(to bottom, transparent, var(--bg-sunken))',
+              pointerEvents: 'none',
+            }}
+          />
+        ) : null}
+      </div>
+      {long ? (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          style={{
+            alignSelf: 'flex-start',
+            padding: 0,
+            border: 0,
+            background: 'none',
+            cursor: 'pointer',
+            font: '500 13px/1.4 var(--font-sans)',
+            color: 'var(--accent)',
+          }}
+        >
+          {open ? 'Show less' : `Show all ${lines.length} lines`}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+/** Agent text as paragraphs, Markdown stripped -- the same treatment as the mockup. */
+function Paragraphs({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/\n{2,}/).map((p, i) => (
+        <p key={i} style={para}>
+          {stripMarkdown(p)}
+        </p>
+      ))}
+    </>
   )
 }
 
@@ -56,48 +139,54 @@ interface Block {
   content?: unknown
   is_error?: boolean
 }
+interface Message {
+  role?: string
+  content?: unknown
+}
 
 function TraceBlock({ block }: { block: Block }) {
-  if (block.type === 'text') return <p style={prose}>{block.text}</p>
+  if (block.type === 'text') return <Paragraphs text={block.text ?? ''} />
   if (block.type === 'tool_use') {
     const input = block.input as { sql?: unknown } | undefined
     return (
-      <Field name={`Tool call · ${block.name}`}>
-        <pre style={codeBlock}>{typeof input?.sql === 'string' ? input.sql : JSON.stringify(block.input, null, 2)}</pre>
-      </Field>
+      <>
+        <span style={{ font: '400 12px/1.3 var(--font-mono)', color: 'var(--fg-3)' }}>{block.name}</span>
+        <Code text={typeof input?.sql === 'string' ? input.sql : JSON.stringify(block.input, null, 2)} />
+      </>
     )
   }
   if (block.type === 'tool_result') {
     const content = Array.isArray(block.content)
       ? block.content.map((c: Block) => c.text ?? JSON.stringify(c)).join('\n')
       : String(block.content ?? '')
-    return (
-      <Field name={block.is_error ? 'Tool error' : 'Tool result'}>
-        <pre style={{ ...codeBlock, color: block.is_error ? 'var(--acc-wrong-ink)' : 'var(--fg-1)' }}>{content}</pre>
-      </Field>
-    )
+    return <Code text={content} color={block.is_error ? 'var(--acc-wrong-ink)' : undefined} />
   }
-  return <pre style={codeBlock}>{JSON.stringify(block, null, 2)}</pre>
+  return <Code text={JSON.stringify(block, null, 2)} />
+}
+
+// A user message carrying only tool results is the tool talking back, so it's labelled that way.
+function roleLabel(m: Message): string {
+  const blocks = Array.isArray(m.content) ? (m.content as Block[]) : []
+  if (m.role === 'user' && blocks.length > 0 && blocks.every((b) => b.type === 'tool_result')) return 'Tool result'
+  return m.role === 'assistant' ? 'Assistant' : 'User'
 }
 
 function Trace({ raw }: { raw: string | undefined }) {
   const messages = raw ? parseJson(raw) : null
   if (!Array.isArray(messages)) return <pre style={codeBlock}>{raw ?? 'No trace recorded.'}</pre>
   return (
-    <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {messages.map((m: { role?: string; content?: unknown }, i: number) => (
-        <li key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span style={{ ...label, textTransform: 'capitalize' }}>
-            {i + 1}. {m.role}
-          </span>
+    <div style={stack(16)}>
+      {(messages as Message[]).map((m, i) => (
+        <div key={i} style={{ ...stack(8), paddingTop: i ? 16 : 0, borderTop: i ? '1px solid var(--border-1)' : 'none' }}>
+          <Num n={i + 1} label={roleLabel(m)} />
           {typeof m.content === 'string' ? (
-            <p style={prose}>{m.content}</p>
+            <Paragraphs text={m.content} />
           ) : (
-            (Array.isArray(m.content) ? m.content : []).map((b: Block, j: number) => <TraceBlock key={j} block={b} />)
+            (Array.isArray(m.content) ? (m.content as Block[]) : []).map((b, j) => <TraceBlock key={j} block={b} />)
           )}
-        </li>
+        </div>
       ))}
-    </ol>
+    </div>
   )
 }
 
@@ -116,32 +205,29 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
   const trace = data.agent_logs.find((l) => l.result_id === r.result_id)?.agent_trace
   const tokens = (r.agent_input_tokens ?? 0) + (r.agent_output_tokens ?? 0)
   const title = quizTitles(data.results).get(r.quiz_id)
-  const context = `${r.category ?? 'Uncategorized'} · ${formatRunTime(r.run_timestamp)} · ${agentOf(r)} · ${r.model_name}`
+  const fmt = (n: number | null) => (n ?? 0).toLocaleString('en-US')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={stack(20)}>
       <PageHeader
-        title={title ?? <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{r.quiz_id}</span>}
+        title={title ?? <span style={{ ...mono, fontWeight: 500 }}>{r.quiz_id}</span>}
         subtitle={
-          title ? (
-            <>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>{r.quiz_id}</span> · {context}
-            </>
-          ) : (
-            context
-          )
+          <>
+            <span style={mono}>{r.quiz_id}</span> · {r.category ?? 'Uncategorized'} · {formatRunTime(r.run_timestamp)} ·{' '}
+            {agentOf(r)} · <span style={mono}>{r.model_name}</span>
+          </>
         }
       >
         <Badge tone={accOk ? 'correct' : 'wrong'} dot>
-          Accuracy {accOk ? 'passed' : 'below min'}
+          {accOk ? 'Accuracy passed' : 'Accuracy below min'}
         </Badge>
         <Badge tone={provOk ? 'correct' : 'wrong'} dot>
-          Provenance {provOk ? 'passed' : 'below min'}
+          {provOk ? 'Provenance passed' : 'Provenance below min'}
         </Badge>
         {back}
       </PageHeader>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
         <Card>
           <ScoreStat label="Accuracy" value={r.accuracy_score} caption={`min score ${pct(r.accuracy_min_score)}`} />
         </Card>
@@ -153,7 +239,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
             label="Latency"
             format="raw"
             value={r.latency_ms == null ? '—' : `${(r.latency_ms / 1000).toFixed(1)}s`}
-            caption="Agent run, excluding grading"
+            caption="Agent time, excluding grading"
           />
         </Card>
         <Card>
@@ -164,64 +250,71 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
               label="Agent tokens"
               format="raw"
               value={tokens.toLocaleString('en-US')}
-              caption={`${(r.agent_input_tokens ?? 0).toLocaleString('en-US')} in · ${(r.agent_output_tokens ?? 0).toLocaleString('en-US')} out`}
+              caption={`${fmt(r.agent_input_tokens)} in · ${fmt(r.agent_output_tokens)} out`}
             />
           )}
         </Card>
       </div>
 
       <Card title="Answer">
-        <Field name="Prompt">
-          <p style={prose}>{r.prompt}</p>
-        </Field>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-          <Field name="Expected">
-            <pre style={codeBlock}>{r.expected_answer}</pre>
+        <div style={stack(20)}>
+          <Field label="Prompt">
+            <p style={para}>{r.prompt}</p>
           </Field>
-          <Field name="Agent said">
-            <pre style={{ ...codeBlock, fontFamily: 'var(--font-sans)' }}>{r.agent_answer || '(empty answer)'}</pre>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+            <Field label="Expected">
+              <pre style={codeBlock}>{r.expected_answer}</pre>
+            </Field>
+            <Field label="Agent said">
+              {r.agent_answer ? <Paragraphs text={r.agent_answer} /> : <p style={para}>(empty answer)</p>}
+            </Field>
+          </div>
+          <Field label="Grading">
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <Badge mono>{r.accuracy_method}</Badge>
+              <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>
+                {r.accuracy_rationale ?? 'No rationale recorded.'}
+              </span>
+            </div>
           </Field>
         </div>
-        <Field name="Grading">
-          <span style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 8 }}>
-            <Badge mono>{r.accuracy_method}</Badge>
-            <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>{r.accuracy_rationale ?? 'No rationale recorded.'}</span>
-          </span>
-        </Field>
       </Card>
 
-      <Card title="Provenance" subtitle="Which tables the quiz expected the agent to query, and what it used">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-          <Field name="Expected sources">
+      <Card title="Provenance">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
+          <Field label="Expected sources">
             <Ids ids={r.expected_sources} />
           </Field>
-          <Field name="Expected database / schema">
-            <span style={{ font: 'var(--type-data)' }}>
+          <Field label="Expected database / schema">
+            <span style={{ font: '400 13px/1.4 var(--font-mono)' }}>
               {r.expected_database ?? '—'} / {r.expected_schema ?? '—'}
             </span>
           </Field>
-          <Field name="Tools used">
+          <Field label="Tools used">
             <Ids ids={r.tools_used} />
           </Field>
         </div>
       </Card>
 
-      <Card title={`SQL calls (${calls.length})`} subtitle="Every SQL statement captured from the agent's tool calls, in order">
+      <Card title={`SQL calls (${calls.length})`}>
         {calls.length === 0 ? (
           <p style={{ margin: 0, font: 'var(--type-small)', color: 'var(--fg-3)' }}>No SQL was captured for this answer.</p>
         ) : (
-          calls.map((c) => {
-            const payload = parseJson(c.payload) as { sql?: string } | null
-            return (
-              <Field key={c.call_index} name={`${c.call_index + 1}. ${c.tool_name}`}>
-                <pre style={codeBlock}>{payload?.sql ?? c.payload}</pre>
-              </Field>
-            )
-          })
+          <div style={stack(16)}>
+            {calls.map((c) => {
+              const payload = parseJson(c.payload) as { sql?: string } | null
+              return (
+                <div key={c.call_index} style={stack(8)}>
+                  <Num n={c.call_index + 1} label={<span style={mono}>{c.tool_name}</span>} />
+                  <Code text={payload?.sql ?? c.payload} />
+                </div>
+              )
+            })}
+          </div>
         )}
       </Card>
 
-      <Card title="Trace" subtitle="The agent's full turn-by-turn conversation, including tool calls and results">
+      <Card title="Trace">
         <Trace raw={trace} />
       </Card>
     </div>

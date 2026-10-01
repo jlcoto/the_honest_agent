@@ -135,6 +135,23 @@ export function formatRunDate(timestamp: string): string {
   return `${d} ${MONTHS[m - 1]}`
 }
 
+/**
+ * Plain-text preview of a Markdown answer (Claude often bolds the number, e.g. "**228,626**").
+ * Only removes emphasis markers that wrap words, so identifiers like q_revenue_1996 survive.
+ */
+export function stripMarkdown(s: string): string {
+  return s
+    .replace(/```\w*\n?/g, '')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s).,!?:;]|$)/g, '$1$2')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*(?:[-*+]|\d+\.)\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** CSV text with every field quoted, so commas, quotes and newlines in answers survive. */
 export function toCsv(header: string[], rows: (string | number | null)[][]): string {
   const cell = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`

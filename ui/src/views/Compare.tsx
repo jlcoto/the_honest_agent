@@ -104,7 +104,7 @@ export function Compare({ data }: { data: ReportData }) {
       ) : (
         <>
           <Card
-            title="Models"
+            title="Results by model"
             subtitle={`Differences in points vs the current model, ${current}, on the quizzes both ran`}
           >
             <DataTable
@@ -126,8 +126,11 @@ export function Compare({ data }: { data: ReportData }) {
                 {
                   key: 'coverage',
                   label: 'Quizzes',
-                  mono: true,
-                  render: (r: ModelRow) => `${r.latest.size} of ${quizzes.length} · ${r.runs} runs`,
+                  render: (r: ModelRow) => (
+                    <span style={{ font: '400 13px var(--font-mono)', color: 'var(--fg-2)', whiteSpace: 'nowrap' }}>
+                      {r.latest.size} of {quizzes.length} · {r.runs} {r.runs === 1 ? 'run' : 'runs'}
+                    </span>
+                  ),
                 },
                 {
                   key: 'accuracy',

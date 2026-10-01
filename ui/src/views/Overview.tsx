@@ -15,10 +15,11 @@ import {
   quizzesOf,
   runColumns,
   runsOf,
+  stripMarkdown,
   toCsv,
 } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
-import { Badge, Card, DataTable, DateRangePicker, Heatmap, IconButton, ScoreCell, ScoreStat, Select, Tabs } from '../ds'
+import { Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, IconButton, ScoreCell, ScoreStat, Select, Tabs } from '../ds'
 import { navigate } from '../router'
 
 const METRICS = [
@@ -30,11 +31,12 @@ const METRICS = [
 const toneOf = (s: number) => (s >= 0.95 ? 'correct' : s >= 0.75 ? 'mostly' : s >= 0.4 ? 'partly' : 'wrong')
 const openResult = (r: ResultRow) => navigate({ name: 'result', resultId: r.result_id })
 
-function downloadCsv(filename: string, rows: ResultRow[]) {
+function downloadCsv(filename: string, rows: ResultRow[], titles: Map<string, string>) {
   const csv = toCsv(
-    ['quiz_id', 'category', 'accuracy_score', 'accuracy_min_score', 'provenance_score', 'provenance_min_score', 'failed', 'accuracy_method', 'agent_answer'],
+    ['quiz_id', 'quiz_title', 'category', 'accuracy_score', 'accuracy_min_score', 'provenance_score', 'provenance_min_score', 'failed', 'accuracy_method', 'expected_answer', 'agent_answer'],
     rows.map((r) => [
       r.quiz_id,
+      titles.get(r.quiz_id) ?? null,
       r.category,
       r.accuracy_score,
       r.accuracy_min_score,
@@ -42,6 +44,7 @@ function downloadCsv(filename: string, rows: ResultRow[]) {
       r.provenance_min_score,
       [accuracyPasses(r) ? null : 'accuracy', provenancePasses(r) ? null : 'provenance'].filter(Boolean).join('+'),
       r.accuracy_method,
+      r.expected_answer,
       r.agent_answer,
     ]),
   )
@@ -159,13 +162,14 @@ export function Overview({ data }: { data: ReportData }) {
                 label="Passed thresholds"
                 value={`${latest.passed} / ${latest.results.length}`}
                 format="raw"
-                caption={failing.length ? `${failing.length} below min score` : 'All met their min score'}
+                caption={failing.length ? `${failing.length} below min score` : 'None below min score'}
               />
             </Card>
           </div>
 
           <Card
             title="Scores by eval run"
+            subtitle="Click a cell to see that answer"
             actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
           >
             <Heatmap
@@ -196,14 +200,14 @@ export function Overview({ data }: { data: ReportData }) {
                 variant="secondary"
                 size="sm"
                 disabled={failing.length === 0}
-                onClick={() => downloadCsv(`below-threshold-${latest.timestamp.slice(0, 10)}.csv`, failing)}
+                onClick={() => downloadCsv(`below-threshold-${latest.timestamp.slice(0, 10)}.csv`, failing, titles)}
               />
             }
           >
             {failing.length === 0 ? (
-              <p style={{ margin: 0, font: 'var(--type-body)', color: 'var(--fg-2)' }}>
+              <div style={{ padding: '28px 0', textAlign: 'center', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
                 Nothing to fix. Your agent was honest this run.
-              </p>
+              </div>
             ) : (
               <DataTable
                 rowKey="result_id"
@@ -230,10 +234,18 @@ export function Overview({ data }: { data: ReportData }) {
                   },
                   { key: 'accuracy_method', label: 'Method', render: (r: ResultRow) => <Badge mono>{r.accuracy_method}</Badge> },
                   {
+                    key: 'expected_answer',
+                    label: 'Expected',
+                    mono: true,
+                    // Numbers line up on the right; free-text expected answers stay left-aligned.
+                    align: failing.every((r) => isNumeric(r.expected_answer)) ? 'right' : 'left',
+                    render: (r: ResultRow) => truncate(r.expected_answer, 40),
+                  },
+                  {
                     key: 'agent_answer',
                     label: 'Agent said',
                     render: (r: ResultRow) => (
-                      <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>{truncate(r.agent_answer, 90)}</span>
+                      <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>{truncate(stripMarkdown(r.agent_answer), 90)}</span>
                     ),
                   },
                   {
@@ -246,6 +258,17 @@ export function Overview({ data }: { data: ReportData }) {
                       </Badge>
                     ),
                   },
+                  {
+                    key: 'go',
+                    label: '',
+                    align: 'right',
+                    width: 24,
+                    render: () => (
+                      <span style={{ display: 'inline-flex', color: 'var(--fg-3)' }}>
+                        <Icon name="chevron-right" size={16} />
+                      </span>
+                    ),
+                  },
                 ]}
               />
             )}
@@ -256,4 +279,5 @@ export function Overview({ data }: { data: ReportData }) {
   )
 }
 
-const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+const isNumeric = (s: string) => /^\s*[-+]?[\d,]*\.?\d+\s*$/.test(s)
+const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
