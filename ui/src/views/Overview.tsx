@@ -1,11 +1,26 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { formatRunTime, mean, modelsOf, passes, accuracyPasses, quizzesOf, runColumns, runsOf } from '../data/derive'
+import { QuizLabel } from '../components/QuizLabel'
+import {
+  accuracyPasses,
+  agentsOf,
+  formatRunDate,
+  formatRunTime,
+  mean,
+  modelsOf,
+  passes,
+  provenancePasses,
+  quizHeatRow,
+  quizTitles,
+  quizzesOf,
+  runColumns,
+  runsOf,
+  toCsv,
+} from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
-import { Badge, Card, DataTable, DateRangePicker, Heatmap, ScoreCell, ScoreStat, Select, Tabs } from '../ds'
+import { Badge, Card, DataTable, DateRangePicker, Heatmap, IconButton, ScoreCell, ScoreStat, Select, Tabs } from '../ds'
 import { navigate } from '../router'
 
-const ALL_MODELS = 'All models'
 const METRICS = [
   { id: 'overall', label: 'Combined' },
   { id: 'accuracy', label: 'Accuracy' },
@@ -14,6 +29,27 @@ const METRICS = [
 
 const toneOf = (s: number) => (s >= 0.95 ? 'correct' : s >= 0.75 ? 'mostly' : s >= 0.4 ? 'partly' : 'wrong')
 const openResult = (r: ResultRow) => navigate({ name: 'result', resultId: r.result_id })
+
+function downloadCsv(filename: string, rows: ResultRow[]) {
+  const csv = toCsv(
+    ['quiz_id', 'category', 'accuracy_score', 'accuracy_min_score', 'provenance_score', 'provenance_min_score', 'failed', 'accuracy_method', 'agent_answer'],
+    rows.map((r) => [
+      r.quiz_id,
+      r.category,
+      r.accuracy_score,
+      r.accuracy_min_score,
+      r.provenance_score,
+      r.provenance_min_score,
+      [accuracyPasses(r) ? null : 'accuracy', provenancePasses(r) ? null : 'provenance'].filter(Boolean).join('+'),
+      r.accuracy_method,
+      r.agent_answer,
+    ]),
+  )
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename })
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
@@ -25,16 +61,26 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 export function Overview({ data }: { data: ReportData }) {
   const allRuns = useMemo(() => runsOf(data.results), [data])
-  const models = useMemo(() => modelsOf(data.results), [data])
-  const dates = useMemo(() => [...new Set(allRuns.map((r) => r.date))], [allRuns])
+  const agents = useMemo(() => agentsOf(data.results), [data])
+  const titles = useMemo(() => quizTitles(data.results), [data])
+  const allDates = useMemo(() => [...new Set(allRuns.map((r) => r.date))], [allRuns])
 
-  const [model, setModel] = useState(ALL_MODELS)
-  const [range, setRange] = useState(() => ({ from: dates[0], to: dates[dates.length - 1] }))
+  // Scores are only meaningful for one agent and one model at a time, so both
+  // are always a single pick, defaulting to the latest run's.
+  const [agent, setAgent] = useState(() => allRuns.at(-1)?.agent ?? '')
+  const agentRuns = allRuns.filter((r) => r.agent === agent)
+  const models = modelsOf(agentRuns.flatMap((r) => r.results))
+  const [modelPick, setModel] = useState(() => allRuns.at(-1)?.model ?? '')
+  const model = models.includes(modelPick) ? modelPick : (agentRuns.at(-1)?.model ?? '')
+  const pairRuns = agentRuns.filter((r) => r.model === model)
+  const [range, setRange] = useState(() => ({ from: allDates[0], to: allDates[allDates.length - 1] }))
   const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
 
-  const runs = allRuns.filter(
-    (r) => (model === ALL_MODELS || r.model === model) && r.date >= range.from && r.date <= range.to,
-  )
+  const switchAgent = (next: string) => {
+    setAgent(next)
+    setModel(allRuns.filter((r) => r.agent === next).at(-1)?.model ?? '')
+  }
+  const runs = pairRuns.filter((r) => r.date >= range.from && r.date <= range.to)
 
   if (allRuns.length === 0) {
     return (
@@ -52,30 +98,31 @@ export function Overview({ data }: { data: ReportData }) {
   const failing = latest ? latest.results.filter((r) => !passes(r)) : []
 
   const columns = runColumns(runs)
-  const quizzes = quizzesOf(runs.flatMap((r) => r.results))
+  const quizzes = quizzesOf(runs.flatMap((r) => r.results), titles)
   const scoreIn = (runIndex: number, quizId: string, key: 'accuracy_score' | 'provenance_score') => {
     const rows = runs[runIndex].results.filter((r) => r.quiz_id === quizId)
     return rows.length ? mean(rows.map((r) => r[key])) : null
   }
-  const heatRows = quizzes.map((q) => ({
-    label: q.quiz_id,
-    sublabel: q.category,
-    accuracy: runs.map((_, i) => scoreIn(i, q.quiz_id, 'accuracy_score')),
-    provenance: runs.map((_, i) => scoreIn(i, q.quiz_id, 'provenance_score')),
-  }))
+  const heatRows = quizzes.map((q) =>
+    quizHeatRow(
+      q,
+      runs.map((_, i) => scoreIn(i, q.quiz_id, 'accuracy_score')),
+      runs.map((_, i) => scoreIn(i, q.quiz_id, 'provenance_score')),
+    ),
+  )
   const categories = [...new Set(quizzes.map((q) => q.category))]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <PageHeader title="Overview" subtitle={latest ? `Last eval run ${formatRunTime(latest.timestamp)} · ${latest.model}` : undefined}>
-        <Select size="sm" icon="cpu" options={[ALL_MODELS, ...models]} value={model} onChange={setModel} />
-        <DateRangePicker dates={dates} value={range} onChange={setRange} />
+      <PageHeader title="Overview" subtitle={latest ? `Last eval run ${formatRunTime(latest.timestamp, { year: false })}` : undefined}>
+        <Select size="sm" icon="bot" options={agents} value={agent} onChange={switchAgent} />
+        <Select size="sm" icon="cpu" options={models} value={model} onChange={setModel} />
+        <DateRangePicker dates={[...new Set(pairRuns.map((r) => r.date))]} value={range} onChange={setRange} />
       </PageHeader>
 
       {!latest ? (
         <Empty>
-          No eval runs between {range.from} and {range.to}
-          {model === ALL_MODELS ? '' : ` for ${model}`}. Try a wider range.
+          No eval runs of {agent} with {model} between {range.from} and {range.to}. Try a wider range.
         </Empty>
       ) : (
         <>
@@ -119,21 +166,21 @@ export function Overview({ data }: { data: ReportData }) {
 
           <Card
             title="Scores by eval run"
-            subtitle={`${runs.length} runs · click a cell to see that answer`}
             actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
           >
             <Heatmap
               metric={metric}
               showToggle={false}
               rowHeader="Quiz"
-              rowLabelWidth={300}
-              groupBy="sublabel"
+              rowLabelWidth={360}
+              groupBy="category"
               defaultExpanded={categories}
               rows={heatRows}
               columns={columns}
               onCellClick={(row, column, value) => {
                 const run = runs[columns.indexOf(column)]
-                const result = value == null ? undefined : run?.results.find((r) => r.quiz_id === row.label)
+                const quizId = (row as ReturnType<typeof quizHeatRow>).quiz_id
+                const result = value == null ? undefined : run?.results.find((r) => r.quiz_id === quizId)
                 if (result) openResult(result)
               }}
             />
@@ -141,7 +188,17 @@ export function Overview({ data }: { data: ReportData }) {
 
           <Card
             title="Below threshold"
-            subtitle={`Latest eval run, ${formatRunTime(latest.timestamp)} · ${failing.length} of ${latest.results.length} quizzes below their accuracy or provenance min score`}
+            subtitle={`Latest eval run, ${formatRunDate(latest.timestamp)} · ${failing.length} ${failing.length === 1 ? 'quiz' : 'quizzes'} failed accuracy or provenance min score`}
+            actions={
+              <IconButton
+                icon="download"
+                label="Export CSV"
+                variant="secondary"
+                size="sm"
+                disabled={failing.length === 0}
+                onClick={() => downloadCsv(`below-threshold-${latest.timestamp.slice(0, 10)}.csv`, failing)}
+              />
+            }
           >
             {failing.length === 0 ? (
               <p style={{ margin: 0, font: 'var(--type-body)', color: 'var(--fg-2)' }}>
@@ -153,7 +210,11 @@ export function Overview({ data }: { data: ReportData }) {
                 onRowClick={openResult}
                 rows={failing}
                 columns={[
-                  { key: 'quiz_id', label: 'Quiz', mono: true },
+                  {
+                    key: 'quiz_id',
+                    label: 'Quiz',
+                    render: (r: ResultRow) => <QuizLabel quizId={r.quiz_id} title={titles.get(r.quiz_id)} />,
+                  },
                   { key: 'category', label: 'Category' },
                   {
                     key: 'accuracy_score',

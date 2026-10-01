@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { bucketCounts, mean, modelsOf, quizzesOf, runsOf } from '../data/derive'
+import { agentOf, agentsOf, bucketCounts, mean, modelsOf, quizHeatRow, quizTitles, quizzesOf, runsOf } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
-import { AccuracyBar, Card, DataTable, Heatmap, ScoreCell, Tabs } from '../ds'
+import { AccuracyBar, Card, DataTable, Heatmap, ScoreCell, Select, Tabs } from '../ds'
 import { navigate } from '../router'
 
 const METRICS = [
@@ -40,9 +40,13 @@ function Delta({ value }: { value: number | null }) {
 
 export function Compare({ data }: { data: ReportData }) {
   const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
+  const agents = useMemo(() => agentsOf(data.results), [data])
+  // One agent at a time: models are only comparable on the same agent. Defaults to the latest run's.
+  const [agent, setAgent] = useState(() => runsOf(data.results).at(-1)?.agent ?? '')
 
   const { rows, quizzes, current } = useMemo(() => {
-    const runs = runsOf(data.results)
+    const results = data.results.filter((r) => agentOf(r) === agent)
+    const runs = runsOf(results)
     const current = runs.length ? runs[runs.length - 1].model : null
     // Each model's most recent result per quiz (runs are sorted oldest first).
     const latestByModel = new Map<string, Map<string, ResultRow>>()
@@ -52,7 +56,7 @@ export function Compare({ data }: { data: ReportData }) {
       latestByModel.set(run.model, latest)
     }
     const base = current ? latestByModel.get(current)! : new Map<string, ResultRow>()
-    const rows: ModelRow[] = modelsOf(data.results).map((model) => {
+    const rows: ModelRow[] = modelsOf(results).map((model) => {
       const latest = latestByModel.get(model)!
       const results = [...latest.values()]
       const shared = [...latest.keys()].filter((q) => base.has(q))
@@ -71,103 +75,116 @@ export function Compare({ data }: { data: ReportData }) {
         dProvenance: sharedDelta('provenance_score'),
       }
     })
-    return { rows, quizzes: quizzesOf(data.results), current }
-  }, [data])
+    return { rows, quizzes: quizzesOf(results, quizTitles(data.results)), current }
+  }, [data, agent])
 
-  if (rows.length === 0) return <PageHeader title="Model comparison" subtitle="No results yet." />
 
-  const heatRows = quizzes.map((q) => ({
-    label: q.quiz_id,
-    sublabel: q.category,
-    accuracy: rows.map((m) => m.latest.get(q.quiz_id)?.accuracy_score ?? null),
-    provenance: rows.map((m) => m.latest.get(q.quiz_id)?.provenance_score ?? null),
-  }))
+  const heatRows = quizzes.map((q) =>
+    quizHeatRow(
+      q,
+      rows.map((m) => m.latest.get(q.quiz_id)?.accuracy_score ?? null),
+      rows.map((m) => m.latest.get(q.quiz_id)?.provenance_score ?? null),
+    ),
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="Model comparison"
-        subtitle={`${rows.length} models · each model's latest result per quiz`}
-      />
-      <Card
-        title="Models"
-        subtitle={`Differences in points vs the current model, ${current}, on the quizzes both ran`}
+        subtitle={`${agent} · ${rows.length} models · each model's latest result per quiz`}
       >
-        <DataTable
-          rowKey="model"
-          rows={rows}
-          columns={[
-            {
-              key: 'model',
-              label: 'Model',
-              render: (r: ModelRow) => (
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ font: '500 13px var(--font-mono)', whiteSpace: 'nowrap' }}>{r.model}</span>
-                  {r.isCurrent ? (
-                    <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>Current model (latest run)</span>
-                  ) : null}
-                </span>
-              ),
-            },
-            {
-              key: 'coverage',
-              label: 'Quizzes',
-              mono: true,
-              render: (r: ModelRow) => `${r.latest.size} of ${quizzes.length} · ${r.runs} runs`,
-            },
-            {
-              key: 'accuracy',
-              label: 'Accuracy',
-              render: (r: ModelRow) => (
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <ScoreCell score={r.accuracy} />
-                  <Delta value={r.dAccuracy} />
-                </span>
-              ),
-            },
-            {
-              key: 'provenance',
-              label: 'Provenance',
-              render: (r: ModelRow) => (
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <ScoreCell score={r.provenance} />
-                  <Delta value={r.dProvenance} />
-                </span>
-              ),
-            },
-            {
-              key: 'mix',
-              label: 'Answer mix',
-              width: 180,
-              render: (r: ModelRow) => (
-                <AccuracyBar counts={bucketCounts([...r.latest.values()].map((x) => x.accuracy_score))} height={8} />
-              ),
-            },
-          ]}
-        />
-      </Card>
-      <Card
-        title="Scores by model"
-        subtitle="Grey cells: that model never ran the quiz · click a cell to see the answer"
-        actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
-      >
-        <Heatmap
-          metric={metric}
-          showToggle={false}
-          showSummary={false}
-          rowHeader="Quiz"
-          rowLabelWidth={300}
-          groupBy="sublabel"
-          defaultExpanded={[...new Set(quizzes.map((q) => q.category))]}
-          rows={heatRows}
-          columns={rows.map((m) => m.model)}
-          cellWidth={56}
-          onCellClick={(row, column) => {
-            const result = rows.find((m) => m.model === column)?.latest.get(row.label)
-            if (result) navigate({ name: 'result', resultId: result.result_id })
-          }}
-        />
-      </Card>
+        <Select size="sm" icon="bot" options={agents} value={agent} onChange={setAgent} />
+      </PageHeader>
+      {rows.length === 0 ? (
+        <Card>
+          <p style={{ margin: 0, padding: '24px 0', textAlign: 'center', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
+            No results yet. Run <code>agent-quiz run</code>, then <code>agent-quiz report</code> again.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <Card
+            title="Models"
+            subtitle={`Differences in points vs the current model, ${current}, on the quizzes both ran`}
+          >
+            <DataTable
+              rowKey="model"
+              rows={rows}
+              columns={[
+                {
+                  key: 'model',
+                  label: 'Model',
+                  render: (r: ModelRow) => (
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ font: '500 13px var(--font-mono)', whiteSpace: 'nowrap' }}>{r.model}</span>
+                      {r.isCurrent ? (
+                        <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>Current model (latest run)</span>
+                      ) : null}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'coverage',
+                  label: 'Quizzes',
+                  mono: true,
+                  render: (r: ModelRow) => `${r.latest.size} of ${quizzes.length} · ${r.runs} runs`,
+                },
+                {
+                  key: 'accuracy',
+                  label: 'Accuracy',
+                  render: (r: ModelRow) => (
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <ScoreCell score={r.accuracy} />
+                      <Delta value={r.dAccuracy} />
+                    </span>
+                  ),
+                },
+                {
+                  key: 'provenance',
+                  label: 'Provenance',
+                  render: (r: ModelRow) => (
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <ScoreCell score={r.provenance} />
+                      <Delta value={r.dProvenance} />
+                    </span>
+                  ),
+                },
+                {
+                  key: 'mix',
+                  label: 'Answer mix',
+                  width: 180,
+                  render: (r: ModelRow) => (
+                    <AccuracyBar counts={bucketCounts([...r.latest.values()].map((x) => x.accuracy_score))} height={8} />
+                  ),
+                },
+              ]}
+            />
+          </Card>
+          <Card
+            title="Scores by model"
+            subtitle="Grey cells: that model never ran the quiz · click a cell to see the answer"
+            actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
+          >
+            <Heatmap
+              metric={metric}
+              showToggle={false}
+              showSummary={false}
+              rowHeader="Quiz"
+              rowLabelWidth={360}
+              groupBy="category"
+              defaultExpanded={[...new Set(quizzes.map((q) => q.category))]}
+              rows={heatRows}
+              columns={rows.map((m) => m.model)}
+              cellWidth={56}
+              onCellClick={(row, column) => {
+                const quizId = (row as ReturnType<typeof quizHeatRow>).quiz_id
+                const result = rows.find((m) => m.model === column)?.latest.get(quizId)
+                if (result) navigate({ name: 'result', resultId: result.result_id })
+              }}
+            />
+          </Card>
+        </>
+      )}
     </div>
   )
 }

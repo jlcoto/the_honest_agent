@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { accuracyPasses, formatRunTime, pct, provenancePasses, toolCallsFor } from '../data/derive'
+import { accuracyPasses, agentOf, formatRunTime, pct, provenancePasses, quizTitles, toolCallsFor } from '../data/derive'
 import type { ReportData } from '../data/types'
 import { Badge, Button, Card, ScoreStat } from '../ds'
 
@@ -115,12 +115,22 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
   const calls = toolCallsFor(data, r.result_id)
   const trace = data.agent_logs.find((l) => l.result_id === r.result_id)?.agent_trace
   const tokens = (r.agent_input_tokens ?? 0) + (r.agent_output_tokens ?? 0)
+  const title = quizTitles(data.results).get(r.quiz_id)
+  const context = `${r.category ?? 'Uncategorized'} · ${formatRunTime(r.run_timestamp)} · ${agentOf(r)} · ${r.model_name}`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
-        title={<span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{r.quiz_id}</span>}
-        subtitle={`${r.category ?? 'Uncategorized'} · ${formatRunTime(r.run_timestamp)} · ${r.model_name}`}
+        title={title ?? <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{r.quiz_id}</span>}
+        subtitle={
+          title ? (
+            <>
+              <span style={{ fontFamily: 'var(--font-mono)' }}>{r.quiz_id}</span> · {context}
+            </>
+          ) : (
+            context
+          )
+        }
       >
         <Badge tone={accOk ? 'correct' : 'wrong'} dot>
           Accuracy {accOk ? 'passed' : 'below min'}

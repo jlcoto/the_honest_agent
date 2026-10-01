@@ -6,6 +6,7 @@ export interface ResultRow {
   run_id: string
   run_timestamp: string
   quiz_id: string
+  quiz_title: string | null // optional `title:` from the quiz YAML
   prompt: string
   category: string | null
   tags: string[] | null
@@ -23,6 +24,7 @@ export interface ResultRow {
   provenance_min_score: number | null
   model_name: string
   agent_backend: string
+  agent_name: string | null // null for results stored before agents were recorded
   latency_ms: number | null
   agent_input_tokens: number | null
   agent_output_tokens: number | null
