@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import click
+from click.core import ParameterSource
 from dotenv import load_dotenv
 
 from . import notify as notify_mod
@@ -124,6 +125,31 @@ def _describe_mcp_connection_error(exc: BaseException) -> str:
     return str(exc)
 
 
+def _resolve_mcp_target(
+    command: str | None,
+    url: str | None,
+    command_source: ParameterSource | None,
+    url_source: ParameterSource | None,
+) -> tuple[str | None, str | None]:
+    """Picks stdio vs HTTP when both are set: a flag typed on the command line beats a value
+    that only came from the environment (or .env), e.g. `--mcp-command ...` with a remote
+    MCP_URL configured in .env for another agent."""
+    if not (command and url):
+        return command, url
+    command_explicit = command_source is ParameterSource.COMMANDLINE
+    url_explicit = url_source is ParameterSource.COMMANDLINE
+    if command_explicit and not url_explicit:
+        return command, None
+    if url_explicit and not command_explicit:
+        return None, url
+    if command_explicit:
+        raise click.ClickException("Pass either --mcp-command (stdio) or --mcp-url (HTTP), not both.")
+    raise click.ClickException(
+        "Both MCP_COMMAND and MCP_URL are set in the environment (or .env). "
+        "Pass --mcp-command or --mcp-url to choose one."
+    )
+
+
 def _resolve_agent_name(explicit: str | None, connected_client) -> str:
     """`--agent-name` wins; otherwise the name the MCP server reported during the handshake."""
     return explicit or connected_client.server_info.name
@@ -222,15 +248,16 @@ async def _run_async(
     envvar="MCP_COMMAND",
     default=None,
     help="Shell command launching a local MCP server over stdio, "
-    'e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url. Requires the '
-    "'mcp' extra.",
+    'e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url; when given on the '
+    "command line, it overrides an MCP_URL set in the environment. Requires the 'mcp' extra.",
 )
 @click.option(
     "--mcp-url",
     envvar="MCP_URL",
     default=None,
-    help="URL of a remote MCP server's streamable-HTTP endpoint. "
-    "Mutually exclusive with --mcp-command. Requires the 'mcp' extra.",
+    help="URL of a remote MCP server's streamable-HTTP endpoint. Mutually exclusive with "
+    "--mcp-command; when given on the command line, it overrides an MCP_COMMAND set in the "
+    "environment. Requires the 'mcp' extra.",
 )
 @click.option(
     "--mcp-bearer-token",
@@ -279,6 +306,10 @@ def run(
         )
     if not (mcp_command or mcp_url):
         raise click.ClickException("--mcp-command or --mcp-url is required.")
+    ctx = click.get_current_context()
+    mcp_command, mcp_url = _resolve_mcp_target(
+        mcp_command, mcp_url, ctx.get_parameter_source("mcp_command"), ctx.get_parameter_source("mcp_url")
+    )
 
     asyncio.run(
         _run_async(

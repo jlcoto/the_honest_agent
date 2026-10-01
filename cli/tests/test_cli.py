@@ -99,3 +99,56 @@ def test_agent_name_defaults_to_the_mcp_server_name():
     connected = SimpleNamespace(server_info=SimpleNamespace(name="mcp-server-motherduck"))
     assert _resolve_agent_name(None, connected) == "mcp-server-motherduck"
     assert _resolve_agent_name("motherduck", connected) == "motherduck"
+
+
+def _run_capturing_mcp_target(monkeypatch, args: list[str], env: dict[str, str]):
+    import agent_quiz_cli.cli as cli_mod
+
+    captured = {}
+
+    async def fake_run_async(*a):
+        captured["mcp_command"], captured["mcp_url"] = a[4], a[5]
+
+    monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
+    with CliRunner().isolated_filesystem():
+        Path("quizzes").mkdir()
+        result = CliRunner().invoke(
+            main, ["run", "--quizzes-dir", "quizzes", *args], env={"ANTHROPIC_API_KEY": "test", **env}
+        )
+    return result, captured
+
+
+def test_explicit_mcp_command_overrides_mcp_url_from_env(monkeypatch):
+    result, target = _run_capturing_mcp_target(
+        monkeypatch, ["--mcp-command", "uvx mcp-server-motherduck"], {"MCP_URL": "https://remote/mcp"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert target == {"mcp_command": "uvx mcp-server-motherduck", "mcp_url": None}
+
+
+def test_explicit_mcp_url_overrides_mcp_command_from_env(monkeypatch):
+    result, target = _run_capturing_mcp_target(
+        monkeypatch, ["--mcp-url", "https://remote/mcp"], {"MCP_COMMAND": "python server.py"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert target == {"mcp_command": None, "mcp_url": "https://remote/mcp"}
+
+
+def test_both_mcp_flags_given_explicitly_is_an_error(monkeypatch):
+    result, _ = _run_capturing_mcp_target(
+        monkeypatch, ["--mcp-command", "python server.py", "--mcp-url", "https://remote/mcp"], {}
+    )
+
+    assert result.exit_code != 0
+    assert "not both" in result.output
+
+
+def test_both_mcp_targets_only_in_env_is_an_error(monkeypatch):
+    result, _ = _run_capturing_mcp_target(
+        monkeypatch, [], {"MCP_COMMAND": "python server.py", "MCP_URL": "https://remote/mcp"}
+    )
+
+    assert result.exit_code != 0
+    assert "Pass --mcp-command or --mcp-url to choose one" in result.output

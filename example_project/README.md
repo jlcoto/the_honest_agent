@@ -167,6 +167,15 @@ itself (the demo server reports `agent_quiz_demo`). Pass
 label instead. Results stored before this was recorded show as "Unknown
 agent".
 
+### `.env` and choosing the MCP server
+
+`.env` is loaded automatically, so `MCP_URL`/`MCP_BEARER_TOKEN` there (e.g.
+for Snowflake) apply to every run. A flag typed on the command line wins
+over a value that only comes from the environment: `--mcp-command ...` runs
+the local server even with `MCP_URL` in `.env`, and `--mcp-url ...` likewise
+overrides `MCP_COMMAND`. Passing both `--mcp-command` and `--mcp-url` as flags
+is an error.
+
 ## Connecting to a real MotherDuck account
 
 `quizzes_motherduck/example_quiz.yml` points at MotherDuck's own official MCP
