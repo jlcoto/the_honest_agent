@@ -1,13 +1,39 @@
-import { Icon, Switch } from '../ds'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { formatRunTime } from '../data/derive'
+import { Icon, Logo, Switch } from '../ds'
 import { href, type Route } from '../router'
 
 const ITEMS = [
   { route: { name: 'overview' } as Route, label: 'Overview', icon: 'layout-dashboard' },
   { route: { name: 'compare' } as Route, label: 'Model comparison', icon: 'git-compare' },
 ]
+const MINI_KEY = 'agent-quiz.sidebarMini'
+// Bust crop of design/mascot.svg, matching the design system's logo-mark.
+const LOGO_SRC = './logo-mark.svg'
 
-// Adapted from the design system's ui_kits/dashboard/Sidebar.jsx. Uses the
-// wordmark alone until assets/logo-mark.png is added for the Logo component.
+function initialMini(): boolean {
+  try {
+    return localStorage.getItem(MINI_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+const iconBtn: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 36,
+  height: 36,
+  border: 0,
+  borderRadius: 'var(--radius-sm)',
+  background: 'transparent',
+  color: 'var(--fg-2)',
+  cursor: 'pointer',
+  flex: 'none',
+}
+
+// Ported from the design system's ui_kits/dashboard/Sidebar.jsx.
 export function Sidebar({
   route,
   theme,
@@ -19,34 +45,90 @@ export function Sidebar({
   setTheme: (t: 'light' | 'dark') => void
   generatedAt: string | null
 }) {
+  const [hov, setHov] = useState(false)
+  const [mini, setMini] = useState(initialMini)
+  useEffect(() => {
+    try {
+      localStorage.setItem(MINI_KEY, mini ? '1' : '0')
+    } catch {
+      // Storage unavailable; the toggle still works for this visit.
+    }
+  }, [mini])
+
   const active = route.name === 'result' ? 'overview' : route.name
   return (
     <aside
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       style={{
-        width: 208,
+        width: mini ? 68 : 208,
+        transition: 'width var(--dur-base) var(--ease-out)',
         flex: 'none',
         borderRight: '1px solid var(--border-1)',
         background: 'var(--bg-surface)',
         display: 'flex',
         flexDirection: 'column',
-        padding: '18px 12px',
+        padding: mini ? '18px 10px' : '18px 12px',
         gap: 24,
         position: 'sticky',
         top: 0,
         height: '100vh',
+        overflow: 'hidden',
       }}
     >
-      <div
-        style={{
-          padding: '16px 12px',
-          borderRadius: 'var(--radius-md)',
-          border: '1.5px solid var(--green-300)',
-          font: '600 14px/1 var(--font-display)',
-          letterSpacing: '-0.02em',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        The Honest Agent
+      <div style={{ position: 'relative' }}>
+        <div
+          title={mini ? 'The Honest Agent' : undefined}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: mini ? 'center' : 'flex-start',
+            height: mini ? 48 : undefined,
+            padding: mini ? 0 : '16px 12px',
+            borderRadius: 'var(--radius-md)',
+            border: mini ? '1.5px solid transparent' : '1.5px solid var(--green-300)',
+            opacity: mini && hov ? 0 : 1,
+            transition: 'opacity var(--dur-fast) var(--ease-out)',
+          }}
+        >
+          <Logo markSrc={LOGO_SRC} size={mini ? 28 : 24} textSize={14} wordmark={!mini} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setMini(!mini)}
+          title={mini ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={mini ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!mini}
+          onFocus={() => setHov(true)}
+          onMouseOver={(e) => {
+            e.currentTarget.style.color = 'var(--fg-1)'
+            e.currentTarget.style.background = 'var(--bg-sunken)'
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.color = 'var(--fg-2)'
+            e.currentTarget.style.background = 'var(--bg-surface)'
+          }}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            ...(mini
+              ? { left: '50%', transform: 'translate(-50%,-50%)', width: 36, height: 36 }
+              : { right: 5, transform: 'translateY(-50%)', width: 24, height: 24 }),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: 0,
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--bg-surface)',
+            color: 'var(--fg-2)',
+            cursor: 'pointer',
+            opacity: hov ? 1 : 0,
+            pointerEvents: hov ? 'auto' : 'none',
+            transition: 'opacity var(--dur-fast) var(--ease-out)',
+          }}
+        >
+          <Icon name={mini ? 'panel-left-open' : 'panel-left-close'} size={16} />
+        </button>
       </div>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {ITEMS.map((it) => {
@@ -55,13 +137,16 @@ export function Sidebar({
             <a
               key={it.label}
               href={href(it.route)}
+              title={mini ? it.label : undefined}
+              aria-label={it.label}
               aria-current={on ? 'page' : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: mini ? 'center' : 'flex-start',
                 gap: 10,
                 height: 36,
-                padding: '0 10px',
+                padding: mini ? 0 : '0 10px',
                 borderRadius: 'var(--radius-sm)',
                 background: on ? 'var(--accent-soft)' : 'transparent',
                 color: on ? 'var(--accent)' : 'var(--fg-2)',
@@ -71,7 +156,7 @@ export function Sidebar({
               }}
             >
               <Icon name={it.icon} size={16} />
-              {it.label}
+              {mini ? null : it.label}
             </a>
           )
         })}
@@ -79,19 +164,36 @@ export function Sidebar({
       <div
         style={{
           marginTop: 'auto',
-          padding: '12px 10px 0',
+          padding: mini ? '12px 0 0' : '12px 10px 0',
           borderTop: '1px solid var(--border-1)',
           display: 'flex',
           flexDirection: 'column',
+          alignItems: mini ? 'center' : 'stretch',
           gap: 12,
         }}
       >
-        <Switch checked={theme === 'dark'} onChange={(v) => setTheme(v ? 'dark' : 'light')} label="Dark mode" />
-        {generatedAt ? (
-          <span style={{ font: '400 12px/1.4 var(--font-mono)', color: 'var(--fg-3)' }}>
-            Generated {generatedAt.slice(0, 16).replace('T', ' ')} UTC
-          </span>
-        ) : null}
+        {mini ? (
+          <button
+            type="button"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            aria-label="Toggle dark mode"
+            style={iconBtn}
+          >
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
+          </button>
+        ) : (
+          <>
+            <Switch checked={theme === 'dark'} onChange={(v) => setTheme(v ? 'dark' : 'light')} label="Dark mode" />
+            {generatedAt ? (
+              <span style={{ font: '400 12px/1.4 var(--font-mono)', color: 'var(--fg-3)' }}>
+                Generated
+                <br />
+                {formatRunTime(generatedAt.slice(0, 16).replace('T', ' '))} UTC
+              </span>
+            ) : null}
+          </>
+        )}
       </div>
     </aside>
   )
