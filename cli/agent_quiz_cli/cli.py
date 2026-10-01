@@ -27,6 +27,8 @@ load_dotenv()
 
 DEFAULT_RESULTS_PATH = "./agent_quiz_results/results.duckdb"
 _RESULTS_PATH_HELP = "Local DuckDB file where results are stored (created on first `run`)."
+DEFAULT_REPORT_DIR = "agent_quiz_report"
+_REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
 
 
 @click.group()
@@ -276,22 +278,24 @@ def run(
 
 @main.command()
 @click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
-@click.option("--out", default="agent_quiz_report.html", type=click.Path())
+@click.option("--out", default=DEFAULT_REPORT_DIR, type=click.Path(file_okay=False), help=_REPORT_DIR_HELP)
 def report(results_path: str, out: str):
-    """Generate a static HTML report from all stored results."""
-    report_mod.generate(results_path, Path(out))
-    click.echo(f"Wrote {out}")
+    """Write the report (web UI + data from all stored results) to a folder."""
+    try:
+        report_mod.generate(results_path, Path(out))
+    except FileNotFoundError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"Wrote {out}/. View it with `agent-quiz serve --out {out}`.")
 
 
 @main.command()
-@click.option("--out", default="agent_quiz_report.html", type=click.Path(exists=True, dir_okay=False))
+@click.option("--out", default=DEFAULT_REPORT_DIR, type=click.Path(exists=True, file_okay=False), help=_REPORT_DIR_HELP)
 @click.option("--port", default=8000, type=int)
 @click.option("--open-browser/--no-open-browser", default=True)
 def serve(out: str, port: int, open_browser: bool):
-    """Serve a generated HTML report locally, the same way `dbt docs serve` does."""
-    report_path = Path(out)
-    click.echo(f"Serving {report_path} at http://127.0.0.1:{port}/{report_path.name} (Ctrl+C to stop)")
-    serve_mod.serve(report_path, port, open_browser=open_browser)
+    """Serve a generated report folder locally, the same way `dbt docs serve` does."""
+    click.echo(f"Serving {out}/ at http://127.0.0.1:{port}/ (Ctrl+C to stop)")
+    serve_mod.serve(Path(out), port, open_browser=open_browser)
 
 
 @main.command()

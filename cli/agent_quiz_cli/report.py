@@ -1,115 +1,43 @@
-from __future__ import annotations
+"""Writes the report: the prebuilt React UI (`report_ui/`, built from the
+repo's `ui/` folder and shipped inside this package) plus `data/report.json`,
+which holds every row of the `results`, `agent_logs`, and `tool_calls` tables.
 
-from collections import defaultdict
-from pathlib import Path
-from typing import Any
-
-from .storage import read_all_results
-
-
-def _accuracy_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "run_id": r["run_id"],
-            "run_timestamp": r["run_timestamp"],
-            "quiz_id": r["quiz_id"],
-            "category": r["category"],
-            "prompt": r["prompt"],
-            "expected_answer": r["expected_answer"],
-            "agent_answer": r["agent_answer"],
-            "accuracy_method": r["accuracy_method"],
-            "accuracy_score": r["accuracy_score"],
-            "accuracy_min_score": r["accuracy_min_score"],
-            "accuracy_rationale": r["accuracy_rationale"],
-            "model_name": r["model_name"],
-            "latency_ms": r["latency_ms"],
-        }
-        for r in rows
-    ]
-
-
-def _provenance_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "run_id": r["run_id"],
-            "run_timestamp": r["run_timestamp"],
-            "quiz_id": r["quiz_id"],
-            "category": r["category"],
-            "tools_used": r["tools_used"],
-            "expected_sources": r["expected_sources"],
-            "expected_database": r["expected_database"],
-            "expected_schema": r["expected_schema"],
-            "provenance_score": r["provenance_score"],
-            "provenance_min_score": r["provenance_min_score"],
-            "model_name": r["model_name"],
-        }
-        for r in rows
-    ]
-
-
-def _summary_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_run: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for r in rows:
-        by_run[r["run_id"]].append(r)
-
-    summaries = []
-    for run_id, run_rows in by_run.items():
-        accuracy_scores = [r["accuracy_score"] for r in run_rows]
-        provenance_scores = [r["provenance_score"] for r in run_rows]
-        timestamps = [r["run_timestamp"] for r in run_rows]
-        summaries.append(
-            {
-                "run_id": run_id,
-                "run_started_at": min(timestamps),
-                "run_finished_at": max(timestamps),
-                "quiz_count": len(run_rows),
-                "avg_accuracy_score": sum(accuracy_scores) / len(accuracy_scores),
-                "min_accuracy_score": min(accuracy_scores),
-                "avg_provenance_score": sum(provenance_scores) / len(provenance_scores),
-                "min_provenance_score": min(provenance_scores),
-            }
-        )
-    summaries.sort(key=lambda s: s["run_started_at"])
-    return summaries
-
-
-def _table_html(rows: list[dict[str, Any]]) -> str:
-    if not rows:
-        return "<p><em>No data yet.</em></p>"
-    headers = list(rows[0].keys())
-    head_html = "".join(f"<th>{h}</th>" for h in headers)
-    body_html = "".join("<tr>" + "".join(f"<td>{row.get(h, '')}</td>" for h in headers) + "</tr>" for row in rows)
-    return f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
-
-
-def _render_html(summary_rows: list[dict], accuracy_rows: list[dict], provenance_rows: list[dict]) -> str:
-    return f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Agent Quiz Report</title>
-<style>
-  body {{ font-family: -apple-system, sans-serif; margin: 2rem; color: #1a1a1a; }}
-  h2 {{ margin-top: 2rem; }}
-  table {{ border-collapse: collapse; width: 100%; margin-top: 0.5rem; }}
-  th, td {{ border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 0.9rem; }}
-  th {{ background: #f5f5f5; }}
-</style>
-</head>
-<body>
-  <h1>Agent Quiz Report</h1>
-  <h2>Run summary</h2>
-  {_table_html(summary_rows)}
-  <h2>Accuracy scores</h2>
-  {_table_html(accuracy_rows)}
-  <h2>Provenance scores</h2>
-  {_table_html(provenance_rows)}
-</body>
-</html>
+The output is a folder of static files. Browsers won't fetch the JSON from a
+`file://` page, so view it through `agent-quiz serve` or any static host.
 """
 
+from __future__ import annotations
 
-def generate(results_path: str, out_path: Path) -> None:
-    rows = read_all_results(results_path)
-    html = _render_html(_summary_rows(rows), _accuracy_rows(rows), _provenance_rows(rows))
-    out_path.write_text(html)
+import json
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .storage import read_agent_logs, read_all_results, read_tool_calls
+
+UI_DIR = Path(__file__).parent / "report_ui"
+
+
+def build_report_data(results_path: str) -> dict:
+    results = sorted(read_all_results(results_path), key=lambda r: (r["run_timestamp"], r["quiz_id"]))
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "results": results,
+        "agent_logs": read_agent_logs(results_path),
+        "tool_calls": read_tool_calls(results_path),
+    }
+
+
+def generate(results_path: str, out_dir: Path) -> None:
+    if not (UI_DIR / "index.html").exists():
+        raise FileNotFoundError(f"Report UI not found at {UI_DIR}. Build it first: `cd ui && npm ci && npm run build`.")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Asset filenames are content-hashed, so a previous report's bundles would
+    # pile up. Only this folder is cleared -- out_dir itself may be user-chosen.
+    shutil.rmtree(out_dir / "assets", ignore_errors=True)
+    shutil.copytree(UI_DIR, out_dir, dirs_exist_ok=True)
+
+    data_dir = out_dir / "data"
+    data_dir.mkdir(exist_ok=True)
+    (data_dir / "report.json").write_text(json.dumps(build_report_data(results_path)))

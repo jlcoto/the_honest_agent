@@ -1,0 +1,93 @@
+import type { ReportData, ResultRow, ToolCallRow } from './types'
+
+export interface Run {
+  run_id: string
+  /** "YYYY-MM-DD HH:MM" */
+  timestamp: string
+  date: string
+  model: string
+  results: ResultRow[]
+  accuracy: number
+  provenance: number
+  overall: number
+  passed: number
+}
+
+export const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0)
+
+// Same rule as cli/agent_quiz_cli/thresholds.py, so the report agrees with `agent-quiz notify`.
+export const accuracyPasses = (r: ResultRow) => r.accuracy_min_score == null || r.accuracy_score >= r.accuracy_min_score
+export const provenancePasses = (r: ResultRow) =>
+  r.provenance_min_score == null || r.provenance_score >= r.provenance_min_score
+export const passes = (r: ResultRow) => accuracyPasses(r) && provenancePasses(r)
+
+export const overallOf = (r: ResultRow) => (r.accuracy_score + r.provenance_score) / 2
+
+export function runsOf(results: ResultRow[]): Run[] {
+  const byRun = new Map<string, ResultRow[]>()
+  for (const r of results) byRun.set(r.run_id, [...(byRun.get(r.run_id) ?? []), r])
+  const runs = [...byRun.entries()].map(([run_id, rows]) => {
+    const timestamp = rows.map((r) => r.run_timestamp).sort()[0].slice(0, 16)
+    const accuracy = mean(rows.map((r) => r.accuracy_score))
+    const provenance = mean(rows.map((r) => r.provenance_score))
+    return {
+      run_id,
+      timestamp,
+      date: timestamp.slice(0, 10),
+      model: rows[0].model_name,
+      results: rows,
+      accuracy,
+      provenance,
+      overall: (accuracy + provenance) / 2,
+      passed: rows.filter(passes).length,
+    }
+  })
+  return runs.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+}
+
+export const modelsOf = (results: ResultRow[]) => [...new Set(results.map((r) => r.model_name))].sort()
+
+/** Quizzes in first-seen order, with their category. */
+export function quizzesOf(results: ResultRow[]): { quiz_id: string; category: string }[] {
+  const seen = new Map<string, string>()
+  for (const r of results) if (!seen.has(r.quiz_id)) seen.set(r.quiz_id, r.category ?? 'Uncategorized')
+  return [...seen.entries()].map(([quiz_id, category]) => ({ quiz_id, category }))
+}
+
+/** Unique heatmap column label per run; the Heatmap shows the date and reveals the rest on hover. */
+export function runColumns(runs: Run[]): string[] {
+  const seen = new Map<string, number>()
+  return runs.map((run) => {
+    const base = `${run.timestamp} · ${run.model}`
+    const n = (seen.get(base) ?? 0) + 1
+    seen.set(base, n)
+    return n === 1 ? base : `${base} (${n})`
+  })
+}
+
+export function toolCallsFor(data: ReportData, resultId: string): ToolCallRow[] {
+  return data.tool_calls.filter((c) => c.result_id === resultId).sort((a, b) => a.call_index - b.call_index)
+}
+
+export function bucketCounts(scores: number[]) {
+  const counts = { correct: 0, mostly: 0, partly: 0, wrong: 0 }
+  for (const s of scores) {
+    if (s >= 0.95) counts.correct++
+    else if (s >= 0.75) counts.mostly++
+    else if (s >= 0.4) counts.partly++
+    else counts.wrong++
+  }
+  return counts
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "2026-09-16 16:21" -> "16 Sep 2026, 16:21". Parsed by hand: run timestamps carry no timezone. */
+export function formatRunTime(timestamp: string): string {
+  const [date, time] = timestamp.split(' ')
+  const [y, m, d] = date.split('-').map(Number)
+  return `${d} ${MONTHS[m - 1]} ${y}${time ? `, ${time.slice(0, 5)}` : ''}`
+}
+
+/** "92.4%" -- one decimal, per the design system's number rules. */
+export const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`)

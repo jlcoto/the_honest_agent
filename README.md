@@ -41,7 +41,7 @@ uv run python warehouse/seed.py                               # seeds warehouse.
 export ANTHROPIC_API_KEY=...                                 # or put it in a .env at the repo root -- auto-loaded
 uv run agent-quiz run --quizzes-dir quizzes \
   --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
-uv run agent-quiz report                                     # static HTML dashboard
+uv run agent-quiz report                                     # writes the web report to agent_quiz_report/
 uv run agent-quiz serve                                      # opens the report in your browser, like `dbt docs serve`
 uv run agent-quiz notify --webhook-url ...                   # Slack alert on regressions
 ```

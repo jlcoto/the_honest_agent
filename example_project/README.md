@@ -40,8 +40,8 @@ export ANTHROPIC_API_KEY=...                     # needed for the agent + the ex
 ```bash
 uv run agent-quiz run --quizzes-dir quizzes \
   --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
-uv run agent-quiz report --out agent_quiz_report.html
-uv run agent-quiz serve --out agent_quiz_report.html
+uv run agent-quiz report
+uv run agent-quiz serve
 uv run agent-quiz notify --webhook-url https://hooks.slack.com/services/...
 ```
 
@@ -67,10 +67,12 @@ it's out of your interactive shell's PATH.
   table, `provenance_score` drops below threshold even though the *answer*
   might still come out correct. Run `agent-quiz logs` after a run to see
   exactly what SQL it executed.
-- `agent-quiz report` renders `agent_quiz_report.html` from every stored run.
+- `agent-quiz report` writes the web report to `agent_quiz_report/`: the
+  report UI plus `data/report.json`, holding every stored run's results,
+  agent traces, and SQL calls.
 - `agent-quiz serve` opens that report in your browser, the same way `dbt
-  docs serve` serves `target/index.html` — no need to open the file
-  directly.
+  docs serve` serves `target/`. Opening `index.html` directly doesn't work,
+  because browsers won't load the data from a `file://` page.
 - `agent-quiz notify` checks only the *most recent* run's results against
   their thresholds and posts to Slack if anything's below.
 

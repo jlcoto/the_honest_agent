@@ -8,7 +8,8 @@ import type { ReportData } from './types'
 const REPORT_DATA_URL = './data/report.json'
 
 export async function loadReportData(): Promise<ReportData> {
-  const response = await fetch(REPORT_DATA_URL)
+  // Revalidate every load: the report folder is regenerated in place.
+  const response = await fetch(REPORT_DATA_URL, { cache: 'no-cache' })
   if (!response.ok) {
     throw new Error(`Couldn't load ${REPORT_DATA_URL} (HTTP ${response.status}).`)
   }

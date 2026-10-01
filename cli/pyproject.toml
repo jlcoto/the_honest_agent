@@ -33,6 +33,10 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["agent_quiz_cli*"]
 
+# The prebuilt report UI (built from ../ui with `npm run build`).
+[tool.setuptools.package-data]
+agent_quiz_cli = ["report_ui/**/*"]
+
 [tool.ruff]
 target-version = "py39"
 line-length = 120
