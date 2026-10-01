@@ -1,0 +1,19 @@
+/* The Honest Agent — typography */
+:root{
+--font-display:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;
+--font-sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+--fs-11:11px;--fs-12:12px;--fs-13:13px;--fs-14:14px;--fs-16:16px;--fs-18:18px;--fs-22:22px;--fs-28:28px;--fs-36:36px;--fs-48:48px;--fs-64:64px;
+--fw-regular:400;/* @kind font */--fw-medium:500;/* @kind font */--fw-semibold:600;/* @kind font */--fw-bold:700;/* @kind font */
+--lh-tight:1.1;/* @kind font */--lh-snug:1.3;/* @kind font */--lh-body:1.5;/* @kind font */
+--ls-display:-0.02em;--ls-caps:0.06em;
+/* Semantic roles */
+--type-display:500 var(--fs-48)/1.05 var(--font-display);
+--type-h1:500 var(--fs-28)/1.15 var(--font-display);
+--type-h2:500 var(--fs-18)/1.3 var(--font-display);
+--type-body:400 var(--fs-14)/1.5 var(--font-sans);
+--type-small:400 var(--fs-13)/1.45 var(--font-sans);
+--type-label:500 var(--fs-12)/1.3 var(--font-sans);
+--type-metric:500 var(--fs-36)/1 var(--font-mono);
+--type-data:400 var(--fs-13)/1.4 var(--font-mono);
+}

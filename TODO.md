@@ -109,6 +109,94 @@ Not yet spiked: a real S3 bucket (only local-HTTP was tested, with CORS/range
 headers set explicitly to simulate it) and concurrent-writer DuckLake catalog
 behavior.
 
-**Sequencing:** this becomes relevant once frontend/report work starts --
-no reason to migrate the export format before there's an actual consumer
-(the interactive report) that needs DuckLake instead of plain Parquet.
+**Sequencing:** only relevant if the report frontend's query box goes with
+DuckDB-WASM (option B in "Report frontend: querying and sharing" below). The
+frontend itself is being built on JSON, not WASM, so there's no consumer for
+DuckLake yet.
+
+## Report frontend: querying and sharing
+
+The report frontend (a React app in `ui/`, built output shipped inside the
+Python package, like Inspect AI's log viewer) is being built first with
+**pre-built views only**. `agent-quiz report` writes the data as JSON files
+and the React app reads them through one data-access module. No DuckDB runs in
+the browser.
+
+Deferred: a **query box** where users run their own SQL against `results`,
+`agent_logs`, and `tool_calls`. Two ways to build it, and the choice depends
+on one question: do reports need to be hosted/shared as static files (S3,
+GitHub Pages, a shared folder) with querying still working, or only viewed
+locally through `agent-quiz serve`?
+
+- **A. `agent-quiz serve` runs the queries (local viewing only).** Add a
+  `/api/query` endpoint to `serve` that runs SQL through Python's DuckDB on a
+  read-only connection and returns rows as JSON. No engine download, works
+  offline, and the file is always read by the same DuckDB version that wrote
+  it. Needs: bind to 127.0.0.1 only, and `set enable_external_access = false`
+  so a query can't read or write other files on disk (read-only mode alone
+  doesn't block `copy ... to` or `read_csv('/any/path')`). Querying only works
+  while `serve` is running.
+- **B. DuckDB-WASM in the browser (static hosting).** The report stays pure
+  static files and querying still works with no Python process. Costs:
+  - The engine is one ~34 MB `.wasm` file (~8 MB compressed; only the `eh`
+    variant is needed for current browsers) plus a ~0.7 MB worker. Either
+    load it from jsDelivr at runtime, pinned to an exact version (small
+    package, but needs internet), or ship it with the package (works
+    offline; build it in CI rather than committing it, or every DuckDB-WASM
+    upgrade adds ~34 MB to git history).
+  - The storage-version coupling and Range/CORS issues from the DuckLake
+    spike above apply here too: the bundled `duckdb-wasm` must be able to
+    read files written by the CLI's `duckdb`, and plain `http.server`
+    ignores Range requests.
+  - DuckDB-WASM downloads some extensions from `extensions.duckdb.org` when
+    a query first needs them. Check which ones queries actually hit before
+    assuming it works offline.
+
+Either way, only the data-access module should change. The views shouldn't
+need to know whether rows came from JSON, the `serve` API, or WASM.
+
+### Sharing reports
+
+Two ways to share, snapshot vs. live:
+
+1. **Snapshot (the default, being built now).** `agent-quiz report` bakes
+   the data into JSON at generation time. View it locally with `agent-quiz
+   serve`, or upload the folder as-is to any static host (S3 website
+   hosting, GitHub Pages, an internal host). Showing new runs means
+   regenerating and re-uploading, typically a CI step after each eval run.
+2. **Live (later, opt-in).** Host the UI once. `agent-quiz export` keeps
+   pushing data to S3 (Parquet/DuckLake, see the section above), and the
+   UI queries the latest data with DuckDB-WASM whenever it's opened. The
+   query box comes with it. Needs: option B above, CORS/Range on the
+   bucket, and `export` including `agent_logs`/`tool_calls` (today it
+   exports `results` only, so live reports would have no traces or SQL).
+
+Worth adding to the snapshot mode: a **single-file** output (data inlined
+into `index.html`, like dbt's `docs generate --static`) so a report can be
+shared as one attachment or one presigned S3 link. Presigned URLs are
+per-object, so a multi-file folder doesn't work well with them.
+
+**Access control is the user's decision, not agent_quiz's.** Where reports
+are hosted, which login sits in front of them, and who gets access depend on
+each team's own infrastructure and policies, so agent_quiz leaves it to
+them. It also can't enforce access itself: anyone who can download the files
+can read everything in them, so a password check in the report's JavaScript
+would be fake. Don't build one. Our only job here is documentation: a
+"Sharing reports" section in the README laying out the options below so
+users can pick what fits their setup.
+
+- **Snapshot:** only the report files need protecting. Keep the bucket
+  private and serve it through CloudFront with signed cookies or SSO/OIDC at
+  the edge (Cognito, Okta), or behind an existing auth proxy (an AWS load
+  balancer with OIDC, Cloudflare Access, Google IAP, oauth2-proxy). Or share
+  the single-file report through a channel that already has access control
+  (Slack, Drive). Access is all-or-nothing, and downloaded copies can't be
+  revoked.
+- **Live:** the browser fetches Parquet from S3 directly, so the data needs
+  protecting too, not just the UI. Simplest: serve the data through the same
+  CloudFront distribution and auth as the UI. It's same-origin, which also
+  avoids CORS, and CloudFront passes Range requests through. Alternatives
+  (per-viewer temporary AWS credentials in the browser via a Cognito
+  identity pool, or a backend that presigns each file) are more complex,
+  and a presigning backend defeats the no-server point. Revoking access
+  takes effect immediately, since no copy of the data is left behind.

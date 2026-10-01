@@ -1,0 +1,12 @@
+/* The Honest Agent — spacing, radii, borders, elevation, motion */
+:root{
+--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;--space-16:64px;
+--radius-xs:6px;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-pill:999px;
+--border-w:1px;/* @kind other */
+--shadow-0:none;
+--shadow-1:0 1px 2px rgba(28,42,34,.06);
+--shadow-2:0 4px 16px -4px rgba(28,42,34,.12),0 1px 2px rgba(28,42,34,.06);
+--shadow-focus:0 0 0 3px color-mix(in oklch,var(--border-focus) 30%,transparent);
+--ease-out:cubic-bezier(.2,.7,.2,1);/* @kind other */--dur-fast:120ms;/* @kind other */--dur-base:200ms;/* @kind other */--dur-slow:360ms;/* @kind other */
+--sidebar-w:232px;--topbar-h:56px;--content-max:1280px;
+}

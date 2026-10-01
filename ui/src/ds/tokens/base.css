@@ -1,0 +1,7 @@
+/* Minimal element defaults */
+html,body{margin:0;background:var(--bg-page);color:var(--fg-1);font:var(--type-body);-webkit-font-smoothing:antialiased}
+*,*::before,*::after{box-sizing:border-box}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+a:hover{color:var(--accent-hover)}
+:focus-visible{outline:2px solid var(--border-focus);outline-offset:2px}
+.tabular,[data-num]{font-variant-numeric:tabular-nums}

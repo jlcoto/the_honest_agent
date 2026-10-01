@@ -1,0 +1,29 @@
+/* The Honest Agent — color tokens */
+:root{
+/* Brand greens (surfaces, chrome, components) */
+--green-50:#F3F2EC;--green-100:#DAD7CD;--green-300:#A3B18A;--green-500:#588157;--green-700:#3A5A40;--green-800:#344E41;--green-900:#1F2E26;--green-950:#16211B;
+/* Accuracy scale (data only) */
+--ink-data:#264653;--acc-correct:#2A9D8F;--acc-mostly:#E9C46A;--acc-partly:#F4A261;--acc-wrong:#E76F51;
+/* Accuracy tints (backgrounds for badges/cells) */
+--acc-correct-tint:#D4EDEA;--acc-mostly-tint:#FAF0D4;--acc-partly-tint:#FCE6D4;--acc-wrong-tint:#F9DDD5;
+/* Accuracy text-safe (≥4.5:1 on light surfaces) */
+--acc-correct-ink:#1B6B61;--acc-mostly-ink:#7A5E12;--acc-partly-ink:#8F4A14;--acc-wrong-ink:#A23A20;
+/* Neutrals */
+--white:#FFFFFF;--paper:#FBFAF6;
+
+/* Semantic — light (default) */
+--bg-page:var(--green-50);--bg-surface:var(--paper);--bg-sunken:#ECEAE2;--bg-inverse:var(--green-800);
+--fg-1:#1C2A22;--fg-2:#4E5C52;--fg-3:#7C877F;--fg-inverse:#F3F2EC;
+--border-1:#DAD7CD;--border-2:#C6C3B6;--border-focus:var(--green-500);
+--accent:var(--green-700);--accent-hover:var(--green-800);--accent-soft:#E3E8DA;--accent-fg:#F3F2EC;
+--chart-grid:#E4E1D7;--chart-axis:#7C877F;--chart-neutral:var(--ink-data);--chart-empty:#ECEAE2;
+}
+[data-theme="dark"]{
+--bg-page:var(--green-950);--bg-surface:var(--green-900);--bg-sunken:#121B16;--bg-inverse:var(--green-100);
+--fg-1:#ECEBE4;--fg-2:#B4BCAF;--fg-3:#86927F;--fg-inverse:#1C2A22;
+--border-1:#2C3D33;--border-2:#3A5A40;--border-focus:var(--green-300);
+--accent:var(--green-300);--accent-hover:#B8C4A2;--accent-soft:#26372D;--accent-fg:#16211B;
+--acc-correct-tint:#173A36;--acc-mostly-tint:#3A3320;--acc-partly-tint:#3D2C1E;--acc-wrong-tint:#3E231C;
+--acc-correct-ink:#6FCFC2;--acc-mostly-ink:#EDD18A;--acc-partly-ink:#F6BA86;--acc-wrong-ink:#F09A82;
+--chart-grid:#26352C;--chart-axis:#86927F;--chart-neutral:#8FB3BF;--chart-empty:#1B2921;
+}
