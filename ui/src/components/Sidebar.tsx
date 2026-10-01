@@ -77,9 +77,13 @@ export function Sidebar({
       }}
     >
       <div style={{ position: 'relative' }}>
-        <div
+        <a
+          href={href({ name: 'overview' })}
+          aria-label="The Honest Agent, go to Overview"
           title={mini ? 'The Honest Agent' : undefined}
           style={{
+            color: 'inherit',
+            textDecoration: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: mini ? 'center' : 'flex-start',
@@ -92,7 +96,7 @@ export function Sidebar({
           }}
         >
           <Logo markSrc={LOGO_SRC} size={mini ? 28 : 24} textSize={14} wordmark={!mini} />
-        </div>
+        </a>
         <button
           type="button"
           onClick={() => setMini(!mini)}
