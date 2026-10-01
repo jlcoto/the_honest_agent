@@ -228,3 +228,19 @@ def test_export_to_parquet_filters_by_run_id(tmp_path: Path):
 
     rows = duckdb.connect().execute(f"SELECT result_id FROM read_parquet('{out_path}')").fetchall()
     assert {r[0] for r in rows} == {"r3"}
+
+
+def test_agent_name_column_is_added_to_an_existing_results_table(tmp_path: Path):
+    import duckdb
+
+    db_path = str(tmp_path / "results.duckdb")
+    con = duckdb.connect(db_path)
+    con.execute("create table results (result_id varchar, run_id varchar, run_timestamp varchar)")
+    con.execute("insert into results values ('old', 'run_0', '2025-12-31 00:00:00')")
+    con.close()
+
+    write_run_results(db_path, "run_1", [_row(agent_name="snowflake")])
+
+    by_id = {r["result_id"]: r for r in read_all_results(db_path)}
+    assert by_id["old"]["agent_name"] is None
+    assert by_id["r1"]["agent_name"] == "snowflake"

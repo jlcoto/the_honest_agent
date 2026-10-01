@@ -62,6 +62,7 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("run_id", "VARCHAR"),
     ("run_timestamp", "VARCHAR"),
     ("quiz_id", "VARCHAR"),
+    ("quiz_title", "VARCHAR"),  # optional `title:` from the quiz YAML; NULL when not set
     ("prompt", "VARCHAR"),
     ("category", "VARCHAR"),
     ("tags", "VARCHAR[]"),
@@ -79,6 +80,9 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("provenance_min_score", "DOUBLE"),
     ("model_name", "VARCHAR"),
     ("agent_backend", "VARCHAR"),  # always "mcp" today; kept for a possible future backend
+    # Which agent was quizzed: `run --agent-name`, else the name the MCP server
+    # reports at connect time. NULL for rows written before this column existed.
+    ("agent_name", "VARCHAR"),
     ("latency_ms", "INTEGER"),
     # Two cost centers, kept separate rather than one combined total: the
     # agent's own tool-use loop (one or more `messages.create` calls) vs. the

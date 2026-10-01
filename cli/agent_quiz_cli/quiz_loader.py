@@ -20,6 +20,8 @@ class QuizDefinition:
     grading_method: str
     expected_sources: list[str]
     tags: list[str]
+    # Optional human-readable name for reports; they fall back to quiz_id.
+    title: str | None = None
     # Optional -- tightens expected_sources to require the matched table
     # resolve to this database/schema (inline-qualified, or via a preceding
     # `use database`/`use schema` in the trace), not just any table with a
@@ -62,6 +64,7 @@ def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
             definitions.append(
                 QuizDefinition(
                     quiz_id=quiz_id,
+                    title=item.get("title"),
                     prompt=item["prompt"],
                     category=item.get("category", ""),
                     expected_answer=item.get("expected_answer", ""),

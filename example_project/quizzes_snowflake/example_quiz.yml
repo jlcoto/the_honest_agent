@@ -13,6 +13,7 @@ version: 1
 
 quizzes:
   - id: q_revenue_1996
+    title: Total revenue in 1996
     prompt: >
       What was our total revenue in 1996? Query the warehouse to find out,
       and give me just the number.
@@ -37,6 +38,7 @@ quizzes:
     tags: [smoke, provenance, snowflake]
 
   - id: q_order_count_1996
+    title: Orders placed in 1996
     prompt: >
       How many orders were placed in 1996? Query the warehouse to find out,
       and give me just the number.

@@ -89,3 +89,13 @@ def test_logs_reports_no_matching_logs():
 
         assert result.exit_code == 0, result.output
         assert "No matching logs found." in result.output
+
+
+def test_agent_name_defaults_to_the_mcp_server_name():
+    from types import SimpleNamespace
+
+    from agent_quiz_cli.cli import _resolve_agent_name
+
+    connected = SimpleNamespace(server_info=SimpleNamespace(name="mcp-server-motherduck"))
+    assert _resolve_agent_name(None, connected) == "mcp-server-motherduck"
+    assert _resolve_agent_name("motherduck", connected) == "motherduck"

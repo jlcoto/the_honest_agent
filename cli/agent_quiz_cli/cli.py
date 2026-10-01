@@ -42,6 +42,7 @@ async def _quiz_loop(
     judge_client,
     model: str,
     run_id: str,
+    agent_name: str | None,
 ) -> list[dict]:
     rows: list[dict] = []
     for definition in definitions:
@@ -76,6 +77,7 @@ async def _quiz_loop(
                 "run_id": run_id,
                 "run_timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                 "quiz_id": definition.quiz_id,
+                "quiz_title": definition.title,
                 "prompt": definition.prompt,
                 "category": definition.category,
                 "tags": definition.tags,
@@ -93,6 +95,7 @@ async def _quiz_loop(
                 "provenance_min_score": definition.provenance_min_score,
                 "model_name": result.model_name,
                 "agent_backend": "mcp",
+                "agent_name": agent_name,
                 "latency_ms": result.latency_ms,
                 "agent_input_tokens": result.input_tokens,
                 "agent_output_tokens": result.output_tokens,
@@ -121,6 +124,11 @@ def _describe_mcp_connection_error(exc: BaseException) -> str:
     return str(exc)
 
 
+def _resolve_agent_name(explicit: str | None, connected_client) -> str:
+    """`--agent-name` wins; otherwise the name the MCP server reported during the handshake."""
+    return explicit or connected_client.server_info.name
+
+
 async def _run_async(
     quizzes_dir_p: Path,
     results_path: str,
@@ -131,6 +139,7 @@ async def _run_async(
     mcp_bearer_token: str | None,
     select: str | None,
     exclude: str | None,
+    agent_name: str | None,
 ) -> None:
     definitions = load_quizzes(quizzes_dir_p)
     if not definitions:
@@ -165,8 +174,10 @@ async def _run_async(
             f"{_describe_mcp_connection_error(exc)}"
         ) from exc
     try:
+        agent_name = _resolve_agent_name(agent_name, connected)
+        click.echo(f"Quizzing agent: {agent_name}")
         agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
-        rows = await _quiz_loop(agent, definitions, judge_client, model, run_id)
+        rows = await _quiz_loop(agent, definitions, judge_client, model, run_id, agent_name)
     finally:
         await mcp_client.__aexit__(None, None, None)
 
@@ -228,6 +239,13 @@ async def _run_async(
     help="[--mcp-url only] Bearer token sent as the Authorization header.",
 )
 @click.option(
+    "--agent-name",
+    envvar="AGENT_QUIZ_AGENT_NAME",
+    default=None,
+    help="Label for the agent being quizzed (e.g. snowflake, motherduck), stored with every result "
+    "so reports can filter by agent. Defaults to the name the MCP server reports about itself.",
+)
+@click.option(
     "--select",
     "-s",
     default=None,
@@ -249,6 +267,7 @@ def run(
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
+    agent_name: str | None,
     select: str | None,
     exclude: str | None,
 ):
@@ -272,6 +291,7 @@ def run(
             mcp_bearer_token,
             select,
             exclude,
+            agent_name,
         )
     )
 

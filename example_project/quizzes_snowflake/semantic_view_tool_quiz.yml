@@ -19,6 +19,7 @@ version: 1
 
 quizzes:
   - id: q_revenue_1996_semantic_view_tool
+    title: Total revenue in 1996, via semantic view tool
     prompt: >
       What was our total revenue in 1996? Use the semantic view tool to find
       out, and give me just the number.

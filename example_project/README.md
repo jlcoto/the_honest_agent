@@ -160,6 +160,13 @@ Swap `--mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"` for
 SQL-holding input field isn't literally called `sql` — see the top-level
 `README.md` and `agent_quiz_cli/sql_capture.py` for how that's resolved.
 
+Every result records which agent was quizzed, so the report can filter and
+compare by agent. By default that's the name the MCP server reports about
+itself (the demo server reports `agent_quiz_demo`). Pass
+`--agent-name snowflake` (or set `AGENT_QUIZ_AGENT_NAME`) to use your own
+label instead. Results stored before this was recorded show as "Unknown
+agent".
+
 ## Connecting to a real MotherDuck account
 
 `quizzes_motherduck/example_quiz.yml` points at MotherDuck's own official MCP

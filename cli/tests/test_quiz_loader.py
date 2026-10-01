@@ -172,3 +172,18 @@ def test_filter_by_tags_exclude_only():
     result = filter_by_tags(_QUIZZES, exclude="motherduck")
     assert "q_motherduck" not in {d.quiz_id for d in result}
     assert len(result) == 3
+
+
+def test_load_quizzes_reads_optional_title(tmp_path: Path):
+    (tmp_path / "titled.yml").write_text(
+        "quizzes:\n"
+        "  - id: q_titled\n"
+        "    title: Total revenue in 1996\n"
+        "    prompt: What was revenue in 1996?\n"
+        "  - id: q_untitled\n"
+        "    prompt: How many orders?\n"
+    )
+
+    titles = {d.quiz_id: d.title for d in load_quizzes(tmp_path)}
+
+    assert titles == {"q_titled": "Total revenue in 1996", "q_untitled": None}

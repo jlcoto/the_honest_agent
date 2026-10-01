@@ -21,6 +21,7 @@ version: 1
 
 quizzes:
   - id: q_revenue_1996_semantic_view
+    title: Total revenue in 1996, via semantic view
     prompt: >
       What was our total revenue in 1996? Query the warehouse to find out,
       and give me just the number. If there's a pre-built semantic view
@@ -41,6 +42,7 @@ quizzes:
     tags: [provenance, snowflake, semantic_view]
 
   - id: q_order_count_1996_semantic_view
+    title: Orders placed in 1996, via semantic view
     prompt: >
       How many orders were placed in 1996? Query the warehouse to find out,
       and give me just the number. If there's a pre-built semantic view
