@@ -89,7 +89,7 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
       <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
         {isG?<span style={{display:'inline-flex',color:'var(--fg-2)',transform:on?'rotate(90deg)':'none',transition:'transform var(--dur-base) var(--ease-out)'}}><Icon name="chevron-right" size={14}/></span>:null}
         <div style={{minWidth:0}}>
-          <div title={r.label} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',font:(isG?'500':'400')+' '+(isC?13:14)+'px/1.25 '+(isC?'var(--font-mono)':'var(--font-sans)'),color:isC?'var(--fg-2)':'var(--fg-1)'}}>{r.label}</div>
+          <div title={r.label} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',font:(isG?'500':'400')+' '+(isC?13:14)+'px/1.25 '+(isC&&!sub?'var(--font-mono)':'var(--font-sans)'),color:isC?'var(--fg-2)':'var(--fg-1)'}}>{r.label}</div>
           {sub?<div style={{font:'400 11px/1.3 var(--font-mono)',color:'var(--fg-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>:null}
         </div>
       </div>

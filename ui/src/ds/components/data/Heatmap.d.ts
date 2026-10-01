@@ -1,6 +1,6 @@
 export interface HeatmapRow {
   label: string;
-  /** Secondary line under the label (e.g. category) */
+  /** Secondary line under the label, in mono. Typically the row's identifier (e.g. a quiz_id) when `label` is a human-readable title. */
   sublabel?: string;
   /** Per-column accuracy 0–1 (enables Combined/Accuracy/Provenance toggle) */
   accuracy?: (number | null)[];
