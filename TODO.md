@@ -4,6 +4,93 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
+## High priority: security fixes (review of 2026-10-02)
+
+Found by a security review of the CLI. No command injection, SQL injection,
+unsafe YAML loading or XSS was found; these are trust-boundary issues.
+
+Fix first:
+
+1. **Every secret is passed to stdio MCP servers.** `mcp_agent_runner.py`
+   builds the server process with `env=dict(os.environ)`, after `.env` has
+   been loaded, so a third-party server (e.g. the unpinned
+   `uvx mcp-server-motherduck` the docs recommend, resolved fresh each run)
+   receives ANTHROPIC_API_KEY, OPENAI_API_KEY, AWS_*, SLACK_WEBHOOK_URL and
+   MCP_BEARER_TOKEN. Pass the SDK's default environment plus variables the
+   user names (e.g. `--mcp-env MOTHERDUCK_TOKEN`), and pin versions in the
+   docs (`uvx mcp-server-motherduck==X.Y.Z`).
+2. **`report --out` can delete files.** `report.py` runs
+   `shutil.rmtree(out_dir / "assets", ignore_errors=True)` and overwrites
+   `index.html` in whatever folder `--out` names (`--out .`, `--out docs`).
+   Only clean folders agent-quiz created, marked with a file it writes on
+   first run; refuse non-empty unmarked folders.
+3. **Prompt injection can change `llm_judge` scores.** `grading.py` pastes
+   the agent's answer unescaped into the judge prompt and reads the score
+   with a greedy `\{.*\}`, so warehouse text can make an answer contain
+   `{"score": 1.0}`. Wrap the answer in tags and tell the judge it's data,
+   use structured output instead of the regex, and recommend
+   `--judge-model` in the docs. (`extract_match` is less exposed: its final
+   comparison is done in code.)
+4. **`.env` is found from the package's folder, not the working
+   directory.** `load_dotenv()` without `usecwd=True` searches upward from
+   `cli.py`, so with an editable install this repo's `.env` applies in every
+   project. Use `load_dotenv(find_dotenv(usecwd=True))`.
+
+Lower severity:
+
+5. **`serve`** has no Host-header check (DNS rebinding can read
+   `report.json`) and lists directories; `serve --out .` would expose
+   `.env`. Check Host, disable listings, refuse folders without the report
+   marker from item 2.
+6. **`agent-quiz logs`** prints `agent_answer` and tool payloads raw, so
+   model/tool output can inject terminal escape sequences (OSC 52 clipboard
+   writes, disguised links). Strip control characters before printing.
+7. **CSV export** (`ui/src/data/derive.ts` `toCsv`) doesn't neutralise
+   cells starting with `= + - @`, so an answer can run as a spreadsheet
+   formula. Prefix those cells with `'`.
+8. **Slack:** `notify.py` puts quiz ids into the message unescaped, so a
+   quiz file can trigger `<!channel>` or disguise a link. Escape `< > &`.
+
+## High priority: cleanup (review of 2026-10-02)
+
+From a refactoring review; tests and lint were clean. All small unless noted.
+
+- **Dead code:** `agent_backend` (always `"mcp"`, read by nothing; drop from
+  `cli.py`, `storage.py`, `ui/src/data/types.ts`, tests). Grader and agent
+  functions still default `model="claude-haiku-4-5-20251001"` and treat the
+  judge as optional although `cli.py` always passes both; make them
+  required and drop the dead branches. `storage.read_tool_calls(result_id=)`
+  is used only by tests.
+- **Stale docs and comments:** Claude-only wording in now provider-neutral
+  code (`agent_runner.py` docstrings, `--max-tool-turns` help, `storage.py`
+  token comment, `mcp_agent_runner.py` "MCP backend selected"); references
+  to removed things (the quiz YAML `tools:` key in `sql_capture.py`, the
+  dbt `schema.yml` in `quiz_loader.py`, the old `exact` method and a missing
+  "module-level note" in `grading.py`, a memory file in `provenance.py`);
+  `read_agent_logs` claims to return extracted SQL. The semantic-layer
+  explanation is repeated four times; keep it in one place.
+- **CLAUDE.md lowercase-SQL rule:** column types in `storage.py` and SQL in
+  `test_provenance.py` / `test_sql_capture.py` are uppercase (keep
+  `FCT_ORDERS` in `test_provenance.py`, which tests case-insensitivity).
+- **Docs drift:** root `README.md` still says "static HTML report" and
+  Claude-only; `.env.example` lacks `AGENT_QUIZ_JUDGE_MODEL`.
+- **Duplication:** failure-line formatting in `cli.py` and `notify.py`
+  (move a `describe_failure` into `thresholds.py`); the turn-limit message
+  and tool-result text join copied between the two agent runners (share in
+  `agent_runner.py`; keep the loops separate); identical `_row()` test
+  helpers in `test_cli.py` / `test_storage.py`; UI score bands hard-coded
+  in `Overview.tsx` and `derive.ts` instead of `bucketOf`/`pct` from
+  `ui/src/ds/components/data/scale.js`; `METRICS` and the empty-state card
+  duplicated in `Overview.tsx` / `Compare.tsx`.
+- **Fragile tests:** `_run_async` takes 11 positional arguments and tests
+  read them by index (`a[4]`, `a[-1]`), so a reorder breaks them silently.
+  Call it with keywords and share the fake-run helper in `tests/conftest.py`.
+  While there, replace click's `CliRunner().isolated_filesystem()` (deprecated,
+  removed in Click 9; tests now emit DeprecationWarnings) with `tmp_path`.
+- **Naming (medium):** `mcp_agent_runner.MCPAgentClient` is the Claude one,
+  next to `OpenAIMCPAgentClient`; rename to `anthropic_agent_runner` /
+  `AnthropicMCPAgentClient`.
+
 ## Semantic-layer provenance checking
 
 Today, `agent_quiz` can only verify provenance (`expected_sources`) by
