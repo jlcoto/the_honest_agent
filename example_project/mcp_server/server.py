@@ -8,7 +8,7 @@ Run standalone with: python mcp_server/server.py (stdio transport).
 Point agent-quiz at it with:
   agent-quiz run --mcp-command "python mcp_server/server.py" ...
 
-Requires the CLI's `mcp` extra: pip install -e "../cli[mcp]" (Python >=3.10).
+Uses the `mcp` package, which comes with agent-quiz (Python >=3.10).
 """
 
 from __future__ import annotations

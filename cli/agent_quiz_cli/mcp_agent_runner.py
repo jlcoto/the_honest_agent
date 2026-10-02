@@ -7,10 +7,8 @@ provenance's SQL-source checking) reflects exactly what a real MCP-connected
 agent can call, not a locally re-implemented stand-in whose behavior could
 drift out of sync with the real tool.
 
-Requires the optional `mcp` extra (`pip install "agent-quiz[mcp]"`), and
-Python >=3.10 (the `mcp` package's own requirement). Imports of `mcp` are
-kept inside functions so the base `agent-quiz` install stays lightweight for
-commands that don't need it (`report`, `notify`, `export`, `logs`).
+Imports of `mcp` are kept inside functions so commands that don't need it
+(`report`, `notify`, `export`, `logs`) don't pay its import cost.
 """
 
 from __future__ import annotations

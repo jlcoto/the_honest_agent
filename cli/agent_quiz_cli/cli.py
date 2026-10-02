@@ -16,7 +16,7 @@ from . import report as report_mod
 from . import serve as serve_mod
 from .agent_runner import AgentClient
 from .grading import grade_accuracy
-from .llm import API_KEY_ENV, OPENAI, Judge, make_judge, provider_for, require_openai_sdk
+from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
 from .provenance import score_provenance
 from .quiz_loader import QuizDefinition, filter_by_tags, load_quizzes
 from .sql_capture import extract_sql_calls
@@ -251,9 +251,11 @@ async def _run_async(
 @click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
 @click.option(
     "--model",
-    default="claude-haiku-4-5-20251001",
+    envvar="AGENT_QUIZ_MODEL",
+    default=None,
     help="Model to quiz (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
-    "Only the API key for its provider is needed.",
+    "Only the API key for its provider is needed. Defaults to claude-haiku-4-5 if ANTHROPIC_API_KEY is set, "
+    "else gpt-5.4-mini if OPENAI_API_KEY is set.",
 )
 @click.option(
     "--judge-model",
@@ -276,7 +278,7 @@ async def _run_async(
     default=None,
     help="Shell command launching a local MCP server over stdio, "
     'e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url; when given on the '
-    "command line, it overrides an MCP_URL set in the environment. Requires the 'mcp' extra.",
+    "command line, it overrides an MCP_URL set in the environment.",
 )
 @click.option(
     "--mcp-url",
@@ -284,7 +286,7 @@ async def _run_async(
     default=None,
     help="URL of a remote MCP server's streamable-HTTP endpoint. Mutually exclusive with "
     "--mcp-command; when given on the command line, it overrides an MCP_COMMAND set in the "
-    "environment. Requires the 'mcp' extra.",
+    "environment.",
 )
 @click.option(
     "--mcp-bearer-token",
@@ -316,7 +318,7 @@ async def _run_async(
 def run(
     quizzes_dir: str,
     results_path: str,
-    model: str,
+    model: str | None,
     judge_model: str | None,
     max_tool_turns: int,
     mcp_command: str | None,
@@ -327,6 +329,13 @@ def run(
     exclude: str | None,
 ):
     """Run every quiz, grade the answers, and write results to storage."""
+    if not model:
+        model = default_model(os.environ)
+        if model is None:
+            raise click.ClickException(
+                "No model API key set. Add ANTHROPIC_API_KEY (Claude) or OPENAI_API_KEY (GPT) to .env, or export it."
+            )
+        click.echo(f"No --model given; using {model} ({API_KEY_ENV[provider_for(model)]} is set).")
     judge_model = judge_model or model
     providers = {provider_for(model), provider_for(judge_model)}
     missing = [API_KEY_ENV[p] for p in sorted(providers) if not os.environ.get(API_KEY_ENV[p])]
@@ -335,11 +344,6 @@ def run(
             f"{' and '.join(missing)} not set. `agent-quiz run` needs the API key for the provider of "
             f"--model ({model}) and --judge-model ({judge_model}). Export it or add it to .env."
         )
-    if OPENAI in providers:
-        try:
-            require_openai_sdk()
-        except ImportError as exc:
-            raise click.ClickException(str(exc)) from exc
     if not (mcp_command or mcp_url):
         raise click.ClickException("--mcp-command or --mcp-url is required.")
     ctx = click.get_current_context()

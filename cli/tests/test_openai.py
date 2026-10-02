@@ -114,20 +114,26 @@ def test_openai_agent_reports_the_turn_limit():
     assert result.answer.startswith("[agent_quiz error] Exceeded max_tool_turns=1")
 
 
-def _invoke_run(monkeypatch, args, env):
+def _invoke_run(monkeypatch, args, env, captured=None):
     import agent_quiz_cli.cli as cli_mod
 
     async def fake_run_async(*a):
-        pass
+        if captured is not None:
+            captured["model"], captured["judge_model"] = a[2], a[-1]
 
     monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
-    monkeypatch.setattr(cli_mod, "require_openai_sdk", lambda: None)
     with CliRunner().isolated_filesystem():
         Path("quizzes").mkdir()
         return CliRunner().invoke(
             main,
             ["run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py", *args],
-            env={"ANTHROPIC_API_KEY": "", "OPENAI_API_KEY": "", "AGENT_QUIZ_JUDGE_MODEL": "", **env},
+            env={
+                "ANTHROPIC_API_KEY": "",
+                "OPENAI_API_KEY": "",
+                "AGENT_QUIZ_MODEL": "",
+                "AGENT_QUIZ_JUDGE_MODEL": "",
+                **env,
+            },
         )
 
 
@@ -144,3 +150,35 @@ def test_a_missing_key_names_the_provider_it_is_for(monkeypatch):
 
     assert result.exit_code != 0
     assert "ANTHROPIC_API_KEY not set" in result.output
+
+
+def test_without_model_an_openai_only_user_gets_the_openai_default(monkeypatch):
+    captured = {}
+    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test"}, captured)
+
+    assert result.exit_code == 0, result.output
+    assert captured == {"model": "gpt-5.4-mini", "judge_model": "gpt-5.4-mini"}
+    assert "No --model given; using gpt-5.4-mini (OPENAI_API_KEY is set)" in result.output
+
+
+def test_without_model_claude_is_the_default_when_both_keys_are_set(monkeypatch):
+    captured = {}
+    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test", "ANTHROPIC_API_KEY": "test"}, captured)
+
+    assert result.exit_code == 0, result.output
+    assert captured["model"] == "claude-haiku-4-5-20251001"
+
+
+def test_agent_quiz_model_sets_the_default_model(monkeypatch):
+    captured = {}
+    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test", "AGENT_QUIZ_MODEL": "gpt-5.4"}, captured)
+
+    assert result.exit_code == 0, result.output
+    assert captured["model"] == "gpt-5.4"
+
+
+def test_without_any_api_key_run_says_which_keys_it_accepts(monkeypatch):
+    result = _invoke_run(monkeypatch, [], {})
+
+    assert result.exit_code != 0
+    assert "Add ANTHROPIC_API_KEY (Claude) or OPENAI_API_KEY (GPT)" in result.output

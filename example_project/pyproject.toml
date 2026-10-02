@@ -2,17 +2,12 @@
 name = "agent-quiz-demo"
 version = "0.1.0"
 description = "Demo project consuming the agent-quiz CLI via a local path (not meant for publishing)."
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "agent-quiz",
 ]
 
 [project.optional-dependencies]
-# Re-exports the CLI's own mcp extra; needs Python >=3.10 (the mcp package's
-# own floor) -- sync this one with `uv sync --extra mcp --python 3.11` (see README).
-mcp = ["agent-quiz[mcp]"]
-# Re-exports the CLI's openai extra, for quizzing GPT models.
-openai = ["agent-quiz[openai]"]
 
 [tool.uv.sources]
 agent-quiz = { path = "../cli", editable = true }

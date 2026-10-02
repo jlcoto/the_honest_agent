@@ -1,7 +1,5 @@
 """Tests only the pure logic in mcp_agent_runner.py (argument validation and
-tool-schema conversion) -- these must not require the optional `mcp` package
-to be installed, since build_mcp_client()'s validation runs before it
-imports `mcp`.
+tool-schema conversion), which runs before build_mcp_client() imports `mcp`.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ hand-rolled `venv`/`pip install`.
 
 ```bash
 cd cli
-uv sync --all-extras     # base deps + test + lint + mcp (mcp needs Python >=3.10;
+uv sync --all-extras     # base deps + test + lint (Python >=3.10;
                           # uv picks a suitable interpreter, or pass --python 3.11)
 ```
 

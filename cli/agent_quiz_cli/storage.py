@@ -227,7 +227,7 @@ def read_all_results(results_path: str) -> list[dict[str, Any]]:
             return []
         cursor = con.execute("select * from results")
         columns = [d[0] for d in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
         con.close()
 
@@ -263,7 +263,7 @@ def read_agent_logs(results_path: str, run_id: str | None = None, quiz_id: str |
         where_sql = f" where {' and '.join(clauses)}" if clauses else ""
         cursor = con.execute(f"select * from agent_logs{where_sql}", params)
         columns = [d[0] for d in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
         con.close()
 
@@ -298,7 +298,7 @@ def read_tool_calls(
         where_sql = f" where {' and '.join(clauses)}" if clauses else ""
         cursor = con.execute(f"select * from tool_calls{where_sql} order by result_id, call_index", params)
         columns = [d[0] for d in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
         con.close()
 

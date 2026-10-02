@@ -25,8 +25,7 @@ never a hand-rolled `venv`/`pip install`.
   Claude with tools sourced live from an MCP server (`--mcp-command`/
   `--mcp-url`) — this tests the actual agent employees connect to, not a
   locally reimplemented stand-in whose behavior can drift out of sync with
-  the real tool. Needs the `mcp` extra, Python >=3.10 — see
-  `example_project/README.md`.
+  the real tool. Needs Python >=3.10 — see `example_project/README.md`.
 - **`example_project/`** — a real-world-shaped consumer of the CLI: its own
   example quiz YAML and a README showing the actual install/run flow. This
   is the only place example data lives.
@@ -35,8 +34,8 @@ never a hand-rolled `venv`/`pip install`.
 
 ```bash
 cd example_project
-uv python install 3.11                                       # one-time; the mcp package needs Python >=3.10
-uv sync --extra mcp --python 3.11                             # installs agent-quiz + mcp, editable, from ../cli
+uv python install 3.11                                       # one-time; agent-quiz needs Python >=3.10
+uv sync --python 3.11                                         # installs agent-quiz, editable, from ../cli
 uv run python warehouse/seed.py                               # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                                 # or put it in a .env at the repo root -- auto-loaded
 uv run agent-quiz run --quizzes-dir quizzes \
@@ -62,7 +61,7 @@ declares its own accuracy/provenance thresholds (`grading.min_score` /
 
 ```bash
 cd cli
-uv sync --all-extras     # base deps + test + mcp (mcp needs Python >=3.10;
+uv sync --all-extras     # base deps + test + lint (Python >=3.10;
                           # uv picks a suitable interpreter, or pass --python 3.11)
 uv run pytest -q
 uv run agent-quiz --help

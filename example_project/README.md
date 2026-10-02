@@ -21,13 +21,12 @@ employees would connect to, not a locally reimplemented stand-in.
 
 ## Setup
 
-The `mcp` package requires **Python >=3.10**, one version floor higher than
-the rest of this project (>=3.9) — `uv` manages that interpreter for you:
+agent-quiz requires **Python >=3.10** — `uv` manages that interpreter for you:
 
 ```bash
 cd example_project
 uv python install 3.11                          # one-time; uv manages this interpreter itself
-uv sync --extra mcp --python 3.11                # installs agent-quiz + mcp, editable
+uv sync --python 3.11                            # installs agent-quiz, editable
 uv run python warehouse/seed.py                  # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                     # needed for the agent + the extract_match grader
 # or put it (and SLACK_WEBHOOK_URL / MCP_BEARER_TOKEN / AWS_* as needed) in a
@@ -212,22 +211,30 @@ fair: otherwise each model grades itself, and part of a difference between
 two models can come from the judge. Each result records its judge in
 `grading_model` (empty for `contains`, which uses no model).
 
-## Using OpenAI (GPT) models
+## Claude or OpenAI (GPT) models
 
-`--model` and `--judge-model` accept OpenAI models as well as Claude ones.
-The provider comes from the model name: `gpt-*`, `o3`, `o4-mini` and similar
-are OpenAI, anything else is Claude. You only need the API key for the
-providers your models come from, so a GPT-only run needs just
-`OPENAI_API_KEY`:
+agent-quiz works with either, and installs both SDKs. You only need an API
+key for the provider you use: `ANTHROPIC_API_KEY` for Claude, or
+`OPENAI_API_KEY` for GPT.
+
+- **Without `--model`**, `run` picks a small, cheap default from the key it
+  finds: `claude-haiku-4-5` if `ANTHROPIC_API_KEY` is set (also when both
+  are), otherwise `gpt-5.4-mini`. It prints which one it chose.
+- **To choose a model**, pass `--model`, or set `AGENT_QUIZ_MODEL` in `.env`
+  so you don't have to pass it every time. The provider comes from the
+  name: `gpt-*`, `o3`, `o4-mini` and similar are OpenAI, anything else is
+  Claude.
+
+So a ChatGPT user with only `OPENAI_API_KEY` in `.env` runs exactly the same
+command as everyone else:
 
 ```bash
-uv sync --extra mcp --extra openai --python 3.11   # one-time: installs the openai package
 uv run agent-quiz run --quizzes-dir quizzes_motherduck \
   --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
-  --agent-name motherduck --model gpt-5.4-mini
+  --agent-name motherduck
 ```
 
-Without `--judge-model`, the quiz model also grades, as with Claude. The
+Without `--judge-model`, the quiz model also grades. The
 agent runs the same loop either way (same MCP tools, same SQL capture and
 provenance checks), and the report shows GPT runs alongside Claude ones in
 the model menus and Model comparison.

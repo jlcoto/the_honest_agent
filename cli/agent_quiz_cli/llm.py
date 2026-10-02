@@ -8,6 +8,7 @@ needed unless a model from that provider is actually used.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 ANTHROPIC = "anthropic"
@@ -64,15 +65,20 @@ def make_judge(provider: str) -> Judge:
     return OpenAIJudge() if provider == OPENAI else AnthropicJudge()
 
 
-def require_openai_sdk() -> Any:
-    try:
-        import openai
-    except ImportError as exc:
-        raise ImportError(
-            "OpenAI models need the openai package: pip install 'agent-quiz[openai]' (or `uv sync --extra openai`)."
-        ) from exc
-    return openai
-
-
 def openai_client() -> Any:
-    return require_openai_sdk().AsyncOpenAI()
+    import openai
+
+    return openai.AsyncOpenAI()
+
+
+# Used when --model isn't given: a small, cheap model from whichever provider has a key.
+DEFAULT_MODELS = {ANTHROPIC: "claude-haiku-4-5-20251001", OPENAI: "gpt-5.4-mini"}
+
+
+def default_model(environ: Mapping[str, str]) -> str | None:
+    """Claude's default when ANTHROPIC_API_KEY is set (including when both keys are),
+    else OpenAI's when OPENAI_API_KEY is set, else None."""
+    for provider in (ANTHROPIC, OPENAI):
+        if environ.get(API_KEY_ENV[provider]):
+            return DEFAULT_MODELS[provider]
+    return None

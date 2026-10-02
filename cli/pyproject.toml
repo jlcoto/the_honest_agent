@@ -4,22 +4,22 @@ version = "0.1.0"
 description = "CLI that runs LLM quizzes against an agent, grades accuracy/provenance, and stores the results."
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "anthropic>=0.40.0",
     "click>=8.1",
     "pyyaml>=6.0",
     "duckdb>=0.10.0",
     "python-dotenv>=1.0",
+    # The MCP SDK (open Model Context Protocol), used by `run` to reach the agent's tools.
+    # 2.x is needed for its `Client` class.
+    "mcp>=2.0",
+    # Model SDKs: both installed, each imported only when one of its models is used.
+    "anthropic>=0.40.0",
+    "openai>=1.40",
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
-# The MCP SDK itself requires Python >=3.10; only needed for `agent-quiz run`
-# (report/notify/export/logs don't need it).
-mcp = ["mcp>=1.0; python_version >= '3.10'"]
-# Only needed to quiz or grade with OpenAI (GPT) models.
-openai = ["openai>=1.40"]
 lint = [
     "ruff>=0.16.7",
 ]
@@ -40,7 +40,7 @@ include = ["agent_quiz_cli*"]
 agent_quiz_cli = ["report_ui/**/*"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]
