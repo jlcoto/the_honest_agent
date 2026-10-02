@@ -10,7 +10,8 @@ version: 1
 #
 # Run with:
 #   agent-quiz run --quizzes-dir quizzes_motherduck \
-#     --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo"
+#     --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
+#     --agent-name motherduck
 #
 # --read-write is required unless your MOTHERDUCK_TOKEN is specifically a
 # read-scaling token -- see README.md's "Connecting to a real MotherDuck

@@ -160,12 +160,27 @@ Swap `--mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"` for
 SQL-holding input field isn't literally called `sql` — see the top-level
 `README.md` and `agent_quiz_cli/sql_capture.py` for how that's resolved.
 
+### Naming the agent
+
 Every result records which agent was quizzed, so the report can filter and
-compare by agent. By default that's the name the MCP server reports about
-itself (the demo server reports `agent_quiz_demo`). Pass
-`--agent-name snowflake` (or set `AGENT_QUIZ_AGENT_NAME`) to use your own
-label instead. Results stored before this was recorded show as "Unknown
-agent".
+compare by agent.
+
+- **Default:** the name the MCP server reports about itself when it
+  connects. The demo server reports `agent_quiz_demo`, and MotherDuck's
+  reports `mcp-server-motherduck`. `agent-quiz run` prints the name it
+  used (`Quizzing agent: ...`).
+- **Your own label:** pass `--agent-name motherduck`, or set
+  `AGENT_QUIZ_AGENT_NAME` in your shell.
+- **Labels must match exactly to group together.** A run labelled
+  `motherduck` and one left at the default `mcp-server-motherduck` show up
+  as two separate agents in the report. Pick one label per agent and use it
+  every time.
+- **Don't set `AGENT_QUIZ_AGENT_NAME` in `.env`.** `.env` applies to every
+  run, so runs against other agents (e.g. Snowflake) would get the same
+  label. Pass the flag per command, or set the variable in the shell you
+  use for that agent.
+- **"Unknown agent"** only appears on results stored before agent names were
+  recorded.
 
 ### `.env` and choosing the MCP server
 
@@ -206,7 +221,8 @@ instead, using your normal token:
 
 ```bash
 agent-quiz run --quizzes-dir quizzes_motherduck \
-  --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo"
+  --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
+  --agent-name motherduck
 ```
 
 This means `agent_quiz`'s own PAT (via `MOTHERDUCK_TOKEN`) has full
