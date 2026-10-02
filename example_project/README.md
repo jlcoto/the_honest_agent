@@ -196,6 +196,22 @@ blending or fallback between them (see `agent_quiz_cli/grading.py`):
 | A single number or literal value (possibly rounded)      | `extract_match`  |
 | Free text — an explanation, summary, or judgment call     | `llm_judge`      |
 
+### The judge model
+
+`extract_match` and `llm_judge` call a model to grade. By default that's the
+same model being quizzed (`--model`). Pass `--judge-model` (or set
+`AGENT_QUIZ_JUDGE_MODEL`) to grade with a different one, e.g. quiz Sonnet and
+grade with Haiku:
+
+```bash
+agent-quiz run ... --model claude-sonnet-5 --judge-model claude-haiku-4-5
+```
+
+Using the same judge for every run keeps comparisons between agent models
+fair: otherwise each model grades itself, and part of a difference between
+two models can come from the judge. Each result records its judge in
+`grading_model` (empty for `contains`, which uses no model).
+
 ## Pointing at a real MCP server instead of the bundled demo one
 
 Swap `--mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"` for

@@ -244,3 +244,13 @@ def test_agent_name_column_is_added_to_an_existing_results_table(tmp_path: Path)
     by_id = {r["result_id"]: r for r in read_all_results(db_path)}
     assert by_id["old"]["agent_name"] is None
     assert by_id["r1"]["agent_name"] == "snowflake"
+
+
+def test_grading_model_roundtrips(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [_row(grading_model="claude-haiku-4-5"), _row(result_id="r2")])
+
+    by_id = {r["result_id"]: r for r in read_all_results(db_path)}
+
+    assert by_id["r1"]["grading_model"] == "claude-haiku-4-5"
+    assert by_id["r2"]["grading_model"] is None

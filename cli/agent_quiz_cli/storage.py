@@ -71,6 +71,8 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("tools_used", "VARCHAR[]"),
     ("accuracy_score", "DOUBLE"),
     ("accuracy_method", "VARCHAR"),
+    # Model that graded the answer (extract_match/llm_judge); NULL for contains, which uses none.
+    ("grading_model", "VARCHAR"),
     ("accuracy_rationale", "VARCHAR"),
     ("accuracy_min_score", "DOUBLE"),
     ("provenance_score", "DOUBLE"),

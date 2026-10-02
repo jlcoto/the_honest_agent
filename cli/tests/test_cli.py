@@ -167,3 +167,44 @@ def test_duplicate_quiz_id_is_a_clean_cli_error():
     assert result.exit_code == 1
     assert "Error: Duplicate quiz id 'q_dup' in a.yml (lines 2 and 4)" in result.output
     assert "Traceback" not in result.output
+
+
+def test_grading_model_is_recorded_only_for_llm_graded_methods():
+    from agent_quiz_cli.cli import _grading_model
+
+    assert _grading_model("extract_match", "claude-haiku-4-5") == "claude-haiku-4-5"
+    assert _grading_model("llm_judge", "claude-haiku-4-5") == "claude-haiku-4-5"
+    assert _grading_model("contains", "claude-haiku-4-5") is None
+
+
+def _run_capturing_models(monkeypatch, args: list[str]):
+    import agent_quiz_cli.cli as cli_mod
+
+    captured = {}
+
+    async def fake_run_async(*a):
+        captured["model"], captured["judge_model"] = a[2], a[-1]
+
+    monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
+    with CliRunner().isolated_filesystem():
+        Path("quizzes").mkdir()
+        result = CliRunner().invoke(
+            main,
+            ["run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py", *args],
+            env={"ANTHROPIC_API_KEY": "test", "AGENT_QUIZ_JUDGE_MODEL": ""},
+        )
+    assert result.exit_code == 0, result.output
+    return captured
+
+
+def test_judge_model_defaults_to_the_agent_model(monkeypatch):
+    assert _run_capturing_models(monkeypatch, ["--model", "claude-sonnet-5"]) == {
+        "model": "claude-sonnet-5",
+        "judge_model": "claude-sonnet-5",
+    }
+
+
+def test_judge_model_can_differ_from_the_agent_model(monkeypatch):
+    models = _run_capturing_models(monkeypatch, ["--model", "claude-sonnet-5", "--judge-model", "claude-haiku-4-5"])
+
+    assert models == {"model": "claude-sonnet-5", "judge_model": "claude-haiku-4-5"}

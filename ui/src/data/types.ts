@@ -15,6 +15,7 @@ export interface ResultRow {
   tools_used: string[] | null
   accuracy_score: number
   accuracy_method: string
+  grading_model: string | null // judge model for extract_match/llm_judge; null for contains
   accuracy_rationale: string | null
   accuracy_min_score: number | null
   provenance_score: number

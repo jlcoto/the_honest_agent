@@ -41,7 +41,7 @@ async def _quiz_loop(
     agent: AgentClient,
     definitions: list[QuizDefinition],
     judge_client,
-    model: str,
+    judge_model: str,
     run_id: str,
     agent_name: str | None,
 ) -> list[dict]:
@@ -58,7 +58,7 @@ async def _quiz_loop(
             definition.expected_answer,
             definition.prompt,
             client=judge_client,
-            model=model,
+            model=judge_model,
             tolerance=definition.tolerance,
             tolerance_percent=definition.tolerance_percent,
         )
@@ -87,6 +87,7 @@ async def _quiz_loop(
                 "tools_used": result.tools_used,
                 "accuracy_score": accuracy_score,
                 "accuracy_method": definition.grading_method,
+                "grading_model": _grading_model(definition.grading_method, judge_model),
                 "accuracy_rationale": rationale,
                 "accuracy_min_score": definition.accuracy_min_score,
                 "provenance_score": provenance_score,
@@ -150,6 +151,11 @@ def _resolve_mcp_target(
     )
 
 
+def _grading_model(method: str, model: str) -> str | None:
+    """The judge model a grading method uses -- `contains` is a plain string check with none."""
+    return None if method == "contains" else model
+
+
 def _resolve_agent_name(explicit: str | None, connected_client) -> str:
     """`--agent-name` wins; otherwise the name the MCP server reported during the handshake."""
     return explicit or connected_client.server_info.name
@@ -166,6 +172,7 @@ async def _run_async(
     select: str | None,
     exclude: str | None,
     agent_name: str | None,
+    judge_model: str,
 ) -> None:
     try:
         definitions = load_quizzes(quizzes_dir_p)
@@ -206,7 +213,8 @@ async def _run_async(
         agent_name = _resolve_agent_name(agent_name, connected)
         click.echo(f"Quizzing agent: {agent_name}")
         agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
-        rows = await _quiz_loop(agent, definitions, judge_client, model, run_id, agent_name)
+        click.echo(f"Judge model: {judge_model}")
+        rows = await _quiz_loop(agent, definitions, judge_client, judge_model, run_id, agent_name)
     finally:
         await mcp_client.__aexit__(None, None, None)
 
@@ -237,7 +245,14 @@ async def _run_async(
     help="Directory of quiz YAML files.",
 )
 @click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
-@click.option("--model", default="claude-haiku-4-5-20251001", help="Claude model to quiz, and to use as the LLM judge.")
+@click.option("--model", default="claude-haiku-4-5-20251001", help="Claude model to quiz (the agent under test).")
+@click.option(
+    "--judge-model",
+    envvar="AGENT_QUIZ_JUDGE_MODEL",
+    default=None,
+    help="Model that grades extract_match/llm_judge quizzes. Defaults to --model. A fixed judge across "
+    "runs keeps comparisons between agent models fair.",
+)
 @click.option(
     "--max-tool-turns",
     type=click.IntRange(min=1),
@@ -293,6 +308,7 @@ def run(
     quizzes_dir: str,
     results_path: str,
     model: str,
+    judge_model: str | None,
     max_tool_turns: int,
     mcp_command: str | None,
     mcp_url: str | None,
@@ -326,6 +342,7 @@ def run(
             select,
             exclude,
             agent_name,
+            judge_model or model,
         )
     )
 
