@@ -16,6 +16,7 @@ from . import report as report_mod
 from . import serve as serve_mod
 from .agent_runner import AgentClient
 from .grading import grade_accuracy
+from .llm import API_KEY_ENV, OPENAI, Judge, make_judge, provider_for, require_openai_sdk
 from .provenance import score_provenance
 from .quiz_loader import QuizDefinition, filter_by_tags, load_quizzes
 from .sql_capture import extract_sql_calls
@@ -40,7 +41,7 @@ def main():
 async def _quiz_loop(
     agent: AgentClient,
     definitions: list[QuizDefinition],
-    judge_client,
+    judge: Judge,
     judge_model: str,
     run_id: str,
     agent_name: str | None,
@@ -57,7 +58,7 @@ async def _quiz_loop(
             result.answer,
             definition.expected_answer,
             definition.prompt,
-            client=judge_client,
+            judge=judge,
             model=judge_model,
             tolerance=definition.tolerance,
             tolerance_percent=definition.tolerance_percent,
@@ -185,11 +186,9 @@ async def _run_async(
     if not definitions:
         raise click.ClickException(f"No quizzes matched --select {select!r} --exclude {exclude!r}")
 
-    import anthropic
-
     from .mcp_agent_runner import MCPAgentClient, build_mcp_client
 
-    judge_client = anthropic.AsyncAnthropic()
+    judge = make_judge(provider_for(judge_model))
     run_id = str(uuid.uuid4())
     click.echo(f"Starting quiz run {run_id} ({len(definitions)} quizzes)...")
 
@@ -212,9 +211,14 @@ async def _run_async(
     try:
         agent_name = _resolve_agent_name(agent_name, connected)
         click.echo(f"Quizzing agent: {agent_name}")
-        agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
-        click.echo(f"Judge model: {judge_model}")
-        rows = await _quiz_loop(agent, definitions, judge_client, judge_model, run_id, agent_name)
+        if provider_for(model) == OPENAI:
+            from .openai_agent_runner import OpenAIMCPAgentClient
+
+            agent = OpenAIMCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
+        else:
+            agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
+        click.echo(f"Model: {model} · judge model: {judge_model}")
+        rows = await _quiz_loop(agent, definitions, judge, judge_model, run_id, agent_name)
     finally:
         await mcp_client.__aexit__(None, None, None)
 
@@ -245,7 +249,12 @@ async def _run_async(
     help="Directory of quiz YAML files.",
 )
 @click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
-@click.option("--model", default="claude-haiku-4-5-20251001", help="Claude model to quiz (the agent under test).")
+@click.option(
+    "--model",
+    default="claude-haiku-4-5-20251001",
+    help="Model to quiz (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
+    "Only the API key for its provider is needed.",
+)
 @click.option(
     "--judge-model",
     envvar="AGENT_QUIZ_JUDGE_MODEL",
@@ -318,11 +327,19 @@ def run(
     exclude: str | None,
 ):
     """Run every quiz, grade the answers, and write results to storage."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    judge_model = judge_model or model
+    providers = {provider_for(model), provider_for(judge_model)}
+    missing = [API_KEY_ENV[p] for p in sorted(providers) if not os.environ.get(API_KEY_ENV[p])]
+    if missing:
         raise click.ClickException(
-            "ANTHROPIC_API_KEY is not set. Export it before running `agent-quiz run` "
-            "(it's needed both to quiz the agent and, for llm_judge-graded quizzes, to grade it)."
+            f"{' and '.join(missing)} not set. `agent-quiz run` needs the API key for the provider of "
+            f"--model ({model}) and --judge-model ({judge_model}). Export it or add it to .env."
         )
+    if OPENAI in providers:
+        try:
+            require_openai_sdk()
+        except ImportError as exc:
+            raise click.ClickException(str(exc)) from exc
     if not (mcp_command or mcp_url):
         raise click.ClickException("--mcp-command or --mcp-url is required.")
     ctx = click.get_current_context()
@@ -342,7 +359,7 @@ def run(
             select,
             exclude,
             agent_name,
-            judge_model or model,
+            judge_model,
         )
     )
 

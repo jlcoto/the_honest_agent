@@ -212,6 +212,26 @@ fair: otherwise each model grades itself, and part of a difference between
 two models can come from the judge. Each result records its judge in
 `grading_model` (empty for `contains`, which uses no model).
 
+## Using OpenAI (GPT) models
+
+`--model` and `--judge-model` accept OpenAI models as well as Claude ones.
+The provider comes from the model name: `gpt-*`, `o3`, `o4-mini` and similar
+are OpenAI, anything else is Claude. You only need the API key for the
+providers your models come from, so a GPT-only run needs just
+`OPENAI_API_KEY`:
+
+```bash
+uv sync --extra mcp --extra openai --python 3.11   # one-time: installs the openai package
+uv run agent-quiz run --quizzes-dir quizzes_motherduck \
+  --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
+  --agent-name motherduck --model gpt-5.4-mini
+```
+
+Without `--judge-model`, the quiz model also grades, as with Claude. The
+agent runs the same loop either way (same MCP tools, same SQL capture and
+provenance checks), and the report shows GPT runs alongside Claude ones in
+the model menus and Model comparison.
+
 ## Pointing at a real MCP server instead of the bundled demo one
 
 Swap `--mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"` for

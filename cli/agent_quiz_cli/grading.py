@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 
+from .llm import Judge
+
 
 def grade_contains(answer: str, expected_answer: str) -> float:
     return 1.0 if expected_answer.strip().lower() in answer.strip().lower() else 0.0
@@ -54,7 +56,7 @@ def _values_match(
 
 
 async def grade_llm_judge(
-    client, answer: str, expected_answer: str, prompt: str, model: str = "claude-haiku-4-5-20251001"
+    judge: Judge, answer: str, expected_answer: str, prompt: str, model: str = "claude-haiku-4-5-20251001"
 ) -> tuple[float, str, int, int]:
     judge_prompt = (
         "You are grading whether an AI-generated answer is correct.\n\n"
@@ -66,26 +68,16 @@ async def grade_llm_judge(
         "differences that don't change the meaning should still score 1.0.\n\n"
         'Respond with ONLY a JSON object: {"score": <float 0-1>, "rationale": "<one sentence>"}'
     )
-    response = await client.messages.create(
-        model=model,
-        max_tokens=200,
-        messages=[{"role": "user", "content": judge_prompt}],
-    )
-    text = "".join(block.text for block in response.content if block.type == "text")
+    text, input_tokens, output_tokens = await judge.complete(judge_prompt, model=model, max_tokens=200)
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"LLM judge did not return parseable JSON: {text!r}")
     payload = json.loads(match.group(0))
-    return (
-        float(payload["score"]),
-        str(payload.get("rationale", "")),
-        response.usage.input_tokens,
-        response.usage.output_tokens,
-    )
+    return float(payload["score"]), str(payload.get("rationale", "")), input_tokens, output_tokens
 
 
 async def grade_extract_match(
-    client,
+    judge: Judge,
     answer: str,
     expected_answer: str,
     prompt: str,
@@ -120,12 +112,7 @@ async def grade_extract_match(
         f"Response: {answer}\n\n"
         'Respond with ONLY a JSON object: {"extracted_answer": "<normalized value>"}'
     )
-    response = await client.messages.create(
-        model=model,
-        max_tokens=200,
-        messages=[{"role": "user", "content": extraction_prompt}],
-    )
-    text = "".join(block.text for block in response.content if block.type == "text")
+    text, input_tokens, output_tokens = await judge.complete(extraction_prompt, model=model, max_tokens=200)
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"Extraction did not return parseable JSON: {text!r}")
@@ -138,7 +125,7 @@ async def grade_extract_match(
         rationale += f" (tolerance={tolerance})"
     if tolerance_percent is not None:
         rationale += f" (tolerance_percent={tolerance_percent})"
-    return score, rationale, response.usage.input_tokens, response.usage.output_tokens
+    return score, rationale, input_tokens, output_tokens
 
 
 async def grade_accuracy(
@@ -146,7 +133,7 @@ async def grade_accuracy(
     answer: str,
     expected_answer: str,
     prompt: str,
-    client=None,
+    judge: Judge | None = None,
     model: str = "claude-haiku-4-5-20251001",
     tolerance: float | None = None,
     tolerance_percent: float | None = None,
@@ -154,10 +141,10 @@ async def grade_accuracy(
     if method == "contains":
         return grade_contains(answer, expected_answer), None, 0, 0
     if method == "extract_match":
-        if client is None:
-            raise ValueError("extract_match grading requires an Anthropic client")
+        if judge is None:
+            raise ValueError("extract_match grading requires a judge model")
         return await grade_extract_match(
-            client,
+            judge,
             answer,
             expected_answer,
             prompt,
@@ -166,7 +153,7 @@ async def grade_accuracy(
             tolerance_percent=tolerance_percent,
         )
     if method == "llm_judge":
-        if client is None:
-            raise ValueError("llm_judge grading requires an Anthropic client")
-        return await grade_llm_judge(client, answer, expected_answer, prompt, model=model)
+        if judge is None:
+            raise ValueError("llm_judge grading requires a judge model")
+        return await grade_llm_judge(judge, answer, expected_answer, prompt, model=model)
     raise ValueError(f"Unknown grading method: {method!r}")

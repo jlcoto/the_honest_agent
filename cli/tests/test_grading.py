@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 
 from agent_quiz_cli.grading import grade_accuracy, grade_contains, grade_extract_match, grade_llm_judge
+from agent_quiz_cli.llm import AnthropicJudge
 
 
 def test_grade_contains():
@@ -60,14 +61,19 @@ class _FakeMessages:
         return _Response(content=[_FakeTextBlock(text=text)], usage=self._usage)
 
 
-class _FakeClient:
+class _FakeAnthropic:
+    def __init__(self, payload: dict, usage: _FakeUsage | None = None):
+        self.messages = _FakeMessages(payload, usage=usage)
+
+
+class _FakeClient(AnthropicJudge):
     def __init__(self, extracted_answer: str, usage: _FakeUsage | None = None):
-        self.messages = _FakeMessages({"extracted_answer": extracted_answer}, usage=usage)
+        super().__init__(_FakeAnthropic({"extracted_answer": extracted_answer}, usage=usage))
 
 
-class _FakeJudgeClient:
+class _FakeJudgeClient(AnthropicJudge):
     def __init__(self, score: float, rationale: str = "", usage: _FakeUsage | None = None):
-        self.messages = _FakeMessages({"score": score, "rationale": rationale}, usage=usage)
+        super().__init__(_FakeAnthropic({"score": score, "rationale": rationale}, usage=usage))
 
 
 def test_grade_extract_match_scores_match_after_normalization():
@@ -128,7 +134,7 @@ def test_grade_llm_judge_returns_token_usage():
 def test_grade_accuracy_dispatches_extract_match_and_forwards_client():
     client = _FakeClient(extracted_answer="4")
 
-    score, rationale, _, _ = asyncio.run(grade_accuracy("extract_match", "It's 4.", "4", "What is 2+2?", client=client))
+    score, rationale, _, _ = asyncio.run(grade_accuracy("extract_match", "It's 4.", "4", "What is 2+2?", judge=client))
 
     assert score == 1.0
 
@@ -196,7 +202,7 @@ def test_grade_accuracy_forwards_tolerance():
     client = _FakeClient(extracted_answer="4.001")
 
     score, _, _, _ = asyncio.run(
-        grade_accuracy("extract_match", "It's 4.001", "4", "What is 2+2?", client=client, tolerance=0.01)
+        grade_accuracy("extract_match", "It's 4.001", "4", "What is 2+2?", judge=client, tolerance=0.01)
     )
 
     assert score == 1.0
@@ -257,9 +263,7 @@ def test_grade_accuracy_forwards_tolerance_percent():
     client = _FakeClient(extracted_answer="1005000")
 
     score, _, _, _ = asyncio.run(
-        grade_accuracy(
-            "extract_match", "1005000", "1000000", "What was revenue?", client=client, tolerance_percent=0.01
-        )
+        grade_accuracy("extract_match", "1005000", "1000000", "What was revenue?", judge=client, tolerance_percent=0.01)
     )
 
     assert score == 1.0
