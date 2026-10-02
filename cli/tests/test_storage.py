@@ -254,3 +254,20 @@ def test_grading_model_roundtrips(tmp_path: Path):
 
     assert by_id["r1"]["grading_model"] == "claude-haiku-4-5"
     assert by_id["r2"]["grading_model"] is None
+
+
+def test_a_results_folder_honest_agent_creates_ignores_itself_in_git(tmp_path: Path):
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    write_run_results(str(tmp_path / "honest_agent_results" / "results.duckdb"), "run_1", [_row()])
+
+    assert (tmp_path / "honest_agent_results" / ".gitignore").read_text().endswith("*\n")
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=tmp_path, capture_output=True, text=True, check=True)
+    assert status.stdout == ""
+
+
+def test_an_existing_folder_never_gets_the_ignore_marker(tmp_path: Path):
+    write_run_results(str(tmp_path / "results.duckdb"), "run_1", [_row()])
+
+    assert not (tmp_path / ".gitignore").exists()

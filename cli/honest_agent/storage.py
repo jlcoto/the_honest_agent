@@ -133,10 +133,22 @@ _TOOL_CALLS_COLUMNS: list[tuple[str, str]] = [
 _TOOL_CALLS_COLUMN_NAMES = [name for name, _ in _TOOL_CALLS_COLUMNS]
 
 
+def make_output_dir(path: Path) -> None:
+    """Creates a folder for honest-agent's generated files that git ignores by itself
+    (like pytest's and ruff's caches), so results and reports stay out of commits
+    without the user editing their own .gitignore. Only a folder created here gets
+    the marker: an existing one (e.g. `--results-path ./results.duckdb` puts results
+    in the project root) is left alone, or `*` would hide the whole project."""
+    if path.exists():
+        return
+    path.mkdir(parents=True)
+    (path / ".gitignore").write_text("# Created by honest-agent: keeps these generated files out of git.\n*\n")
+
+
 def _connect(results_path: str):
     import duckdb
 
-    Path(results_path).parent.mkdir(parents=True, exist_ok=True)
+    make_output_dir(Path(results_path).parent)
     return duckdb.connect(results_path)
 
 

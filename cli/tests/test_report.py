@@ -52,3 +52,17 @@ def test_report_with_no_results_yet(tmp_path: Path):
     assert result.exit_code == 0, result.output
     data = json.loads((out / "data" / "report.json").read_text())
     assert data["results"] == data["agent_logs"] == data["tool_calls"] == []
+
+
+def test_a_report_folder_honest_agent_creates_ignores_itself_but_an_existing_one_is_left_alone(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [_row()])
+    existing = tmp_path / "site"
+    existing.mkdir()
+
+    CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(tmp_path / "new_report")])
+    CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(existing)])
+
+    assert (tmp_path / "new_report" / ".gitignore").read_text().endswith("*\n")
+    assert (tmp_path / "new_report" / "index.html").exists()
+    assert not (existing / ".gitignore").exists()

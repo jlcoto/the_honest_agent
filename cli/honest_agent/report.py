@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .storage import read_agent_logs, read_all_results, read_tool_calls
+from .storage import make_output_dir, read_agent_logs, read_all_results, read_tool_calls
 
 UI_DIR = Path(__file__).parent / "report_ui"
 
@@ -32,7 +32,7 @@ def generate(results_path: str, out_dir: Path) -> None:
     if not (UI_DIR / "index.html").exists():
         raise FileNotFoundError(f"Report UI not found at {UI_DIR}. Build it first: `cd ui && npm ci && npm run build`.")
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    make_output_dir(out_dir)
     # Asset filenames are content-hashed, so a previous report's bundles would
     # pile up. Only this folder is cleared -- out_dir itself may be user-chosen.
     shutil.rmtree(out_dir / "assets", ignore_errors=True)
