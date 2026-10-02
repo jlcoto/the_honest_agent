@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from agent_quiz_cli.quiz_loader import (
     DEFAULT_ACCURACY_MIN_SCORE,
     DEFAULT_PROVENANCE_MIN_SCORE,
@@ -108,15 +110,23 @@ def test_load_quizzes_defaults_tolerance_to_none(tmp_path: Path):
     assert capital.tolerance_percent is None
 
 
-def test_duplicate_quiz_id_raises(tmp_path: Path):
-    (tmp_path / "a.yml").write_text(QUIZ_YAML)
-    (tmp_path / "b.yml").write_text(QUIZ_YAML)
+def test_duplicate_quiz_id_across_files_names_both(tmp_path: Path):
+    (tmp_path / "a.yml").write_text("quizzes:\n  - id: q_dup\n    prompt: one\n")
+    (tmp_path / "b.yml").write_text("quizzes:\n  - id: q_other\n    prompt: two\n  - id: q_dup\n    prompt: three\n")
 
-    try:
+    with pytest.raises(ValueError) as exc:
         load_quizzes(tmp_path)
-        raise AssertionError("expected ValueError for duplicate quiz id")
-    except ValueError:
-        pass
+
+    assert "Duplicate quiz id 'q_dup' in a.yml (line 2) and b.yml (line 4)" in str(exc.value)
+
+
+def test_duplicate_quiz_id_in_one_file_names_both_lines(tmp_path: Path):
+    (tmp_path / "a.yml").write_text("quizzes:\n  - id: q_dup\n    prompt: one\n  - id: 'q_dup'\n    prompt: two\n")
+
+    with pytest.raises(ValueError) as exc:
+        load_quizzes(tmp_path)
+
+    assert "Duplicate quiz id 'q_dup' in a.yml (lines 2 and 4)" in str(exc.value)
 
 
 def _quiz(quiz_id: str, tags: list[str]) -> QuizDefinition:

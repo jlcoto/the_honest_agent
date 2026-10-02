@@ -152,3 +152,18 @@ def test_both_mcp_targets_only_in_env_is_an_error(monkeypatch):
 
     assert result.exit_code != 0
     assert "Pass --mcp-command or --mcp-url to choose one" in result.output
+
+
+def test_duplicate_quiz_id_is_a_clean_cli_error():
+    with CliRunner().isolated_filesystem():
+        Path("quizzes").mkdir()
+        Path("quizzes/a.yml").write_text("quizzes:\n  - id: q_dup\n    prompt: one\n  - id: q_dup\n    prompt: two\n")
+        result = CliRunner().invoke(
+            main,
+            ["run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py"],
+            env={"ANTHROPIC_API_KEY": "test"},
+        )
+
+    assert result.exit_code == 1
+    assert "Error: Duplicate quiz id 'q_dup' in a.yml (lines 2 and 4)" in result.output
+    assert "Traceback" not in result.output

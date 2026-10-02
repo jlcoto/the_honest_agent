@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -47,16 +48,16 @@ class QuizDefinition:
 
 def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
     definitions: list[QuizDefinition] = []
-    seen_ids: set[str] = set()
+    seen_in: dict[str, Path] = {}
 
     for yml_path in sorted(quizzes_dir.glob("*.yml")):
         doc = yaml.safe_load(yml_path.read_text()) or {}
 
         for item in doc.get("quizzes", []):
             quiz_id = item["id"]
-            if quiz_id in seen_ids:
-                raise ValueError(f"Duplicate quiz id {quiz_id!r} in {yml_path}")
-            seen_ids.add(quiz_id)
+            if quiz_id in seen_in:
+                raise ValueError(_duplicate_id_message(quiz_id, seen_in[quiz_id], yml_path))
+            seen_in[quiz_id] = yml_path
 
             grading = item.get("grading", {})
             provenance = item.get("provenance", {})
@@ -82,6 +83,26 @@ def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
             )
 
     return definitions
+
+
+def _id_lines(path: Path, quiz_id: str) -> list[int]:
+    pattern = re.compile(rf"^\s*(?:-\s*)?id:\s*['\"]?{re.escape(quiz_id)}['\"]?\s*(?:#.*)?$")
+    return [n for n, line in enumerate(path.read_text().splitlines(), start=1) if pattern.match(line)]
+
+
+def _duplicate_id_message(quiz_id: str, first: Path, second: Path) -> str:
+    """Names every place the id is defined, with line numbers when they can be found."""
+
+    def where(path: Path, lines: list[int]) -> str:
+        if not lines:
+            return path.name
+        return f"{path.name} (line{'s' if len(lines) > 1 else ''} {' and '.join(map(str, lines))})"
+
+    if first == second:
+        places = where(first, _id_lines(first, quiz_id))
+    else:
+        places = f"{where(first, _id_lines(first, quiz_id))} and {where(second, _id_lines(second, quiz_id))}"
+    return f"Duplicate quiz id {quiz_id!r} in {places}. Quiz ids must be unique within a quizzes directory."
 
 
 def _parse_selector(selector: str) -> list[set[str]]:

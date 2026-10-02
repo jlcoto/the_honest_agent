@@ -167,7 +167,10 @@ async def _run_async(
     exclude: str | None,
     agent_name: str | None,
 ) -> None:
-    definitions = load_quizzes(quizzes_dir_p)
+    try:
+        definitions = load_quizzes(quizzes_dir_p)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     if not definitions:
         raise click.ClickException(f"No quizzes found in {quizzes_dir_p}")
 
