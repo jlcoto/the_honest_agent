@@ -245,17 +245,29 @@ export function Overview({ data }: { data: ReportData }) {
                     key: 'agent_answer',
                     label: 'Agent said',
                     render: (r: ResultRow) => (
-                      <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>{truncate(stripMarkdown(r.agent_answer), 90)}</span>
+                      <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>{answerPreview(r.agent_answer)}</span>
                     ),
                   },
                   {
                     key: 'status',
                     label: '',
-                    align: 'right',
+                    align: 'center',
+                    // One pill per failed check, each coloured by its own score.
                     render: (r: ResultRow) => (
-                      <Badge tone={toneOf(accuracyPasses(r) ? r.provenance_score : r.accuracy_score)} dot>
-                        {accuracyPasses(r) ? 'Provenance' : 'Accuracy'}
-                      </Badge>
+                      <span
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                      >
+                        {accuracyPasses(r) ? null : (
+                          <Badge tone={toneOf(r.accuracy_score)} dot>
+                            Accuracy
+                          </Badge>
+                        )}
+                        {provenancePasses(r) ? null : (
+                          <Badge tone={toneOf(r.provenance_score)} dot>
+                            Provenance
+                          </Badge>
+                        )}
+                      </span>
                     ),
                   },
                   {
@@ -280,4 +292,7 @@ export function Overview({ data }: { data: ReportData }) {
 }
 
 const isNumeric = (s: string) => /^\s*[-+]?[\d,]*\.?\d+\s*$/.test(s)
+// One line per row: paragraphs joined with " · " so "**0**\n\nThere were none." reads "0 · There were none."
+const answerPreview = (s: string) =>
+  truncate(s.split(/\n{2,}/).map(stripMarkdown).filter(Boolean).join(' · '), 90)
 const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
