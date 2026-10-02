@@ -17,7 +17,7 @@ version: 1
 # the check.
 #
 # Run with (MCP_URL/MCP_BEARER_TOKEN read from .env automatically):
-#   agent-quiz run --quizzes-dir quizzes_snowflake --select semantic_view --agent-name snowflake
+#   honest-agent run --quizzes-dir quizzes_snowflake --select semantic_view --agent-name snowflake
 
 quizzes:
   - category: finance

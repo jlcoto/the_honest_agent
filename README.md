@@ -1,4 +1,4 @@
-# agent_quiz
+# The Honest Agent (`honest-agent`)
 
 Quiz an analytics AI agent with known prompts/answers and check two things about
 each response:
@@ -16,12 +16,12 @@ never a hand-rolled `venv`/`pip install`.
 
 ## Layout
 
-- **`cli/`** — the `agent-quiz` Python CLI. Owns every LLM call (running the
+- **`cli/`** — the `honest-agent` Python CLI. Owns every LLM call (running the
   quiz, LLM-judge grading, provenance scoring), the threshold checks, and
   everything else (Slack notifications, the static HTML report). Results
-  storage is a local DuckDB file by default; `agent-quiz export` can push a
+  storage is a local DuckDB file by default; `honest-agent export` can push a
   Parquet snapshot to S3 (via DuckDB's own `httpfs` extension) for sharing
-  with a team, but that's an explicit, optional step. `agent-quiz run` calls
+  with a team, but that's an explicit, optional step. `honest-agent run` calls
   Claude with tools sourced live from an MCP server (`--mcp-command`/
   `--mcp-url`) — this tests the actual agent employees connect to, not a
   locally reimplemented stand-in whose behavior can drift out of sync with
@@ -34,22 +34,22 @@ never a hand-rolled `venv`/`pip install`.
 
 ```bash
 cd example_project
-uv python install 3.11                                       # one-time; agent-quiz needs Python >=3.10
-uv sync --python 3.11                                         # installs agent-quiz, editable, from ../cli
+uv python install 3.11                                       # one-time; honest-agent needs Python >=3.10
+uv sync --python 3.11                                         # installs honest-agent, editable, from ../cli
 uv run python warehouse/seed.py                               # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                                 # or put it in a .env at the repo root -- auto-loaded
-uv run agent-quiz run --quizzes-dir quizzes \
+uv run honest-agent run --quizzes-dir quizzes \
   --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
-uv run agent-quiz report                                     # writes the web report to agent_quiz_report/
-uv run agent-quiz serve                                      # opens the report in your browser, like `dbt docs serve`
-uv run agent-quiz notify --webhook-url ...                   # Slack alert on regressions
+uv run honest-agent report                                     # writes the web report to honest_agent_report/
+uv run honest-agent serve                                      # opens the report in your browser, like `dbt docs serve`
+uv run honest-agent notify --webhook-url ...                   # Slack alert on regressions
 ```
 
 This calls Claude with the `query_warehouse` tool sourced live from the
 bundled demo MCP server (`mcp_server/server.py`), against a real seeded
 TPC-H warehouse — real SQL, real data, real provenance checking (does the
 agent's SQL actually hit the table we expect). By default results land in
-`./agent_quiz_results/results.duckdb`. Run `agent-quiz export --s3-path
+`./honest_agent_results/results.duckdb`. Run `honest-agent export --s3-path
 s3://...` afterward if you want a Parquet snapshot in S3 too — see
 `example_project/README.md` for details, including how to point at a real
 MCP server (MotherDuck, Snowflake, or your own) instead of the bundled demo
@@ -64,5 +64,5 @@ cd cli
 uv sync --all-extras     # base deps + test + lint (Python >=3.10;
                           # uv picks a suitable interpreter, or pass --python 3.11)
 uv run pytest -q
-uv run agent-quiz --help
+uv run honest-agent --help
 ```

@@ -1,4 +1,4 @@
-"""Covers `agent-quiz logs`'s formatting -- pure storage read/print logic,
+"""Covers `honest-agent logs`'s formatting -- pure storage read/print logic,
 no LLM or MCP dependency, so it's cheap to drive end to end through the real
 `run` command's storage layer instead of mocking anything.
 """
@@ -9,8 +9,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from agent_quiz_cli.cli import main
-from agent_quiz_cli.storage import write_run_results
+from honest_agent.cli import main
+from honest_agent.storage import write_run_results
 
 
 def _row(**overrides) -> dict:
@@ -69,7 +69,7 @@ def test_logs_surfaces_turn_limit_error_message():
             "run_1",
             [
                 _row(
-                    agent_answer="[agent_quiz error] Exceeded max_tool_turns=5 without a final answer -- "
+                    agent_answer="[honest-agent error] Exceeded max_tool_turns=5 without a final answer -- "
                     "the agent was still requesting tools on the last turn. See agent_trace for detail.",
                     accuracy_score=0.0,
                 )
@@ -79,7 +79,7 @@ def test_logs_surfaces_turn_limit_error_message():
         result = CliRunner().invoke(main, ["logs", "--results-path", db_path])
 
         assert result.exit_code == 0, result.output
-        assert "Answer: [agent_quiz error] Exceeded max_tool_turns=5" in result.output
+        assert "Answer: [honest-agent error] Exceeded max_tool_turns=5" in result.output
         assert "Accuracy: 0.00 (min 0.80)" in result.output
 
 
@@ -94,7 +94,7 @@ def test_logs_reports_no_matching_logs():
 def test_agent_name_defaults_to_the_mcp_server_name():
     from types import SimpleNamespace
 
-    from agent_quiz_cli.cli import _resolve_agent_name
+    from honest_agent.cli import _resolve_agent_name
 
     connected = SimpleNamespace(server_info=SimpleNamespace(name="mcp-server-motherduck"))
     assert _resolve_agent_name(None, connected) == "mcp-server-motherduck"
@@ -102,7 +102,7 @@ def test_agent_name_defaults_to_the_mcp_server_name():
 
 
 def _run_capturing_mcp_target(monkeypatch, args: list[str], env: dict[str, str]):
-    import agent_quiz_cli.cli as cli_mod
+    import honest_agent.cli as cli_mod
 
     captured = {}
 
@@ -170,7 +170,7 @@ def test_duplicate_quiz_id_is_a_clean_cli_error():
 
 
 def test_grading_model_is_recorded_only_for_llm_graded_methods():
-    from agent_quiz_cli.cli import _grading_model
+    from honest_agent.cli import _grading_model
 
     assert _grading_model("extract_match", "claude-haiku-4-5") == "claude-haiku-4-5"
     assert _grading_model("llm_judge", "claude-haiku-4-5") == "claude-haiku-4-5"
@@ -178,7 +178,7 @@ def test_grading_model_is_recorded_only_for_llm_graded_methods():
 
 
 def _run_capturing_models(monkeypatch, args: list[str]):
-    import agent_quiz_cli.cli as cli_mod
+    import honest_agent.cli as cli_mod
 
     captured = {}
 
@@ -191,7 +191,7 @@ def _run_capturing_models(monkeypatch, args: list[str]):
         result = CliRunner().invoke(
             main,
             ["run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py", *args],
-            env={"ANTHROPIC_API_KEY": "test", "AGENT_QUIZ_JUDGE_MODEL": ""},
+            env={"ANTHROPIC_API_KEY": "test", "HONEST_AGENT_JUDGE_MODEL": ""},
         )
     assert result.exit_code == 0, result.output
     return captured

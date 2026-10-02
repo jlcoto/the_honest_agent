@@ -46,7 +46,7 @@ class AgentClient(ABC):
 
     `MCPAgentClient` (mcp_agent_runner.py) is currently the only
     implementation -- it sources tools from a live MCP server rather than a
-    local stand-in, which is what `agent-quiz` needs to test the actual
+    local stand-in, which is what `honest-agent` needs to test the actual
     agent employees connect to (see mcp_agent_runner.py's module docstring).
     This stays an ABC, rather than `cli.py` depending on `MCPAgentClient`
     directly, so the quiz loop doesn't need to know which concrete backend

@@ -90,7 +90,7 @@ export function Overview({ data }: { data: ReportData }) {
       <>
         <PageHeader title="Overview" />
         <Empty>
-          No results yet. Run <code>agent-quiz run</code>, then <code>agent-quiz report</code> again.
+          No results yet. Run <code>honest-agent run</code>, then <code>honest-agent report</code> again.
         </Empty>
       </>
     )

@@ -1,5 +1,5 @@
 [project]
-name = "agent-quiz"
+name = "honest-agent"
 version = "0.1.0"
 description = "CLI that runs LLM quizzes against an agent, grades accuracy/provenance, and stores the results."
 license = "MIT"
@@ -25,7 +25,7 @@ lint = [
 ]
 
 [project.scripts]
-agent-quiz = "agent_quiz_cli.cli:main"
+honest-agent = "honest_agent.cli:main"
 
 [build-system]
 requires = ["setuptools>=77", "wheel"]
@@ -33,11 +33,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["agent_quiz_cli*"]
+include = ["honest_agent*"]
 
 # The prebuilt report UI (built from ../ui with `npm run build`).
 [tool.setuptools.package-data]
-agent_quiz_cli = ["report_ui/**/*"]
+honest_agent = ["report_ui/**/*"]
 
 [tool.ruff]
 target-version = "py310"

@@ -9,7 +9,7 @@ version: 1
 # side by side in the same results.duckdb, comparable by quiz_id.
 #
 # Run with:
-#   agent-quiz run --quizzes-dir quizzes_motherduck \
+#   honest-agent run --quizzes-dir quizzes_motherduck \
 #     --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
 #     --agent-name motherduck
 #

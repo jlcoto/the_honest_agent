@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 
-from agent_quiz_cli.agent_runner import plain_content
+from honest_agent.agent_runner import plain_content
 
 
 @dataclass

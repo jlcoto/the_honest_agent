@@ -1,4 +1,4 @@
-from agent_quiz_cli.provenance import score_provenance
+from honest_agent.provenance import score_provenance
 
 
 def test_no_expected_sources_is_trivially_satisfied():

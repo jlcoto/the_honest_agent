@@ -1,10 +1,10 @@
 # example_project
 
-A real-world-shaped consumer of the `agent-quiz` CLI — this is where
+A real-world-shaped consumer of the `honest-agent` CLI — this is where
 example/demo content lives; the CLI itself ships none of its own.
 
 Python dependencies here are managed with [`uv`](https://docs.astral.sh/uv/);
-`agent-quiz` is pulled in as an **editable local path dependency** on `../cli`
+`honest-agent` is pulled in as an **editable local path dependency** on `../cli`
 (see `pyproject.toml`'s `[tool.uv.sources]`) rather than published to PyPI.
 
 This demo's example quizzes (`quizzes/`, and `quizzes_motherduck/`,
@@ -15,41 +15,41 @@ TPC-H generator — a standard multi-table schema (`orders`, `lineitem`,
 a single flat table. The tool that answers them (`query_warehouse`) is
 exposed by the bundled demo MCP server (`mcp_server/server.py`), or by a
 real MotherDuck/Snowflake MCP server — this is what demonstrates provenance
-checking against *real* SQL and *real* data: `agent-quiz` calls Claude with
+checking against *real* SQL and *real* data: `honest-agent` calls Claude with
 tools sourced live from that MCP server, so it's testing the actual agent
 employees would connect to, not a locally reimplemented stand-in.
 
 ## Setup
 
-agent-quiz requires **Python >=3.10** — `uv` manages that interpreter for you:
+honest-agent requires **Python >=3.10** — `uv` manages that interpreter for you:
 
 ```bash
 cd example_project
 uv python install 3.11                          # one-time; uv manages this interpreter itself
-uv sync --python 3.11                            # installs agent-quiz, editable
+uv sync --python 3.11                            # installs honest-agent, editable
 uv run python warehouse/seed.py                  # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                     # needed for the agent + the extract_match grader
 # or put it (and SLACK_WEBHOOK_URL / MCP_BEARER_TOKEN / AWS_* as needed) in a
-# .env at the repo root -- auto-loaded on every `agent-quiz` command, no
+# .env at the repo root -- auto-loaded on every `honest-agent` command, no
 # export/--env-file needed.
 ```
 
 ## Run the quiz end to end
 
 ```bash
-uv run agent-quiz run --quizzes-dir quizzes \
+uv run honest-agent run --quizzes-dir quizzes \
   --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
-uv run agent-quiz report
-uv run agent-quiz serve
-uv run agent-quiz notify --webhook-url https://hooks.slack.com/services/...
+uv run honest-agent report
+uv run honest-agent serve
+uv run honest-agent notify --webhook-url https://hooks.slack.com/services/...
 ```
 
 Use `$(pwd)/.venv/bin/python` (not a bare `python`/`python3`) for
-`--mcp-command` — `agent-quiz` launches it as a subprocess, and a bare
+`--mcp-command` — `honest-agent` launches it as a subprocess, and a bare
 `python` may not resolve to the right interpreter (or any interpreter) once
 it's out of your interactive shell's PATH.
 
-- `agent-quiz run` reads `quizzes/example_quiz.yml`, connects to the MCP
+- `honest-agent run` reads `quizzes/example_quiz.yml`, connects to the MCP
   server, calls Claude with the live `query_warehouse` tool for each prompt,
   grades accuracy (`extract_match`: a cheap extraction call normalizes the
   answer, then compares it exactly against `expected_answer`) and provenance
@@ -58,32 +58,32 @@ it's out of your interactive shell's PATH.
   `expected_database`/`expected_schema`) — against each quiz's own
   thresholds (`grading.min_score` / `provenance.min_score` in the YAML —
   default to 0.8 / 0.7 if omitted), and appends the results into a local
-  DuckDB file at `./agent_quiz_results/results.duckdb` (created on first
+  DuckDB file at `./honest_agent_results/results.duckdb` (created on first
   run).
 - `q_revenue_1996` expects the agent to query `fct_revenue_by_year` (the
   pre-aggregated mart) rather than joining `orders`+`lineitem` and
   recomputing TPC-H's revenue formula by hand — if it queries the wrong
   table, `provenance_score` drops below threshold even though the *answer*
-  might still come out correct. Run `agent-quiz logs` after a run to see
+  might still come out correct. Run `honest-agent logs` after a run to see
   exactly what SQL it executed.
-- `agent-quiz report` writes the web report to `agent_quiz_report/`: the
+- `honest-agent report` writes the web report to `honest_agent_report/`: the
   report UI plus `data/report.json`, holding every stored run's results,
   agent traces, and SQL calls.
-- `agent-quiz serve` opens that report in your browser, the same way `dbt
+- `honest-agent serve` opens that report in your browser, the same way `dbt
   docs serve` serves `target/`. Opening `index.html` directly doesn't work,
   because browsers won't load the data from a `file://` page.
-- `agent-quiz notify` checks only the *most recent* run's results against
+- `honest-agent notify` checks only the *most recent* run's results against
   their thresholds and posts to Slack if anything's below.
 
 Every command takes `--results-path` (default
-`./agent_quiz_results/results.duckdb`) pointing at that local file. DuckDB
+`./honest_agent_results/results.duckdb`) pointing at that local file. DuckDB
 (like SQLite) allows only one writer at a time, so this is a good fit for
-`agent-quiz run`'s occasional, sequential writes, but it's **not** a
+`honest-agent run`'s occasional, sequential writes, but it's **not** a
 shared/concurrent store on its own — it's a local file on whoever's machine
-runs `agent-quiz run`.
+runs `honest-agent run`.
 
-Re-running `agent-quiz run` inserts another batch of rows under a new
-`run_id`, so history just accumulates in the same file — `agent-quiz
+Re-running `honest-agent run` inserts another batch of rows under a new
+`run_id`, so history just accumulates in the same file — `honest-agent
 report`'s run-summary table picks up the trend automatically.
 
 ### Sharing results with a team (optional)
@@ -94,7 +94,7 @@ DuckDB's own `httpfs` extension (installed automatically on first use, no
 separate S3 SDK dependency):
 
 ```bash
-uv run agent-quiz export --s3-path s3://your-bucket/agent_quiz/results.parquet
+uv run honest-agent export --s3-path s3://your-bucket/honest_agent/results.parquet
 ```
 
 This reads AWS credentials the standard way DuckDB does (`AWS_ACCESS_KEY_ID`
@@ -147,7 +147,7 @@ quizzes:
 - **The same title or id in different quizzes directories is intended:**
   that's how results for the same question line up across agents (e.g.
   `quizzes_motherduck/` and `quizzes_snowflake/`). Within one directory,
-  ids must be unique, and `agent-quiz run` stops with an error naming both
+  ids must be unique, and `honest-agent run` stops with an error naming both
   places if two collide.
 - A plain list of quizzes without groups also works, each quiz carrying all
   of its own settings.
@@ -155,7 +155,7 @@ quizzes:
 ## Choosing a grading method
 
 Each quiz picks exactly one `grading.method` in its YAML entry — there's no
-blending or fallback between them (see `agent_quiz_cli/grading.py`):
+blending or fallback between them (see `honest_agent/grading.py`):
 
 - **`contains`** (default) — a plain string check, no LLM call at all: does
   `expected_answer` (case/whitespace-insensitive) appear anywhere in the
@@ -199,11 +199,11 @@ blending or fallback between them (see `agent_quiz_cli/grading.py`):
 
 `extract_match` and `llm_judge` call a model to grade. By default that's the
 same model being quizzed (`--model`). Pass `--judge-model` (or set
-`AGENT_QUIZ_JUDGE_MODEL`) to grade with a different one, e.g. quiz Sonnet and
+`HONEST_AGENT_JUDGE_MODEL`) to grade with a different one, e.g. quiz Sonnet and
 grade with Haiku:
 
 ```bash
-agent-quiz run ... --model claude-sonnet-5 --judge-model claude-haiku-4-5
+honest-agent run ... --model claude-sonnet-5 --judge-model claude-haiku-4-5
 ```
 
 Using the same judge for every run keeps comparisons between agent models
@@ -213,14 +213,14 @@ two models can come from the judge. Each result records its judge in
 
 ## Claude or OpenAI (GPT) models
 
-agent-quiz works with either, and installs both SDKs. You only need an API
+honest-agent works with either, and installs both SDKs. You only need an API
 key for the provider you use: `ANTHROPIC_API_KEY` for Claude, or
 `OPENAI_API_KEY` for GPT.
 
 - **Without `--model`**, `run` picks a small, cheap default from the key it
   finds: `claude-haiku-4-5` if `ANTHROPIC_API_KEY` is set (also when both
   are), otherwise `gpt-5.4-mini`. It prints which one it chose.
-- **To choose a model**, pass `--model`, or set `AGENT_QUIZ_MODEL` in `.env`
+- **To choose a model**, pass `--model`, or set `HONEST_AGENT_MODEL` in `.env`
   so you don't have to pass it every time. The provider comes from the
   name: `gpt-*`, `o3`, `o4-mini` and similar are OpenAI, anything else is
   Claude.
@@ -229,7 +229,7 @@ So a ChatGPT user with only `OPENAI_API_KEY` in `.env` runs exactly the same
 command as everyone else:
 
 ```bash
-uv run agent-quiz run --quizzes-dir quizzes_motherduck \
+uv run honest-agent run --quizzes-dir quizzes_motherduck \
   --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
   --agent-name motherduck
 ```
@@ -247,7 +247,7 @@ Swap `--mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"` for
 `expected_sources` to match that server's actual table/model names.
 `provenance.sql_fields` may also need updating if the real tool's
 SQL-holding input field isn't literally called `sql` — see the top-level
-`README.md` and `agent_quiz_cli/sql_capture.py` for how that's resolved.
+`README.md` and `honest_agent/sql_capture.py` for how that's resolved.
 
 ### Naming the agent
 
@@ -256,15 +256,15 @@ compare by agent.
 
 - **Default:** the name the MCP server reports about itself when it
   connects. The demo server reports `agent_quiz_demo`, and MotherDuck's
-  reports `mcp-server-motherduck`. `agent-quiz run` prints the name it
+  reports `mcp-server-motherduck`. `honest-agent run` prints the name it
   used (`Quizzing agent: ...`).
 - **Your own label:** pass `--agent-name motherduck`, or set
-  `AGENT_QUIZ_AGENT_NAME` in your shell.
+  `HONEST_AGENT_AGENT_NAME` in your shell.
 - **Labels must match exactly to group together.** A run labelled
   `motherduck` and one left at the default `mcp-server-motherduck` show up
   as two separate agents in the report. Pick one label per agent and use it
   every time.
-- **Don't set `AGENT_QUIZ_AGENT_NAME` in `.env`.** `.env` applies to every
+- **Don't set `HONEST_AGENT_AGENT_NAME` in `.env`.** `.env` applies to every
   run, so runs against other agents (e.g. Snowflake) would get the same
   label. Pass the flag per command, or set the variable in the shell you
   use for that agent.
@@ -309,12 +309,12 @@ the fix isn't "generate the right token," it's passing `--read-write`
 instead, using your normal token:
 
 ```bash
-agent-quiz run --quizzes-dir quizzes_motherduck \
+honest-agent run --quizzes-dir quizzes_motherduck \
   --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
   --agent-name motherduck
 ```
 
-This means `agent_quiz`'s own PAT (via `MOTHERDUCK_TOKEN`) has full
+This means `honest-agent`'s own PAT (via `MOTHERDUCK_TOKEN`) has full
 read/write access to whatever database it's pointed at for the duration of
 the run — same tradeoff as any read/write credential, worth keeping in mind
 if you point this at something other than a disposable demo database.
@@ -344,7 +344,7 @@ header. **RSA key-pair auth isn't supported at this layer** — it's a real
 feature of Snowflake's Python connector for normal SQL connections, but the
 managed MCP server's auth surface doesn't expose it.
 
-Given that, PAT is the practical choice for `agent-quiz` specifically: OAuth
+Given that, PAT is the practical choice for `honest-agent` specifically: OAuth
 means a full browser-based authorization-code flow, which a CLI test harness
 isn't set up to do (and which real Claude clients like Claude Cowork have
 also hit friction with against Snowflake specifically — its OAuth

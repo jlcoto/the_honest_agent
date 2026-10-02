@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from agent_quiz_cli.mcp_agent_runner import (
+from honest_agent.mcp_agent_runner import (
     MCPAgentClient,
     _mcp_tool_to_anthropic_schema,
     build_mcp_client,

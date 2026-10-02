@@ -16,7 +16,7 @@ export interface Run {
 
 export const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0)
 
-// Same rule as cli/agent_quiz_cli/thresholds.py, so the report agrees with `agent-quiz notify`.
+// Same rule as cli/honest_agent/thresholds.py, so the report agrees with `honest-agent notify`.
 export const accuracyPasses = (r: ResultRow) => r.accuracy_min_score == null || r.accuracy_score >= r.accuracy_min_score
 export const provenancePasses = (r: ResultRow) =>
   r.provenance_min_score == null || r.provenance_score >= r.provenance_min_score

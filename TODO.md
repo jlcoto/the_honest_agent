@@ -22,7 +22,7 @@ Fix first:
 2. **`report --out` can delete files.** `report.py` runs
    `shutil.rmtree(out_dir / "assets", ignore_errors=True)` and overwrites
    `index.html` in whatever folder `--out` names (`--out .`, `--out docs`).
-   Only clean folders agent-quiz created, marked with a file it writes on
+   Only clean folders honest-agent created, marked with a file it writes on
    first run; refuse non-empty unmarked folders.
 3. **Prompt injection can change `llm_judge` scores.** `grading.py` pastes
    the agent's answer unescaped into the judge prompt and reads the score
@@ -42,7 +42,7 @@ Lower severity:
    `report.json`) and lists directories; `serve --out .` would expose
    `.env`. Check Host, disable listings, refuse folders without the report
    marker from item 2.
-6. **`agent-quiz logs`** prints `agent_answer` and tool payloads raw, so
+6. **`honest-agent logs`** prints `agent_answer` and tool payloads raw, so
    model/tool output can inject terminal escape sequences (OSC 52 clipboard
    writes, disguised links). Strip control characters before printing.
 7. **CSV export** (`ui/src/data/derive.ts` `toCsv`) doesn't neutralise
@@ -73,7 +73,7 @@ From a refactoring review; tests and lint were clean. All small unless noted.
   `test_provenance.py` / `test_sql_capture.py` are uppercase (keep
   `FCT_ORDERS` in `test_provenance.py`, which tests case-insensitivity).
 - **Docs drift:** root `README.md` still says "static HTML report" and
-  Claude-only; `.env.example` lacks `AGENT_QUIZ_JUDGE_MODEL`.
+  Claude-only.
 - **Duplication:** failure-line formatting in `cli.py` and `notify.py`
   (move a `describe_failure` into `thresholds.py`); the turn-limit message
   and tool-result text join copied between the two agent runners (share in
@@ -93,9 +93,9 @@ From a refactoring review; tests and lint were clean. All small unless noted.
 
 ## Semantic-layer provenance checking
 
-Today, `agent_quiz` can only verify provenance (`expected_sources`) by
+Today, `honest-agent` can only verify provenance (`expected_sources`) by
 inspecting SQL text captured from tool calls (see
-`cli/agent_quiz_cli/sql_capture.py`, `cli/agent_quiz_cli/provenance.py`). That
+`cli/honest_agent/sql_capture.py`, `cli/honest_agent/provenance.py`). That
 only works when a tool call actually contains a SQL string somewhere in its
 input.
 
@@ -115,7 +115,7 @@ two separate config surfaces, both necessarily declared per-deployment since
 they describe someone else's tool contract, not ours:
 
 1. **Which tool names are semantic-layer calls** -- so their whole structured
-   input gets captured as a payload instead of agent_quiz looking for a "sql"
+   input gets captured as a payload instead of honest-agent looking for a "sql"
    field that doesn't exist. Likely shape: a `provenance.semantic_tools` list
    in the quiz YAML, alongside the existing `sql_fields`.
 2. **Which field inside that structured input names the model/metric being
@@ -162,12 +162,12 @@ future work, not a confirmed schema to design against.
 
 ## Migrate S3 export from plain Parquet to DuckLake
 
-`agent-quiz export` (`storage.py`'s `export_to_s3_parquet`) currently writes a
+`honest-agent export` (`storage.py`'s `export_to_s3_parquet`) currently writes a
 plain Parquet snapshot to S3 via `COPY (...) TO 's3://...' (FORMAT PARQUET)`.
 The plan, discussed and spiked but never implemented, is to write a
 **DuckLake** table instead (Parquet data files + a small catalog) so the
 export becomes directly queryable by DuckDB-WASM in the browser -- the
-foundation for an eventual interactive HTML report (`agent-quiz report`
+foundation for an eventual interactive HTML report (`honest-agent report`
 running live SQL client-side against S3 data, instead of today's static
 pre-rendered tables).
 
@@ -205,7 +205,7 @@ DuckLake yet.
 
 The report frontend (a React app in `ui/`, built output shipped inside the
 Python package, like Inspect AI's log viewer) is being built first with
-**pre-built views only**. `agent-quiz report` writes the data as JSON files
+**pre-built views only**. `honest-agent report` writes the data as JSON files
 and the React app reads them through one data-access module. No DuckDB runs in
 the browser.
 
@@ -213,9 +213,9 @@ Deferred: a **query box** where users run their own SQL against `results`,
 `agent_logs`, and `tool_calls`. Two ways to build it, and the choice depends
 on one question: do reports need to be hosted/shared as static files (S3,
 GitHub Pages, a shared folder) with querying still working, or only viewed
-locally through `agent-quiz serve`?
+locally through `honest-agent serve`?
 
-- **A. `agent-quiz serve` runs the queries (local viewing only).** Add a
+- **A. `honest-agent serve` runs the queries (local viewing only).** Add a
   `/api/query` endpoint to `serve` that runs SQL through Python's DuckDB on a
   read-only connection and returns rows as JSON. No engine download, works
   offline, and the file is always read by the same DuckDB version that wrote
@@ -246,12 +246,12 @@ need to know whether rows came from JSON, the `serve` API, or WASM.
 
 Two ways to share, snapshot vs. live:
 
-1. **Snapshot (the default, being built now).** `agent-quiz report` bakes
-   the data into JSON at generation time. View it locally with `agent-quiz
+1. **Snapshot (the default, being built now).** `honest-agent report` bakes
+   the data into JSON at generation time. View it locally with `honest-agent
    serve`, or upload the folder as-is to any static host (S3 website
    hosting, GitHub Pages, an internal host). Showing new runs means
    regenerating and re-uploading, typically a CI step after each eval run.
-2. **Live (later, opt-in).** Host the UI once. `agent-quiz export` keeps
+2. **Live (later, opt-in).** Host the UI once. `honest-agent export` keeps
    pushing data to S3 (Parquet/DuckLake, see the section above), and the
    UI queries the latest data with DuckDB-WASM whenever it's opened. The
    query box comes with it. Needs: option B above, CORS/Range on the
@@ -263,9 +263,9 @@ into `index.html`, like dbt's `docs generate --static`) so a report can be
 shared as one attachment or one presigned S3 link. Presigned URLs are
 per-object, so a multi-file folder doesn't work well with them.
 
-**Access control is the user's decision, not agent_quiz's.** Where reports
+**Access control is the user's decision, not honest-agent's.** Where reports
 are hosted, which login sits in front of them, and who gets access depend on
-each team's own infrastructure and policies, so agent_quiz leaves it to
+each team's own infrastructure and policies, so honest-agent leaves it to
 them. It also can't enforce access itself: anyone who can download the files
 can read everything in them, so a password check in the report's JavaScript
 would be fake. Don't build one. Our only job here is documentation: a

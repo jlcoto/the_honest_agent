@@ -1,4 +1,4 @@
-"""The model providers agent-quiz can use, for both the agent under test and the
+"""The model providers honest-agent can use, for both the agent under test and the
 grader: Anthropic (Claude) or OpenAI (GPT). The provider is inferred from the model
 name, so a run only needs the API key for the providers its models come from.
 

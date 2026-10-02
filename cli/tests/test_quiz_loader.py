@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_quiz_cli.quiz_loader import (
+from honest_agent.quiz_loader import (
     DEFAULT_ACCURACY_MIN_SCORE,
     DEFAULT_PROVENANCE_MIN_SCORE,
     QuizDefinition,

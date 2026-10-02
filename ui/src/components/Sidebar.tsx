@@ -7,7 +7,7 @@ const ITEMS = [
   { route: { name: 'overview' } as Route, label: 'Overview', icon: 'layout-dashboard' },
   { route: { name: 'compare' } as Route, label: 'Model comparison', icon: 'git-compare' },
 ]
-const MINI_KEY = 'agent-quiz.sidebarMini'
+const MINI_KEY = 'honest-agent.sidebarMini'
 // Bust crop of design/mascot.svg, matching the design system's logo-mark.
 const LOGO_SRC = './logo-mark.svg'
 

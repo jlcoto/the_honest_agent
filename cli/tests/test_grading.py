@@ -4,8 +4,8 @@ import asyncio
 import json
 from dataclasses import dataclass
 
-from agent_quiz_cli.grading import grade_accuracy, grade_contains, grade_extract_match, grade_llm_judge
-from agent_quiz_cli.llm import AnthropicJudge
+from honest_agent.grading import grade_accuracy, grade_contains, grade_extract_match, grade_llm_judge
+from honest_agent.llm import AnthropicJudge
 
 
 def test_grade_contains():

@@ -9,10 +9,10 @@ from types import SimpleNamespace as NS
 
 from click.testing import CliRunner
 
-from agent_quiz_cli.cli import main
-from agent_quiz_cli.llm import ANTHROPIC, OPENAI, OpenAIJudge, provider_for
-from agent_quiz_cli.openai_agent_runner import OpenAIMCPAgentClient
-from agent_quiz_cli.sql_capture import extract_sql_calls
+from honest_agent.cli import main
+from honest_agent.llm import ANTHROPIC, OPENAI, OpenAIJudge, provider_for
+from honest_agent.openai_agent_runner import OpenAIMCPAgentClient
+from honest_agent.sql_capture import extract_sql_calls
 
 
 def test_provider_is_inferred_from_the_model_name():
@@ -111,11 +111,11 @@ def test_openai_agent_reports_the_turn_limit():
     )
 
     assert result.hit_turn_limit
-    assert result.answer.startswith("[agent_quiz error] Exceeded max_tool_turns=1")
+    assert result.answer.startswith("[honest-agent error] Exceeded max_tool_turns=1")
 
 
 def _invoke_run(monkeypatch, args, env, captured=None):
-    import agent_quiz_cli.cli as cli_mod
+    import honest_agent.cli as cli_mod
 
     async def fake_run_async(*a):
         if captured is not None:
@@ -130,8 +130,8 @@ def _invoke_run(monkeypatch, args, env, captured=None):
             env={
                 "ANTHROPIC_API_KEY": "",
                 "OPENAI_API_KEY": "",
-                "AGENT_QUIZ_MODEL": "",
-                "AGENT_QUIZ_JUDGE_MODEL": "",
+                "HONEST_AGENT_MODEL": "",
+                "HONEST_AGENT_JUDGE_MODEL": "",
                 **env,
             },
         )
@@ -169,9 +169,9 @@ def test_without_model_claude_is_the_default_when_both_keys_are_set(monkeypatch)
     assert captured["model"] == "claude-haiku-4-5-20251001"
 
 
-def test_agent_quiz_model_sets_the_default_model(monkeypatch):
+def test_honest_agent_model_sets_the_default_model(monkeypatch):
     captured = {}
-    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test", "AGENT_QUIZ_MODEL": "gpt-5.4"}, captured)
+    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test", "HONEST_AGENT_MODEL": "gpt-5.4"}, captured)
 
     assert result.exit_code == 0, result.output
     assert captured["model"] == "gpt-5.4"

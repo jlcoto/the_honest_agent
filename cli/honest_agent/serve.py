@@ -13,7 +13,7 @@ from pathlib import Path
 
 class _RevalidatingHandler(http.server.SimpleHTTPRequestHandler):
     # Without this, browsers can keep showing the previous report after
-    # `agent-quiz report` regenerates it into the same folder.
+    # `honest-agent report` regenerates it into the same folder.
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()

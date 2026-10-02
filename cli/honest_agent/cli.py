@@ -27,15 +27,15 @@ from .thresholds import failing_rows
 # one exists -- never overrides variables already set in the environment.
 load_dotenv()
 
-DEFAULT_RESULTS_PATH = "./agent_quiz_results/results.duckdb"
+DEFAULT_RESULTS_PATH = "./honest_agent_results/results.duckdb"
 _RESULTS_PATH_HELP = "Local DuckDB file where results are stored (created on first `run`)."
-DEFAULT_REPORT_DIR = "agent_quiz_report"
+DEFAULT_REPORT_DIR = "honest_agent_report"
 _REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
 
 
 @click.group()
 def main():
-    """agent-quiz: run LLM quizzes against an agent, grade them, and store the results."""
+    """honest-agent: run LLM quizzes against an agent, grade them, and store the results."""
 
 
 async def _quiz_loop(
@@ -238,7 +238,7 @@ async def _run_async(
     else:
         click.echo("All quizzes met their thresholds.")
 
-    click.echo(f"Run {run_id} complete. Next: `agent-quiz report` / `agent-quiz notify`.")
+    click.echo(f"Run {run_id} complete. Next: `honest-agent report` / `honest-agent notify`.")
 
 
 @main.command()
@@ -251,7 +251,7 @@ async def _run_async(
 @click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
 @click.option(
     "--model",
-    envvar="AGENT_QUIZ_MODEL",
+    envvar="HONEST_AGENT_MODEL",
     default=None,
     help="Model to quiz (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
     "Only the API key for its provider is needed. Defaults to claude-haiku-4-5 if ANTHROPIC_API_KEY is set, "
@@ -259,7 +259,7 @@ async def _run_async(
 )
 @click.option(
     "--judge-model",
-    envvar="AGENT_QUIZ_JUDGE_MODEL",
+    envvar="HONEST_AGENT_JUDGE_MODEL",
     default=None,
     help="Model that grades extract_match/llm_judge quizzes. Defaults to --model. A fixed judge across "
     "runs keeps comparisons between agent models fair.",
@@ -296,7 +296,7 @@ async def _run_async(
 )
 @click.option(
     "--agent-name",
-    envvar="AGENT_QUIZ_AGENT_NAME",
+    envvar="HONEST_AGENT_AGENT_NAME",
     default=None,
     help="Label for the agent being quizzed (e.g. snowflake, motherduck), stored with every result "
     "so reports can filter by agent. Defaults to the name the MCP server reports about itself.",
@@ -341,7 +341,7 @@ def run(
     missing = [API_KEY_ENV[p] for p in sorted(providers) if not os.environ.get(API_KEY_ENV[p])]
     if missing:
         raise click.ClickException(
-            f"{' and '.join(missing)} not set. `agent-quiz run` needs the API key for the provider of "
+            f"{' and '.join(missing)} not set. `honest-agent run` needs the API key for the provider of "
             f"--model ({model}) and --judge-model ({judge_model}). Export it or add it to .env."
         )
     if not (mcp_command or mcp_url):
@@ -377,7 +377,7 @@ def report(results_path: str, out: str):
         report_mod.generate(results_path, Path(out))
     except FileNotFoundError as e:
         raise click.ClickException(str(e)) from e
-    click.echo(f"Wrote {out}/. View it with `agent-quiz serve --out {out}`.")
+    click.echo(f"Wrote {out}/. View it with `honest-agent serve --out {out}`.")
 
 
 @main.command()

@@ -9,7 +9,7 @@ Three tables, kept deliberately separate:
 - `agent_logs`: one row per graded quiz, joined to `results` by `result_id`,
   for people who want to dig into *why* -- the agent's full turn-by-turn
   trace. Nothing reads this by default; it's there to be explored on demand
-  (see `read_agent_logs` / `agent-quiz logs`).
+  (see `read_agent_logs` / `honest-agent logs`).
 - `tool_calls`: **today, this only ever contains SQL calls** -- despite the
   name, a tool call that doesn't produce a SQL string anywhere (no field
   matching `provenance.sql_fields`/the `sql`/`query`/`statement` heuristic --
@@ -32,13 +32,13 @@ Three tables, kept deliberately separate:
 
 The local .duckdb file is always the live, queryable store -- DuckDB (like
 SQLite) allows only one writer process at a time against a given file, so
-this is a good fit for `agent-quiz run`'s occasional, sequential writes, but
+this is a good fit for `honest-agent run`'s occasional, sequential writes, but
 it is NOT a shared, concurrently-writable store on its own. For "a team
 wants to constantly analyze this together", `export_to_s3_parquet()` is the
 intended path: it writes a Parquet snapshot to S3 (via DuckDB's own httpfs
 extension -- no separate S3 SDK dependency needed), which Snowflake/
 BigQuery/Athena/another DuckDB can all read as an external table. Nothing
-calls that automatically; it's an explicit, optional step (`agent-quiz
+calls that automatically; it's an explicit, optional step (`honest-agent
 export`). It exports `results` only -- `agent_logs`/`tool_calls` can be
 large and are meant for local/ad-hoc exploration, not the shared dashboard.
 
@@ -161,7 +161,7 @@ def _table_exists(con, table_name: str) -> bool:
 
 
 def write_run_results(results_path: str, run_id: str, rows: list[dict[str, Any]]) -> str:
-    """Writes every graded quiz result from one `agent-quiz run` invocation.
+    """Writes every graded quiz result from one `honest-agent run` invocation.
 
     Each row in `rows` is expected to carry the union of `results` and
     `agent_logs` fields (result_id, scores, ..., agent_trace), plus an
@@ -318,12 +318,12 @@ def export_to_s3_parquet(results_path: str, s3_path: str, run_id: str | None = N
     Returns `s3_path`, for logging.
     """
     if not Path(results_path).exists():
-        raise FileNotFoundError(f"No results database at {results_path} -- run `agent-quiz run` first.")
+        raise FileNotFoundError(f"No results database at {results_path} -- run `honest-agent run` first.")
 
     con = _connect(results_path)
     try:
         if not _table_exists(con, "results"):
-            raise RuntimeError(f"{results_path} has no results yet -- run `agent-quiz run` first.")
+            raise RuntimeError(f"{results_path} has no results yet -- run `honest-agent run` first.")
 
         con.execute("install httpfs")
         con.execute("load httpfs")

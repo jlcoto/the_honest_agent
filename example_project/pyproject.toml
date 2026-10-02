@@ -1,13 +1,13 @@
 [project]
-name = "agent-quiz-demo"
+name = "honest-agent-demo"
 version = "0.1.0"
-description = "Demo project consuming the agent-quiz CLI via a local path (not meant for publishing)."
+description = "Demo project consuming the honest-agent CLI via a local path (not meant for publishing)."
 requires-python = ">=3.10"
 dependencies = [
-    "agent-quiz",
+    "honest-agent",
 ]
 
 [project.optional-dependencies]
 
 [tool.uv.sources]
-agent-quiz = { path = "../cli", editable = true }
+honest-agent = { path = "../cli", editable = true }

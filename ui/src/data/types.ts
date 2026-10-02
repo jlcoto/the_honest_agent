@@ -1,4 +1,4 @@
-// Mirrors the three DuckDB tables in cli/agent_quiz_cli/storage.py, one row
+// Mirrors the three DuckDB tables in cli/honest_agent/storage.py, one row
 // type per table. Keep field names identical to the column names there.
 
 export interface ResultRow {

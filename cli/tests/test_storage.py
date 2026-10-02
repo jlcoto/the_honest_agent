@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_quiz_cli.storage import (
+from honest_agent.storage import (
     export_to_s3_parquet,
     read_agent_logs,
     read_all_results,

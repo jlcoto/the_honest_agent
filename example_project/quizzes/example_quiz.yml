@@ -1,6 +1,6 @@
 version: 1
 
-# No `tools:` block here -- `agent-quiz` sources its tools live from the
+# No `tools:` block here -- `honest-agent` sources its tools live from the
 # connected MCP server (see ../mcp_server/server.py's query_warehouse), so a
 # locally-declared tool schema would just be unused. Run with
 # `--mcp-command "python mcp_server/server.py"` (see README.md) after

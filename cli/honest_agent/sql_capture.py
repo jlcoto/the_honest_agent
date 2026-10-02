@@ -1,7 +1,7 @@
 """Pulls SQL text out of an agent's tool calls, for the `tool_calls` table
 (written there as `type="sql"` rows -- see storage.py).
 
-Tool input schemas aren't something agent_quiz controls: a locally-defined
+Tool input schemas aren't something honest-agent controls: a locally-defined
 tool's schema is whatever the quiz YAML's author wrote, and an MCP tool's
 schema is whatever that MCP server's author wrote -- there's no field name
 guaranteed to hold SQL in either case. So extraction is two-tier: a quiz can
@@ -35,7 +35,7 @@ actually in scope. Two separate config surfaces would be needed, both
 necessarily declared per-deployment since they describe someone else's tool
 contract, not ours -- there's no way to auto-detect either:
   1. Which tool names are semantic-layer calls (so their whole structured
-     input/output gets captured as a payload, instead of agent_quiz looking
+     input/output gets captured as a payload, instead of honest-agent looking
      for a "sql"/"query"/"statement" field that doesn't exist) -- e.g. a
      `provenance.semantic_tools` list in the quiz YAML, alongside
      `sql_fields`.

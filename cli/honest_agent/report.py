@@ -3,7 +3,7 @@ repo's `ui/` folder and shipped inside this package) plus `data/report.json`,
 which holds every row of the `results`, `agent_logs`, and `tool_calls` tables.
 
 The output is a folder of static files. Browsers won't fetch the JSON from a
-`file://` page, so view it through `agent-quiz serve` or any static host.
+`file://` page, so view it through `honest-agent serve` or any static host.
 """
 
 from __future__ import annotations

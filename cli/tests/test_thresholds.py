@@ -1,4 +1,4 @@
-from agent_quiz_cli.thresholds import check_row, failing_rows
+from honest_agent.thresholds import check_row, failing_rows
 
 PASSING_ROW = {
     "quiz_id": "q1",

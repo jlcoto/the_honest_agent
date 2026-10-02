@@ -111,7 +111,7 @@ class OpenAIMCPAgentClient(AgentClient):
             # still requesting tools, so there's no final answer to report.
             hit_turn_limit = True
             final_text = (
-                f"[agent_quiz error] Exceeded max_tool_turns={self._max_tool_turns} without a final answer -- "
+                f"[honest-agent error] Exceeded max_tool_turns={self._max_tool_turns} without a final answer -- "
                 "the agent was still requesting tools on the last turn. See agent_trace for detail."
             )
 

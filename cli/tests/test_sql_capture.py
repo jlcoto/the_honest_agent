@@ -1,6 +1,6 @@
 import json
 
-from agent_quiz_cli.sql_capture import extract_sql_calls
+from honest_agent.sql_capture import extract_sql_calls
 
 
 def _tool_use_trace(name: str, input_: dict) -> list[dict]:

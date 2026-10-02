@@ -147,7 +147,7 @@ class MCPAgentClient(AgentClient):
         final_text = "".join(block.text for block in (response.content if response else []) if block.type == "text")
         if hit_turn_limit:
             final_text = (
-                f"[agent_quiz error] Exceeded max_tool_turns={self._max_tool_turns} without a final answer -- "
+                f"[honest-agent error] Exceeded max_tool_turns={self._max_tool_turns} without a final answer -- "
                 "the agent was still requesting tools on the last turn. See agent_trace for detail."
             )
         latency_ms = int((time.monotonic() - start) * 1000)

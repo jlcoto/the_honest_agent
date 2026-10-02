@@ -13,7 +13,7 @@ type LoadState =
   | { status: 'ready'; data: ReportData }
 
 type Theme = 'light' | 'dark'
-const THEME_KEY = 'agent-quiz.theme'
+const THEME_KEY = 'honest-agent.theme'
 
 function initialTheme(): Theme {
   try {
@@ -58,7 +58,7 @@ function App() {
           {state.status === 'loading' && <p style={{ color: 'var(--fg-3)' }}>Loading…</p>}
           {state.status === 'error' && (
             <p role="alert">
-              {state.message} If you opened this file directly, run <code>agent-quiz serve</code> instead.
+              {state.message} If you opened this file directly, run <code>honest-agent serve</code> instead.
             </p>
           )}
           {state.status === 'ready' && route.name === 'overview' && <Overview data={state.data} />}

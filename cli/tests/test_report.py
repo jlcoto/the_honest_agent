@@ -5,8 +5,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from agent_quiz_cli.cli import main
-from agent_quiz_cli.storage import write_run_results
+from honest_agent.cli import main
+from honest_agent.storage import write_run_results
 
 
 def _row() -> dict:

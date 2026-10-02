@@ -26,7 +26,7 @@ def notify_on_failures(results_path: str, webhook_url: str) -> None:
         print("No quizzes below threshold in the latest run -- nothing to notify.")
         return
 
-    lines = [f"*agent_quiz*: {len(failures)}/{len(rows)} quiz(zes) below threshold (run {rows[0]['run_id']})"]
+    lines = [f"*honest-agent*: {len(failures)}/{len(rows)} quiz(zes) below threshold (run {rows[0]['run_id']})"]
     for f in failures:
         bits = []
         if not f["accuracy_pass"]:

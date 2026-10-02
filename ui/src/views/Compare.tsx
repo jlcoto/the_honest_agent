@@ -98,7 +98,7 @@ export function Compare({ data }: { data: ReportData }) {
       {rows.length === 0 ? (
         <Card>
           <p style={{ margin: 0, padding: '24px 0', textAlign: 'center', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
-            No results yet. Run <code>agent-quiz run</code>, then <code>agent-quiz report</code> again.
+            No results yet. Run <code>honest-agent run</code>, then <code>honest-agent report</code> again.
           </p>
         </Card>
       ) : (
