@@ -15,6 +15,14 @@ from . import notify as notify_mod
 from . import report as report_mod
 from . import serve as serve_mod
 from .agent_runner import AgentClient
+from .config_file import (
+    CONFIG_FILE_NAME,
+    Config,
+    ConfigError,
+    Target,
+    find_config_file,
+    load_config,
+)
 from .grading import grade_accuracy
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
 from .provenance import score_provenance
@@ -26,6 +34,7 @@ from .thresholds import failing_rows
 DEFAULT_RESULTS_PATH = "./honest_agent_results/results.duckdb"
 _RESULTS_PATH_HELP = "Local DuckDB file where results are stored (created on first `run`)."
 DEFAULT_REPORT_DIR = "honest_agent_report"
+DEFAULT_MAX_TOOL_TURNS = 5
 _REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
 
 
@@ -38,11 +47,62 @@ _REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
     help="Load settings and API keys from this file instead of the .env found from the current directory "
     "(or its parents). Variables already set in your shell take precedence.",
 )
-def main(env_file: str | None):
+@click.option(
+    "--config-file",
+    envvar="HONEST_AGENT_CONFIG_FILE",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help=f"Read settings and targets from this file instead of the {CONFIG_FILE_NAME} "
+    "found from the current directory (or its parents).",
+)
+@click.pass_context
+def main(ctx: click.Context, env_file: str | None, config_file: str | None):
     """honest-agent: run LLM quizzes against an agent, grade them, and store the results."""
     # usecwd: look from where the command runs, not from where honest-agent is installed --
     # otherwise a tool or editable install would find some other project's .env, or none.
     load_dotenv(env_file or find_dotenv(usecwd=True))
+    ctx.obj = Path(config_file) if config_file else find_config_file(Path.cwd())
+
+
+def _config(ctx: click.Context) -> Config | None:
+    path = ctx.find_root().obj
+    if path is None:
+        return None
+    try:
+        return load_config(path)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _results_path(ctx: click.Context, results_path: str | None) -> str:
+    """--results-path, else the config file's results_path, else the default."""
+    if results_path is not None:
+        return results_path
+    config = _config(ctx)
+    return (config and config.results_path) or DEFAULT_RESULTS_PATH
+
+
+def _from_layers(ctx: click.Context, param: str, value, target: Target | None, key: str | None = None):
+    """Applies flag > environment variable > config file > built-in default to one setting.
+    `value` is what Click resolved (flag, env var, or its own default); the file only fills in
+    when Click fell back to its default. An env var beating the file gets a note, so a stale
+    variable in .env never overrides a target silently."""
+    file_value = target.settings.get(key or param) if target else None
+    source = ctx.get_parameter_source(param)
+    if file_value is None or source is ParameterSource.COMMANDLINE:
+        return value
+    if source is ParameterSource.ENVIRONMENT:
+        if value != file_value:
+            click.echo(
+                f"Note: {_envvar(ctx, param)} from the environment overrides target {target.name!r} "
+                f"({key or param} in {CONFIG_FILE_NAME})."
+            )
+        return value
+    return file_value
+
+
+def _envvar(ctx: click.Context, param: str) -> str:
+    return next(p.envvar for p in ctx.command.params if p.name == param)
 
 
 async def _quiz_loop(
@@ -52,6 +112,7 @@ async def _quiz_loop(
     judge_model: str,
     run_id: str,
     agent_name: str | None,
+    ignore_tools: list[str],
 ) -> list[dict]:
     rows: list[dict] = []
     for definition in definitions:
@@ -70,7 +131,7 @@ async def _quiz_loop(
             tolerance=definition.tolerance,
             tolerance_percent=definition.tolerance_percent,
         )
-        sql_calls = extract_sql_calls(result.raw_trace, definition.sql_fields)
+        sql_calls = extract_sql_calls(result.raw_trace, definition.sql_fields, ignore_tools)
         provenance_score = score_provenance(
             [call["sql"] for call in sql_calls],
             definition.expected_sources,
@@ -134,29 +195,55 @@ def _describe_mcp_connection_error(exc: BaseException) -> str:
     return str(exc)
 
 
-def _resolve_mcp_target(
+def _resolve_server(
+    ctx: click.Context,
     command: str | None,
     url: str | None,
-    command_source: ParameterSource | None,
-    url_source: ParameterSource | None,
-) -> tuple[str | None, str | None]:
-    """Picks stdio vs HTTP when both are set: a flag typed on the command line beats a value
-    that only came from the environment (or .env), e.g. `--mcp-command ...` with a remote
-    MCP_URL configured in .env for another agent."""
-    if not (command and url):
-        return command, url
-    command_explicit = command_source is ParameterSource.COMMANDLINE
-    url_explicit = url_source is ParameterSource.COMMANDLINE
-    if command_explicit and not url_explicit:
-        return command, None
-    if url_explicit and not command_explicit:
-        return None, url
-    if command_explicit:
-        raise click.ClickException("Pass either --mcp-command (stdio) or --mcp-url (HTTP), not both.")
-    raise click.ClickException(
-        "Both MCP_COMMAND and MCP_URL are set in the environment (or .env). "
-        "Pass --mcp-command or --mcp-url to choose one."
-    )
+    bearer_token: str | None,
+    target: Target | None,
+) -> tuple[str | None, str | None, str | None]:
+    """Picks the MCP server (stdio command or HTTP URL) and its bearer token from the first
+    layer that names a server: flags, then environment variables, then the config file's
+    target. The token follows the server it was set up for: a target's token comes from its
+    `bearer_token_env`, and MCP_BEARER_TOKEN only applies to a server set by flag or env var --
+    so a token for one vendor is never sent to another target's server. A --mcp-bearer-token
+    flag still wins everywhere."""
+    sources = {"command": ctx.get_parameter_source("mcp_command"), "url": ctx.get_parameter_source("mcp_url")}
+    file_command = target.settings.get("mcp_command") if target else None
+    file_url = target.settings.get("mcp_url") if target else None
+
+    for layer in (ParameterSource.COMMANDLINE, ParameterSource.ENVIRONMENT):
+        layer_command = command if sources["command"] is layer else None
+        layer_url = url if sources["url"] is layer else None
+        if not (layer_command or layer_url):
+            continue
+        if layer_command and layer_url:
+            if layer is ParameterSource.COMMANDLINE:
+                raise click.ClickException("Pass either --mcp-command (stdio) or --mcp-url (HTTP), not both.")
+            raise click.ClickException(
+                "Both MCP_COMMAND and MCP_URL are set in the environment (or .env). "
+                "Pass --mcp-command or --mcp-url to choose one."
+            )
+        if layer is ParameterSource.ENVIRONMENT and (file_command or file_url):
+            name = "MCP_COMMAND" if layer_command else "MCP_URL"
+            click.echo(f"Note: {name} from the environment overrides target {target.name!r}'s MCP server.")
+        return layer_command, layer_url, bearer_token
+
+    if not (file_command or file_url):
+        raise click.ClickException(
+            f"--mcp-command or --mcp-url is required (or a target with mcp_command/mcp_url in {CONFIG_FILE_NAME})."
+        )
+    if ctx.get_parameter_source("mcp_bearer_token") is ParameterSource.COMMANDLINE:
+        return file_command, file_url, bearer_token
+    token_env = target.settings.get("bearer_token_env")
+    if token_env is None:
+        return file_command, file_url, None
+    if not os.environ.get(token_env):
+        raise click.ClickException(
+            f"{token_env} is not set. Target {target.name!r} reads its bearer token from it (bearer_token_env). "
+            "Add it to .env or export it."
+        )
+    return file_command, file_url, os.environ[token_env]
 
 
 def _grading_model(method: str, model: str) -> str | None:
@@ -180,6 +267,8 @@ async def _run_async(
     select: str | None,
     exclude: str | None,
     agent_name: str | None,
+    ignore_tools: list[str],
+    mcp_cwd: str | None,
     judge_model: str,
 ) -> None:
     try:
@@ -199,7 +288,7 @@ async def _run_async(
     run_id = str(uuid.uuid4())
     click.echo(f"Starting quiz run {run_id} ({len(definitions)} quizzes)...")
 
-    mcp_client = build_mcp_client(command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token)
+    mcp_client = build_mcp_client(command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token, cwd=mcp_cwd)
     # Deliberately split from the quiz loop below: a failure *here* means
     # the MCP handshake itself never completed (wrong token, unreachable
     # server, server crashed on startup, ...) -- every quiz would fail
@@ -225,7 +314,7 @@ async def _run_async(
         else:
             agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
         click.echo(f"Model: {model} · judge model: {judge_model}")
-        rows = await _quiz_loop(agent, definitions, judge, judge_model, run_id, agent_name)
+        rows = await _quiz_loop(agent, definitions, judge, judge_model, run_id, agent_name, ignore_tools)
     finally:
         await mcp_client.__aexit__(None, None, None)
 
@@ -250,12 +339,18 @@ async def _run_async(
 
 @main.command()
 @click.option(
-    "--quizzes-dir",
-    default="quizzes",
-    type=click.Path(exists=True, file_okay=False),
-    help="Directory of quiz YAML files.",
+    "--target",
+    "-t",
+    default=None,
+    help=f"Target (agent) from {CONFIG_FILE_NAME} to quiz. Defaults to its default_target.",
 )
-@click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
+@click.option(
+    "--quizzes-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory of quiz YAML files. Defaults to the target's quizzes_dir, else ./quizzes.",
+)
+@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option(
     "--model",
     envvar="HONEST_AGENT_MODEL",
@@ -274,8 +369,8 @@ async def _run_async(
 @click.option(
     "--max-tool-turns",
     type=click.IntRange(min=1),
-    default=5,
-    help="Max rounds of tool calls per quiz before giving up (each round is one Claude API call). "
+    default=DEFAULT_MAX_TOOL_TURNS,
+    help="Max rounds of tool calls per quiz before giving up (each round is one model API call). "
     "If Claude is still requesting tools when this is hit, that quiz fails with a clear error "
     "instead of silently returning an empty answer.",
 )
@@ -306,7 +401,8 @@ async def _run_async(
     envvar="HONEST_AGENT_AGENT_NAME",
     default=None,
     help="Label for the agent being quizzed (e.g. snowflake, motherduck), stored with every result "
-    "so reports can filter by agent. Defaults to the name the MCP server reports about itself.",
+    "so reports can filter by agent. Defaults to the target's agent_name or name, else the name the "
+    "MCP server reports about itself.",
 )
 @click.option(
     "--select",
@@ -322,9 +418,12 @@ async def _run_async(
     default=None,
     help="Skip quizzes matching this tag selector (same syntax as --select), applied after --select.",
 )
+@click.pass_context
 def run(
-    quizzes_dir: str,
-    results_path: str,
+    ctx: click.Context,
+    target: str | None,
+    quizzes_dir: str | None,
+    results_path: str | None,
     model: str | None,
     judge_model: str | None,
     max_tool_turns: int,
@@ -336,6 +435,29 @@ def run(
     exclude: str | None,
 ):
     """Run every quiz, grade the answers, and write results to storage."""
+    config = _config(ctx)
+    if config is None and target is not None:
+        raise click.ClickException(f"--target {target} needs a {CONFIG_FILE_NAME}, and none was found.")
+    try:
+        chosen = config.target(target) if config and config.targets else None
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if chosen:
+        click.echo(f"Target: {chosen.name} ({config.path})")
+
+    # Without targets, the file's top-level model/judge_model/max_tool_turns still apply.
+    layer = chosen or (Target("config", config.shared) if config else None)
+    model = _from_layers(ctx, "model", model, layer)
+    judge_model = _from_layers(ctx, "judge_model", judge_model, layer)
+    max_tool_turns = _from_layers(ctx, "max_tool_turns", max_tool_turns, layer)
+    quizzes_dir = quizzes_dir or (chosen and chosen.settings.get("quizzes_dir")) or "quizzes"
+    if not Path(quizzes_dir).is_dir():
+        raise click.ClickException(f"Quizzes folder {quizzes_dir} not found. Pass --quizzes-dir or set quizzes_dir.")
+    if chosen:
+        # A target names the agent: its agent_name, else the target's own name.
+        named = Target(chosen.name, {"agent_name": chosen.settings.get("agent_name") or chosen.name})
+        agent_name = _from_layers(ctx, "agent_name", agent_name, named)
+
     if not model:
         model = default_model(os.environ)
         if model is None:
@@ -351,17 +473,15 @@ def run(
             f"{' and '.join(missing)} not set. `honest-agent run` needs the API key for the provider of "
             f"--model ({model}) and --judge-model ({judge_model}). Export it or add it to .env."
         )
-    if not (mcp_command or mcp_url):
-        raise click.ClickException("--mcp-command or --mcp-url is required.")
-    ctx = click.get_current_context()
-    mcp_command, mcp_url = _resolve_mcp_target(
-        mcp_command, mcp_url, ctx.get_parameter_source("mcp_command"), ctx.get_parameter_source("mcp_url")
-    )
+    mcp_command, mcp_url, mcp_bearer_token = _resolve_server(ctx, mcp_command, mcp_url, mcp_bearer_token, chosen)
+    # A target's mcp_command runs from the config file's folder, wherever `run` is started.
+    from_target = chosen is not None and mcp_command is not None and mcp_command == chosen.settings.get("mcp_command")
+    mcp_cwd = str(config.path.parent) if from_target else None
 
     asyncio.run(
         _run_async(
             Path(quizzes_dir).resolve(),
-            results_path,
+            _results_path(ctx, results_path),
             model,
             max_tool_turns,
             mcp_command,
@@ -370,16 +490,20 @@ def run(
             select,
             exclude,
             agent_name,
+            chosen.settings.get("ignore_tools", []) if chosen else [],
+            mcp_cwd,
             judge_model,
         )
     )
 
 
 @main.command()
-@click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
+@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option("--out", default=DEFAULT_REPORT_DIR, type=click.Path(file_okay=False), help=_REPORT_DIR_HELP)
-def report(results_path: str, out: str):
+@click.pass_context
+def report(ctx: click.Context, results_path: str | None, out: str):
     """Write the report (web UI + data from all stored results) to a folder."""
+    results_path = _results_path(ctx, results_path)
     try:
         report_mod.generate(results_path, Path(out))
     except FileNotFoundError as e:
@@ -398,17 +522,19 @@ def serve(out: str, port: int, open_browser: bool):
 
 
 @main.command()
-@click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
+@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option("--webhook-url", envvar="SLACK_WEBHOOK_URL", default=None)
-def notify(results_path: str, webhook_url: str | None):
+@click.pass_context
+def notify(ctx: click.Context, results_path: str | None, webhook_url: str | None):
     """Send a Slack alert if the most recent run had any quiz below its threshold."""
+    results_path = _results_path(ctx, results_path)
     if not webhook_url:
         raise click.ClickException("No Slack webhook URL. Pass --webhook-url or set SLACK_WEBHOOK_URL.")
     notify_mod.notify_on_failures(results_path, webhook_url)
 
 
 @main.command()
-@click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
+@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option(
     "--s3-path",
     required=True,
@@ -421,20 +547,24 @@ def notify(results_path: str, webhook_url: str | None):
     default=None,
     help="Export only this run instead of every stored run.",
 )
-def export(results_path: str, s3_path: str, run_id: str | None):
+@click.pass_context
+def export(ctx: click.Context, results_path: str | None, s3_path: str, run_id: str | None):
     """Export stored results to S3 as Parquet -- entirely optional; nothing else requires this."""
+    results_path = _results_path(ctx, results_path)
     written = export_to_s3_parquet(results_path, s3_path, run_id=run_id)
     click.echo(f"Exported to {written}")
 
 
 @main.command()
-@click.option("--results-path", default=DEFAULT_RESULTS_PATH, help=_RESULTS_PATH_HELP)
+@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option("--run-id", default=None, help="Only show logs for this run.")
 @click.option("--quiz-id", default=None, help="Only show logs for this quiz id.")
-def logs(results_path: str, run_id: str | None, quiz_id: str | None):
+@click.pass_context
+def logs(ctx: click.Context, results_path: str | None, run_id: str | None, quiz_id: str | None):
     """Print each matching quiz's agent trace and any captured SQL, for digging into
     *why* a result came out the way it did (as opposed to `report`, which only shows
     scores)."""
+    results_path = _results_path(ctx, results_path)
     rows = read_agent_logs(results_path, run_id=run_id, quiz_id=quiz_id)
     if not rows:
         click.echo("No matching logs found.")

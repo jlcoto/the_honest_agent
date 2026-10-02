@@ -2,9 +2,9 @@ version: 1
 
 # No `tools:` block here -- `honest-agent` sources its tools live from the
 # connected MCP server (see ../mcp_server/server.py's query_warehouse), so a
-# locally-declared tool schema would just be unused. Run with
-# `--mcp-command "python mcp_server/server.py"` (see README.md) after
-# seeding the warehouse with `uv run python warehouse/seed.py`.
+# locally-declared tool schema would just be unused. Run with `honest-agent run`
+# (the default `demo` target in ../honest_agent_config.yml) after seeding the
+# warehouse with `uv run python warehouse/seed.py`.
 #
 # The warehouse is DuckDB's own TPC-H generator (see ../warehouse/seed.py) --
 # order dates always fall in 1992-01-01..1998-08-02 regardless of when this

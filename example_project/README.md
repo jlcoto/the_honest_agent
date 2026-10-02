@@ -29,7 +29,7 @@ uv python install 3.11                          # one-time; uv manages this inte
 uv sync --python 3.11                            # installs honest-agent, editable
 uv run python warehouse/seed.py                  # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                     # needed for the agent + the extract_match grader
-# or put it (and SLACK_WEBHOOK_URL / MCP_BEARER_TOKEN / AWS_* as needed) in a
+# or put it (and MOTHERDUCK_TOKEN / SLACK_WEBHOOK_URL / AWS_* as needed) in a
 # .env at the repo root -- auto-loaded on every `honest-agent` command, since
 # it's the nearest .env above this folder.
 ```
@@ -37,17 +37,15 @@ export ANTHROPIC_API_KEY=...                     # needed for the agent + the ex
 ## Run the quiz end to end
 
 ```bash
-uv run honest-agent run --quizzes-dir quizzes \
-  --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
+uv run honest-agent run
 uv run honest-agent report
 uv run honest-agent serve
 uv run honest-agent notify --webhook-url https://hooks.slack.com/services/...
 ```
 
-Use `$(pwd)/.venv/bin/python` (not a bare `python`/`python3`) for
-`--mcp-command` — `honest-agent` launches it as a subprocess, and a bare
-`python` may not resolve to the right interpreter (or any interpreter) once
-it's out of your interactive shell's PATH.
+`run` takes its settings from `honest_agent_config.yml` (see "The project
+file" below). Its default target, `demo`, starts the bundled MCP server and
+reads the quizzes in `quizzes/`.
 
 - `honest-agent run` reads `quizzes/example_quiz.yml`, connects to the MCP
   server, calls Claude with the live `query_warehouse` tool for each prompt,
@@ -119,8 +117,6 @@ quizzes:
       method: extract_match
       min_score: 0.8
     provenance:
-      sql_fields:
-        execute_query: sql
       min_score: 0.7
     tags: [motherduck]
     tests:
@@ -229,9 +225,7 @@ So a ChatGPT user with only `OPENAI_API_KEY` in `.env` runs exactly the same
 command as everyone else:
 
 ```bash
-uv run honest-agent run --quizzes-dir quizzes_motherduck \
-  --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
-  --agent-name motherduck
+uv run honest-agent run --target motherduck
 ```
 
 Without `--judge-model`, the quiz model also grades. The
@@ -239,91 +233,127 @@ agent runs the same loop either way (same MCP tools, same SQL capture and
 provenance checks), and the report shows GPT runs alongside Claude ones in
 the model menus and Model comparison.
 
+## The config file
+
+`honest_agent_config.yml` holds the project's settings, with one **target**
+per agent being quizzed, like the targets in a dbt profile. It's committed and shared with
+the team; secrets stay in `.env`, which the file never contains.
+
+```yaml
+results_path: ./honest_agent_results/results.duckdb
+default_target: demo
+
+targets:
+  demo:
+    mcp_command: uv run python mcp_server/server.py
+    quizzes_dir: quizzes
+  motherduck:
+    mcp_url: https://api.motherduck.com/mcp
+    bearer_token_env: MOTHERDUCK_TOKEN   # names the variable in .env, never the token
+    quizzes_dir: quizzes_motherduck
+    max_tool_turns: 10
+```
+
+- `honest-agent run` quizzes the `default_target`; `honest-agent run --target
+  motherduck` quizzes another one.
+- honest-agent finds the file in the folder you run it from, or the nearest
+  parent folder, like `.env`. `--config-file PATH` (before the command) or
+  `HONEST_AGENT_CONFIG_FILE` points to another one. Without a file,
+  everything comes from flags and environment variables.
+- Relative paths are relative to the file's folder, and a target's
+  `mcp_command` runs from there, so `run` works from any subfolder.
+
+| Setting | Where | Flag it replaces |
+|---|---|---|
+| `results_path` | top level only: every agent's results share one file, so the report can compare them | `--results-path` |
+| `model`, `judge_model`, `max_tool_turns` | top level, or per target | `--model`, `--judge-model`, `--max-tool-turns` |
+| `mcp_command` or `mcp_url` (one of them) | target | `--mcp-command`, `--mcp-url` |
+| `bearer_token_env`: the variable holding the server's token | target | `--mcp-bearer-token` |
+| `quizzes_dir` | target | `--quizzes-dir` |
+| `agent_name`: defaults to the target's name | target | `--agent-name` |
+| `ignore_tools`: tools whose `sql`/`query`/`statement` argument isn't SQL | target | none |
+
+### Which value wins
+
+For each setting, the first one found:
+
+1. a flag in the command, e.g. `--max-tool-turns 3`
+2. an environment variable, from your shell or `.env`, e.g. `HONEST_AGENT_MODEL`
+3. the target in `honest_agent_config.yml`
+4. the built-in default
+
+When an environment variable overrides the file, `run` prints a note, e.g.
+`Note: MCP_URL from the environment overrides target 'motherduck's MCP
+server.` Once you use the config file, keep only secrets in `.env`, so
+`MCP_URL`/`MCP_COMMAND` left there from before don't override every target.
+
+The bearer token follows its server: a target's server gets the token from
+its `bearer_token_env`, never from `MCP_BEARER_TOKEN`, so a token meant for
+one vendor isn't sent to another.
+
 ## Pointing at a real MCP server instead of the bundled demo one
 
-Swap `--mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"` for
-`--mcp-url https://your-mcp-server/mcp` (add `--mcp-bearer-token`, or set
-`MCP_BEARER_TOKEN`, if it requires auth), and rewrite the quizzes'
-`expected_sources` to match that server's actual table/model names.
-`provenance.sql_fields` may also need updating if the real tool's
-SQL-holding input field isn't literally called `sql` — see the top-level
-`README.md` and `honest_agent/sql_capture.py` for how that's resolved.
+Add a target with the server's `mcp_url` (and `bearer_token_env`, if it
+requires auth) or `mcp_command`, and rewrite its quizzes' `expected_sources`
+to match that server's actual table/model names.
+
+honest-agent finds the SQL by itself in any tool argument named `sql`,
+`query` or `statement`. Two settings cover the rare exceptions: the quiz's
+`provenance.sql_fields` names the argument for a tool that keeps its SQL
+somewhere else, and the target's `ignore_tools` lists tools whose
+`query`-style argument isn't SQL (a search term, say). MotherDuck's
+`search_catalog` is already excluded by default. See
+`honest_agent/sql_capture.py` for details.
 
 ### Naming the agent
 
 Every result records which agent was quizzed, so the report can filter and
 compare by agent.
 
-- **Default:** the name the MCP server reports about itself when it
-  connects. The demo server reports `agent_quiz_demo`, and MotherDuck's
-  reports `mcp-server-motherduck`. `honest-agent run` prints the name it
-  used (`Quizzing agent: ...`).
-- **Your own label:** pass `--agent-name motherduck`, or set
-  `HONEST_AGENT_AGENT_NAME` in your shell.
-- **Labels must match exactly to group together.** A run labelled
-  `motherduck` and one left at the default `mcp-server-motherduck` show up
-  as two separate agents in the report. Pick one label per agent and use it
-  every time.
-- **Don't set `HONEST_AGENT_AGENT_NAME` in `.env`.** `.env` applies to every
-  run, so runs against other agents (e.g. Snowflake) would get the same
-  label. Pass the flag per command, or set the variable in the shell you
-  use for that agent.
+- **With a target:** the target's name (`demo`, `motherduck`, ...), or its
+  `agent_name` if set.
+- **Without a config file:** the name the MCP server reports about itself
+  when it connects, e.g. `agent_quiz_demo` for the demo server. Pass
+  `--agent-name` to choose your own.
+- `honest-agent run` prints the name it used (`Quizzing agent: ...`).
+- **Labels must match exactly to group together.** Results stored before
+  targets existed may carry the server's own name (e.g.
+  `mcp-server-motherduck`) and show up as a separate agent in the report.
 - **"Unknown agent"** only appears on results stored before agent names were
   recorded.
 
-### `.env` and choosing the MCP server
-
-honest-agent loads the `.env` in the folder you run it from, or the nearest
-one in a parent folder. To use a different file, pass `--env-file PATH`
-(before the command, e.g. `honest-agent --env-file .env.snowflake run ...`)
-or set `HONEST_AGENT_ENV_FILE`; a path that doesn't exist is an error.
-Variables already set in your shell always win over the file.
-
-Whatever `.env` sets applies to every run, so `MCP_URL`/`MCP_BEARER_TOKEN`
-there (e.g. for Snowflake) are used unless overridden. A flag typed on the command line wins
-over a value that only comes from the environment: `--mcp-command ...` runs
-the local server even with `MCP_URL` in `.env`, and `--mcp-url ...` likewise
-overrides `MCP_COMMAND`. Passing both `--mcp-command` and `--mcp-url` as flags
-is an error.
-
 ## Connecting to a real MotherDuck account
 
-`quizzes_motherduck/example_quiz.yml` points at MotherDuck's own official MCP
-server (`uvx mcp-server-motherduck`) instead of the bundled demo one.
-
-**If you're not on a MotherDuck Business-plan (team) account, pass
-`--read-write`, or expect a confusing auth error.**
-`mcp-server-motherduck` defaults to a read-only mode that requires a
-**read-scaling token** specifically — not just any read-only permission, a
-distinct token type generated for that purpose, and (per MotherDuck's
-pricing page) only available on the Business plan. A personal/free-tier
-account's token is always read/write, so the default `--read-only` mode
-can never work there — this isn't a one-off config mistake to fix, it's a
-plan limitation. If you connect with that ordinary read/write token anyway,
-the server refuses to start at all:
+The `motherduck` target uses MotherDuck's hosted MCP server
+(`https://api.motherduck.com/mcp`), the same one Claude, Cursor and other
+clients connect to. Nothing runs locally. Put your token in `.env`:
 
 ```
-ValueError: The --read-only flag with MotherDuck requires a read-scaling
-token. You appear to be using a read/write token.
+MOTHERDUCK_TOKEN=...
 ```
 
-See [read scaling docs][motherduck-read-scaling] for what a read-scaling
-token actually is (its plan requirement isn't stated on that page itself,
-only on the pricing page). If you *are* on a Business-plan account, you
-could generate one and use `--read-only` instead — but for everyone else,
-the fix isn't "generate the right token," it's passing `--read-write`
-instead, using your normal token:
+and run:
 
 ```bash
-honest-agent run --quizzes-dir quizzes_motherduck \
-  --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
-  --agent-name motherduck
+uv run honest-agent run --target motherduck
 ```
 
-This means `honest-agent`'s own PAT (via `MOTHERDUCK_TOKEN`) has full
-read/write access to whatever database it's pointed at for the duration of
-the run — same tradeoff as any read/write credential, worth keeping in mind
-if you point this at something other than a disposable demo database.
+- **Use a read-only token.** Besides `query`, the server offers `query_rw`
+  and tools that create and delete dives, flights and guides, so an agent
+  under test could change or delete things in your account with a
+  read/write token.
+- **Expect more tokens per quiz.** The server describes 45 tools to the model
+  on every call, and the agent explores (databases, tables, columns) before
+  it queries: about 75k–140k input tokens per quiz, against about 7k with the
+  demo server. That's also why the target sets `max_tool_turns: 10`.
+
+MotherDuck also publishes a local server (`uvx mcp-server-motherduck`). To
+use it instead, set the target's `mcp_command` to `uvx
+mcp-server-motherduck --read-write --db-path md:agent_quiz_demo`.
+`--read-write` is needed unless you have a [read-scaling
+token][motherduck-read-scaling] (Business plan only). Note that a local
+server is started with your whole environment, so it can read every key in
+`.env`.
 
 [motherduck-read-scaling]: https://motherduck.com/docs/key-tasks/authenticating-and-connecting-to-motherduck/read-scaling/
 
@@ -426,7 +456,7 @@ create mcp server <database_name>.<schema_name>.<mcp_server_name>
 grant usage on mcp server <database_name>.<schema_name>.<mcp_server_name> to role <role_name>;
 ```
 
-The URL to pass as `--mcp-url`/`MCP_URL` follows a fixed shape
+The URL for the `snowflake` target's `mcp_url` follows a fixed shape
 ([reference][create-mcp-server]):
 
 ```
@@ -435,6 +465,8 @@ https://<account_identifier>.snowflakecomputing.com/api/v2/databases/<database_n
 
 Get `<account_identifier>` in the right format with
 `select current_organization_name() || '-' || current_account_name();`.
+Put the PAT in `.env` as `SNOWFLAKE_MCP_TOKEN` (the target's
+`bearer_token_env`) and run `uv run honest-agent run --target snowflake`.
 
 [create-mcp-server]: https://docs.snowflake.com/en/sql-reference/sql/create-mcp-server
 [cortex-agents-mcp]: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp

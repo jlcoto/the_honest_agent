@@ -25,12 +25,13 @@ def build_mcp_client(
     command: str | None = None,
     url: str | None = None,
     bearer_token: str | None = None,
+    cwd: str | None = None,
 ):
     """Builds an (unconnected) mcp.Client.
 
     Pass exactly one of:
       - `command`: a shell command launching a local MCP server over stdio,
-        e.g. "python mcp_server/server.py".
+        e.g. "python mcp_server/server.py", started in `cwd` if given.
       - `url`: a remote MCP server's streamable-HTTP endpoint, e.g.
         "https://mcp.internal.example.com/mcp". `bearer_token`, if given, is
         sent as an `Authorization: Bearer <token>` header on every request.
@@ -57,7 +58,7 @@ def build_mcp_client(
         # that needs a credential via an env var (MOTHERDUCK_TOKEN, etc.) fails
         # to authenticate even though the CLI's own process has it (e.g. from
         # .env via load_dotenv()).
-        return Client(StdioServerParameters(command=parts[0], args=parts[1:], env=dict(os.environ)))
+        return Client(StdioServerParameters(command=parts[0], args=parts[1:], env=dict(os.environ), cwd=cwd))
 
     if bearer_token:
         import httpx2

@@ -16,8 +16,8 @@ version: 1
 # way), so it doesn't discriminate anything here -- expected_sources is what's actually doing
 # the check.
 #
-# Run with (MCP_URL/MCP_BEARER_TOKEN read from .env automatically):
-#   honest-agent run --quizzes-dir quizzes_snowflake --select semantic_view --agent-name snowflake
+# Run with (target in ../honest_agent_config.yml):
+#   honest-agent run --target snowflake --select semantic_view
 
 quizzes:
   - category: finance

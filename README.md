@@ -38,14 +38,16 @@ uv python install 3.11                                       # one-time; honest-
 uv sync --python 3.11                                         # installs honest-agent, editable, from ../cli
 uv run python warehouse/seed.py                               # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                                 # or put it in a .env here or in a parent folder -- auto-loaded
-uv run honest-agent run --quizzes-dir quizzes \
-  --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
+uv run honest-agent run                                        # quizzes the default target in honest_agent_config.yml
 uv run honest-agent report                                     # writes the web report to honest_agent_report/
 uv run honest-agent serve                                      # opens the report in your browser, like `dbt docs serve`
 uv run honest-agent notify --webhook-url ...                   # Slack alert on regressions
 ```
 
-This calls Claude with the `query_warehouse` tool sourced live from the
+`honest_agent_config.yml` holds the project's settings, with one target
+per agent being quizzed, like the targets in a dbt profile: `honest-agent run --target
+motherduck` quizzes another one. The default target calls Claude with the
+`query_warehouse` tool sourced live from the
 bundled demo MCP server (`mcp_server/server.py`), against a real seeded
 TPC-H warehouse — real SQL, real data, real provenance checking (does the
 agent's SQL actually hit the table we expect). By default results land in

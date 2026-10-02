@@ -1,21 +1,13 @@
 version: 1
 
 # Same two quizzes as ../quizzes/example_quiz.yml, but pointed at MotherDuck's
-# own official MCP server (`uvx mcp-server-motherduck`) instead of our
-# bundled demo server -- its tool is `execute_query` (sql field: `sql`), not
-# `query_warehouse`. Data is a byte-identical copy of ../warehouse.duckdb,
+# hosted MCP server instead of our bundled demo server. Data is a byte-identical copy of ../warehouse.duckdb,
 # loaded into a MotherDuck database (see TODO.md/README for how it got
 # there). Same quiz IDs on purpose, so results from both targets land
 # side by side in the same results.duckdb, comparable by quiz_id.
 #
-# Run with:
-#   honest-agent run --quizzes-dir quizzes_motherduck \
-#     --mcp-command "uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo" \
-#     --agent-name motherduck
-#
-# --read-write is required unless your MOTHERDUCK_TOKEN is specifically a
-# read-scaling token -- see README.md's "Connecting to a real MotherDuck
-# account" section for why.
+# Run with `honest-agent run --target motherduck` (see ../honest_agent_config.yml
+# and README.md's "Connecting to a real MotherDuck account").
 #
 # Quizzes are grouped by category; each group's settings apply to its tests
 # unless a test sets its own. These quizzes keep explicit ids so their result
@@ -27,8 +19,6 @@ quizzes:
       method: extract_match
       min_score: 0.8
     provenance:
-      sql_fields:
-        execute_query: sql
       min_score: 0.7
     tags: [smoke, provenance, motherduck]
     tests:
@@ -59,8 +49,6 @@ quizzes:
       method: llm_judge
       min_score: 0.8
     provenance:
-      sql_fields:
-        execute_query: sql
       min_score: 0.7
     tags: [smoke, provenance, motherduck]
     tests:

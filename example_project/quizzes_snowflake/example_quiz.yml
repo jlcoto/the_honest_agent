@@ -8,8 +8,7 @@ version: 1
 # (see README.md). Same quiz IDs on purpose, so results from all targets
 # land side by side in the same results.duckdb, comparable by quiz_id.
 #
-# Run with (MCP_URL/MCP_BEARER_TOKEN read from .env automatically):
-#   honest-agent run --quizzes-dir quizzes_snowflake --agent-name snowflake
+# Run with `honest-agent run --target snowflake` (see ../honest_agent_config.yml).
 
 quizzes:
   - category: finance

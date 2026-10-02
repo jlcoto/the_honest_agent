@@ -8,6 +8,9 @@ guaranteed to hold SQL in either case. So extraction is two-tier: a quiz can
 declare exactly which field to read per tool name (`provenance.sql_fields` in
 the quiz YAML, loaded into `QuizDefinition.sql_fields`), and any tool call
 not covered by that falls back to a best-effort scan for common field names.
+Tools whose matching field holds something else (a search term, say) are
+skipped: a built-in list (`_NON_SQL_TOOLS`) plus any the config file's target
+names in `ignore_tools` (see config_file.py).
 
 Some tools put the SQL on the *response* side instead: e.g. Snowflake's
 Cortex Analyst (`CORTEX_ANALYST_MESSAGE`) takes a natural-language `message`
@@ -56,6 +59,16 @@ from typing import Any
 
 _HEURISTIC_FIELD_NAMES = ("sql", "query", "statement")
 
+# Tools known to have a field from `_HEURISTIC_FIELD_NAMES` that isn't SQL, so the
+# fallback scan would record it as a SQL call. Add a tool here once a real run shows
+# it; a project can exclude more per target with `ignore_tools` (config_file.py).
+_NON_SQL_TOOLS = frozenset(
+    {
+        # MotherDuck's hosted MCP server: `query` is a search term, e.g. "orders".
+        "search_catalog",
+    }
+)
+
 
 def _find_field(data: Any, field: str | None) -> str | None:
     """Looks for `field` (or, if `field` is None, any of
@@ -76,7 +89,11 @@ def _find_field(data: Any, field: str | None) -> str | None:
     return None
 
 
-def extract_sql_calls(trace: list[dict[str, Any]], sql_fields: dict[str, str] | None = None) -> list[dict[str, str]]:
+def extract_sql_calls(
+    trace: list[dict[str, Any]],
+    sql_fields: dict[str, str] | None = None,
+    ignore_tools: list[str] | None = None,
+) -> list[dict[str, str]]:
     """Scans a message trace (as produced by agent_runner.plain_content) for
     tool_use blocks and pulls out SQL calls, in the order they happened.
     Each returned item is `{"tool_name": ..., "sql": ...}`.
@@ -87,8 +104,12 @@ def extract_sql_calls(trace: list[dict[str, Any]], sql_fields: dict[str, str] | 
     check runs against `_HEURISTIC_FIELD_NAMES` instead. Silently skips
     calls where nothing matches on either side, or the matched value isn't a
     non-empty string.
+
+    Tools in `_NON_SQL_TOOLS` or `ignore_tools` are skipped, unless `sql_fields`
+    names them: declaring a tool's SQL field is more specific than either list.
     """
     sql_fields = sql_fields or {}
+    skipped = _NON_SQL_TOOLS.union(ignore_tools or [])
 
     tool_uses: list[tuple[Any, str, dict]] = []
     results_by_id: dict[Any, Any] = {}
@@ -114,6 +135,8 @@ def extract_sql_calls(trace: list[dict[str, Any]], sql_fields: dict[str, str] | 
 
     calls: list[dict[str, str]] = []
     for tool_use_id, tool_name, tool_input in tool_uses:
+        if tool_name in skipped and tool_name not in sql_fields:
+            continue
         field = sql_fields.get(tool_name)
         value = _find_field(tool_input, field) or _find_field(results_by_id.get(tool_use_id), field)
         if value:

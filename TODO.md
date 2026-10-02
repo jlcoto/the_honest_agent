@@ -283,3 +283,11 @@ users can pick what fits their setup.
   identity pool, or a backend that presigns each file) are more complex,
   and a presigning backend defeats the no-server point. Revoking access
   takes effect immediately, since no copy of the data is left behind.
+
+## Move `sql_fields` into the config file's targets
+
+Which tool argument holds SQL is a fact about the MCP server, not about a quiz,
+so `provenance.sql_fields` belongs with the target in
+`honest_agent_config.yml` (next to `ignore_tools`), not in each quiz file. Left
+in the quizzes for now: no current server needs it, since honest-agent finds
+`sql`/`query`/`statement` arguments by itself. Move it when a real server does.

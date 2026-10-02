@@ -127,3 +127,24 @@ def test_extract_collects_multiple_calls_in_order_with_tool_names():
         {"tool_name": "query_warehouse", "sql": "SELECT 1"},
         {"tool_name": "run_metric_query", "sql": "SELECT 2"},
     ]
+
+
+def test_extract_skips_built_in_non_sql_tools():
+    # MotherDuck's hosted server: `search_catalog`'s `query` is a search term.
+    trace = _tool_use_trace("search_catalog", {"query": "orders"})
+
+    assert extract_sql_calls(trace) == []
+
+
+def test_extract_skips_tools_the_quiz_ignores():
+    trace = _tool_use_trace("find_tables", {"query": "orders"})
+
+    assert extract_sql_calls(trace, ignore_tools=["find_tables"]) == []
+
+
+def test_declaring_a_tool_in_sql_fields_beats_ignoring_it():
+    trace = _tool_use_trace("search_catalog", {"query": "select 1"})
+
+    calls = extract_sql_calls(trace, sql_fields={"search_catalog": "query"}, ignore_tools=["search_catalog"])
+
+    assert calls == [{"tool_name": "search_catalog", "sql": "select 1"}]

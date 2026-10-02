@@ -14,8 +14,8 @@ version: 1
 # expected_sources is what's actually checking the thing that matters. Revisit expected_tools
 # here once there's real experience with how other semantic-layer tools behave, not before.
 #
-# Run with (MCP_URL/MCP_BEARER_TOKEN read from .env automatically):
-#   honest-agent run --quizzes-dir quizzes_snowflake --select semantic_view_tool --agent-name snowflake
+# Run with (target in ../honest_agent_config.yml):
+#   honest-agent run --target snowflake --select semantic_view_tool
 
 quizzes:
   - category: finance
