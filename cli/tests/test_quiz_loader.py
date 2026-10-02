@@ -197,3 +197,66 @@ def test_load_quizzes_reads_optional_title(tmp_path: Path):
     titles = {d.quiz_id: d.title for d in load_quizzes(tmp_path)}
 
     assert titles == {"q_titled": "Total revenue in 1996", "q_untitled": None}
+
+
+GROUPED_YAML = """
+quizzes:
+  - category: finance
+    grading: {method: extract_match, min_score: 0.8}
+    provenance: {sql_fields: {execute_query: sql}, min_score: 0.7}
+    tags: [motherduck]
+    tests:
+      - title: Total revenue in 1996
+        prompt: What was revenue in 1996?
+        provenance: {expected_sources: [fct_revenue_by_year]}
+        tags: [smoke]
+      - title: Orders placed in 1996
+        id: q_order_count_1996
+        prompt: How many orders in 1996?
+        grading: {min_score: 0.9}
+  - title: Loose quiz
+    prompt: Not in a group
+"""
+
+
+def test_group_settings_are_inherited_and_most_specific_wins(tmp_path: Path):
+    (tmp_path / "grouped.yml").write_text(GROUPED_YAML)
+
+    revenue, orders, loose = load_quizzes(tmp_path)
+
+    assert (revenue.category, revenue.grading_method, revenue.accuracy_min_score) == ("finance", "extract_match", 0.8)
+    assert revenue.sql_fields == {"execute_query": "sql"}
+    assert revenue.provenance_min_score == 0.7
+    assert revenue.expected_sources == ["fct_revenue_by_year"]
+    assert revenue.tags == ["motherduck", "smoke"]
+    assert (orders.grading_method, orders.accuracy_min_score) == ("extract_match", 0.9)
+    assert orders.tags == ["motherduck"]
+    assert loose.category == ""
+
+
+def test_quiz_id_comes_from_title_unless_id_is_given(tmp_path: Path):
+    (tmp_path / "grouped.yml").write_text(GROUPED_YAML)
+
+    ids = [d.quiz_id for d in load_quizzes(tmp_path)]
+
+    assert ids == ["total_revenue_in_1996", "q_order_count_1996", "loose_quiz"]
+
+
+def test_quiz_without_title_or_id_is_an_error(tmp_path: Path):
+    (tmp_path / "a.yml").write_text("quizzes:\n  - prompt: What is 2+2?\n")
+
+    with pytest.raises(ValueError, match="has no title"):
+        load_quizzes(tmp_path)
+
+
+def test_titles_that_slug_to_the_same_id_are_a_duplicate(tmp_path: Path):
+    (tmp_path / "a.yml").write_text(
+        "quizzes:\n  - title: Revenue 1996\n    prompt: one\n  - title: 'Revenue: 1996'\n    prompt: two\n"
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_quizzes(tmp_path)
+
+    message = str(exc.value)
+    assert "Duplicate quiz id 'revenue_1996' in a.yml (lines 2 and 4)" in message
+    assert "change one title or give it an id:" in message

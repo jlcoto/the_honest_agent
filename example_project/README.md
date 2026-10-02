@@ -107,6 +107,52 @@ another DuckDB (anyone's laptop, a scheduled job) can query directly with
 in this project requires it, and if you never run it nothing ever touches
 S3.
 
+## Writing quizzes
+
+A quizzes directory holds one or more `*.yml` files. Each has a `quizzes:`
+list of category groups, and each group has `tests:`:
+
+```yaml
+version: 1
+quizzes:
+  - category: finance
+    grading:
+      method: extract_match
+      min_score: 0.8
+    provenance:
+      sql_fields:
+        execute_query: sql
+      min_score: 0.7
+    tags: [motherduck]
+    tests:
+      - title: Total revenue in 1996
+        prompt: What was our total revenue in 1996? Give me just the number.
+        expected_answer: "311928357.78"
+        provenance:
+          expected_sources: [fct_revenue_by_year]
+        tags: [smoke]
+```
+
+- **Inheritance:** anything set on a group (`category`, `grading`,
+  `provenance`, `tags`, ...) applies to its tests. The most specific value
+  wins, like dbt's config precedence: a test's own setting overrides its
+  group's. `grading` and `provenance` merge key by key, so a test can
+  override just `min_score` or add `tolerance`. `tags` add up: the test
+  above ends up with `[motherduck, smoke]`.
+- **Ids come from titles.** Each test needs a `title`. Its id is derived
+  from the title (`Total revenue in 1996` → `total_revenue_in_1996`) and is
+  what ties its results together across runs, agents and models. Set an
+  explicit `id:` to keep that history when you reword a title; without one,
+  renaming a title starts the quiz over under a new id. The example quizzes
+  here keep explicit ids for that reason.
+- **The same title or id in different quizzes directories is intended:**
+  that's how results for the same question line up across agents (e.g.
+  `quizzes_motherduck/` and `quizzes_snowflake/`). Within one directory,
+  ids must be unique, and `agent-quiz run` stops with an error naming both
+  places if two collide.
+- A plain list of quizzes without groups also works, each quiz carrying all
+  of its own settings.
+
 ## Choosing a grading method
 
 Each quiz picks exactly one `grading.method` in its YAML entry — there's no

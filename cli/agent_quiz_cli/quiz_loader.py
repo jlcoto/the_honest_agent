@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import unicodedata
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -47,17 +49,29 @@ class QuizDefinition:
 
 
 def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
+    """Reads every *.yml in `quizzes_dir`. A `quizzes:` entry is either a quiz or a
+    group (a category with `tests:`) whose settings its quizzes inherit -- see _inherit.
+    A quiz's id is its explicit `id:`, else derived from its `title:` (see slugify)."""
     definitions: list[QuizDefinition] = []
-    seen_in: dict[str, Path] = {}
+    seen_in: dict[str, tuple[Path, str, str]] = {}
 
     for yml_path in sorted(quizzes_dir.glob("*.yml")):
         doc = yaml.safe_load(yml_path.read_text()) or {}
 
-        for item in doc.get("quizzes", []):
-            quiz_id = item["id"]
+        for item in _quiz_items(doc):
+            title = item.get("title")
+            if item.get("id"):
+                quiz_id, source = item["id"], ("id", item["id"])
+            elif title:
+                quiz_id, source = slugify(title), ("title", title)
+                if not quiz_id:
+                    raise ValueError(f"Can't derive a quiz id from the title {title!r} in {yml_path.name}. Add an id:.")
+            else:
+                raise ValueError(f"A quiz in {yml_path.name} has no title. Each quiz needs a title (or an id).")
+
             if quiz_id in seen_in:
-                raise ValueError(_duplicate_id_message(quiz_id, seen_in[quiz_id], yml_path))
-            seen_in[quiz_id] = yml_path
+                raise ValueError(_duplicate_id_message(quiz_id, seen_in[quiz_id], (yml_path, *source)))
+            seen_in[quiz_id] = (yml_path, *source)
 
             grading = item.get("grading", {})
             provenance = item.get("provenance", {})
@@ -65,7 +79,7 @@ def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
             definitions.append(
                 QuizDefinition(
                     quiz_id=quiz_id,
-                    title=item.get("title"),
+                    title=title,
                     prompt=item["prompt"],
                     category=item.get("category", ""),
                     expected_answer=item.get("expected_answer", ""),
@@ -85,24 +99,62 @@ def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
     return definitions
 
 
-def _id_lines(path: Path, quiz_id: str) -> list[int]:
-    pattern = re.compile(rf"^\s*(?:-\s*)?id:\s*['\"]?{re.escape(quiz_id)}['\"]?\s*(?:#.*)?$")
+def slugify(title: str) -> str:
+    """Readable id from a title: "Revenue in 1996, via semantic view" -> "revenue_in_1996_via_semantic_view"."""
+    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "_", ascii_title.lower()).strip("_")
+
+
+def _quiz_items(doc: dict) -> Iterator[dict]:
+    for item in doc.get("quizzes", []):
+        if "tests" in item:
+            for quiz in item["tests"]:
+                yield _inherit(item, quiz)
+        else:
+            yield item
+
+
+# Settings a group can't pass down: they identify one quiz.
+_NOT_INHERITED = {"tests", "id", "title"}
+
+
+def _inherit(group: dict, quiz: dict) -> dict:
+    """Follows dbt's config precedence: the most specific value wins, so a quiz's own
+    setting overrides its group's. `grading`/`provenance` merge key by key (a quiz can
+    override just `min_score`), and `tags` add up instead of replacing."""
+    merged = {key: value for key, value in group.items() if key not in _NOT_INHERITED}
+    for key, value in quiz.items():
+        if key in ("grading", "provenance") and isinstance(merged.get(key), dict):
+            merged[key] = {**merged[key], **value}
+        elif key == "tags":
+            merged[key] = list(dict.fromkeys([*merged.get("tags", []), *value]))
+        else:
+            merged[key] = value
+    return merged
+
+
+def _lines(path: Path, field: str, value: str) -> list[int]:
+    pattern = re.compile(rf"^\s*(?:-\s*)?{field}:\s*['\"]?{re.escape(value)}['\"]?\s*(?:#.*)?$")
     return [n for n, line in enumerate(path.read_text().splitlines(), start=1) if pattern.match(line)]
 
 
-def _duplicate_id_message(quiz_id: str, first: Path, second: Path) -> str:
-    """Names every place the id is defined, with line numbers when they can be found."""
+def _duplicate_id_message(quiz_id: str, first: tuple[Path, str, str], second: tuple[Path, str, str]) -> str:
+    """Names every place the id comes from, with line numbers when they can be found."""
 
     def where(path: Path, lines: list[int]) -> str:
         if not lines:
             return path.name
         return f"{path.name} (line{'s' if len(lines) > 1 else ''} {' and '.join(map(str, lines))})"
 
-    if first == second:
-        places = where(first, _id_lines(first, quiz_id))
+    (path1, field1, value1), (path2, field2, value2) = first, second
+    if path1 == path2:
+        places = where(path1, sorted(set(_lines(path1, field1, value1) + _lines(path2, field2, value2))))
     else:
-        places = f"{where(first, _id_lines(first, quiz_id))} and {where(second, _id_lines(second, quiz_id))}"
-    return f"Duplicate quiz id {quiz_id!r} in {places}. Quiz ids must be unique within a quizzes directory."
+        places = f"{where(path1, _lines(path1, field1, value1))} and {where(path2, _lines(path2, field2, value2))}"
+    hint = ""
+    if "title" in (field1, field2):
+        hint = " Quizzes without an id: get one from their title, so change one title or give it an id:."
+    return f"Duplicate quiz id {quiz_id!r} in {places}.{hint} Quiz ids must be unique within a quizzes directory."
 
 
 def _parse_selector(selector: str) -> list[set[str]]:

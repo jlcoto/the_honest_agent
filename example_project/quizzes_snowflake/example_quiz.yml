@@ -12,21 +12,11 @@ version: 1
 #   agent-quiz run --quizzes-dir quizzes_snowflake --agent-name snowflake
 
 quizzes:
-  - id: q_revenue_1996
-    title: Total revenue in 1996
-    prompt: >
-      What was our total revenue in 1996? Query the warehouse to find out,
-      and give me just the number.
-    category: finance
-    expected_answer: "311928357.78"
+  - category: finance
     grading:
       method: extract_match
       min_score: 0.8
-      # fct_revenue_by_year.revenue is an unrounded raw sum (...7805); the
-      # agent faithfully reporting that isn't a real accuracy failure.
-      tolerance: 0.01
     provenance:
-      expected_sources: [fct_revenue_by_year]
       # Without these, a query against a same-named table in the wrong
       # place (e.g. Snowflake's own built-in snowflake_sample_data) would
       # still count as a source-check hit. See provenance.py.
@@ -36,22 +26,25 @@ quizzes:
         query_warehouse: sql
       min_score: 0.7
     tags: [smoke, provenance, snowflake]
+    tests:
+      - id: q_revenue_1996
+        title: Total revenue in 1996
+        prompt: >
+          What was our total revenue in 1996? Query the warehouse to find out,
+          and give me just the number.
+        expected_answer: "311928357.78"
+        grading:
+          # fct_revenue_by_year.revenue is an unrounded raw sum (...7805); the
+          # agent faithfully reporting that isn't a real accuracy failure.
+          tolerance: 0.01
+        provenance:
+          expected_sources: [fct_revenue_by_year]
 
-  - id: q_order_count_1996
-    title: Orders placed in 1996
-    prompt: >
-      How many orders were placed in 1996? Query the warehouse to find out,
-      and give me just the number.
-    category: finance
-    expected_answer: "2297"
-    grading:
-      method: extract_match
-      min_score: 0.8
-    provenance:
-      expected_sources: [orders]
-      expected_database: agent_quiz_demo
-      expected_schema: public
-      sql_fields:
-        query_warehouse: sql
-      min_score: 0.7
-    tags: [smoke, provenance, snowflake]
+      - id: q_order_count_1996
+        title: Orders placed in 1996
+        prompt: >
+          How many orders were placed in 1996? Query the warehouse to find out,
+          and give me just the number.
+        expected_answer: "2297"
+        provenance:
+          expected_sources: [orders]

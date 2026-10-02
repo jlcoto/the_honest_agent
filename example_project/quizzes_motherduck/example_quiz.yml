@@ -16,41 +16,68 @@ version: 1
 # --read-write is required unless your MOTHERDUCK_TOKEN is specifically a
 # read-scaling token -- see README.md's "Connecting to a real MotherDuck
 # account" section for why.
+#
+# Quizzes are grouped by category; each group's settings apply to its tests
+# unless a test sets its own. These quizzes keep explicit ids so their result
+# history carries over; a new quiz can leave id out and get one from its title.
 
 quizzes:
-  - id: q_revenue_1996
-    title: Total revenue in 1996
-    prompt: >
-      What was our total revenue in 1996? Query the warehouse to find out,
-      and give me just the number.
-    category: finance
-    expected_answer: "311928357.78"
+  - category: finance
     grading:
       method: extract_match
       min_score: 0.8
-      # fct_revenue_by_year.revenue is an unrounded raw sum (...7805); the
-      # agent faithfully reporting that isn't a real accuracy failure.
-      tolerance: 0.01
     provenance:
-      expected_sources: [fct_revenue_by_year]
       sql_fields:
         execute_query: sql
       min_score: 0.7
     tags: [smoke, provenance, motherduck]
+    tests:
+      - id: q_revenue_1996
+        title: Total revenue in 1996
+        prompt: >
+          What was our total revenue in 1996? Query the warehouse to find out,
+          and give me just the number.
+        expected_answer: "311928357.78"
+        grading:
+          # fct_revenue_by_year.revenue is an unrounded raw sum (...7805); the
+          # agent faithfully reporting that isn't a real accuracy failure.
+          tolerance: 0.01
+        provenance:
+          expected_sources: [fct_revenue_by_year]
 
-  - id: q_order_count_1996
-    title: Orders placed in 1996
-    prompt: >
-      How many orders were placed in 1996? Query the warehouse to find out,
-      and give me just the number.
-    category: finance
-    expected_answer: "2297"
+      - id: q_order_count_1996
+        title: Orders placed in 1996
+        prompt: >
+          How many orders were placed in 1996? Query the warehouse to find out,
+          and give me just the number.
+        expected_answer: "2297"
+        provenance:
+          expected_sources: [orders]
+
+  - category: orders
     grading:
-      method: extract_match
+      method: llm_judge
       min_score: 0.8
     provenance:
-      expected_sources: [orders]
       sql_fields:
         execute_query: sql
       min_score: 0.7
     tags: [smoke, provenance, motherduck]
+    tests:
+      - id: q_order_count_2025
+        title: Orders placed in 2025
+        prompt: >
+          How many orders were placed in 2025? Query the warehouse to find out,
+          and give me just the number.
+        expected_answer: "3000"
+        provenance:
+          expected_sources: [revenue]
+
+      - id: q_order_count_2025_test_b
+        title: Orders placed in 2025
+        prompt: >
+          How many orders were placed in 2025? Query the warehouse to find out,
+          and give me just the number.
+        expected_answer: "2500"
+        provenance:
+          expected_sources: [orders]
