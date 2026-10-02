@@ -1,6 +1,6 @@
 export interface HeatmapRow {
   label: string;
-  /** Secondary line under the label, in mono. Typically the row's identifier (e.g. a quiz_id) when `label` is a human-readable title. */
+  /** Secondary line under the label, in mono. Typically the row's identifier (e.g. a eval_id) when `label` is a human-readable title. */
   sublabel?: string;
   /** Per-column accuracy 0–1 (enables Combined/Accuracy/Provenance toggle) */
   accuracy?: (number | null)[];
@@ -10,7 +10,7 @@ export interface HeatmapRow {
   values?: (number | null)[];
 }
 /**
- * @startingPoint section="Data" subtitle="FiveThirtyEight-style quiz × run score table" viewport="700x420"
+ * @startingPoint section="Data" subtitle="FiveThirtyEight-style eval × run score table" viewport="700x420"
  */
 export interface HeatmapProps {
   rows: HeatmapRow[];
@@ -25,15 +25,15 @@ export interface HeatmapProps {
   /** Right-hand column averaging all runs (sticky) */
   showSummary?: boolean;
   summaryLabel?: string;
-  /** Row key to group by (e.g. "sublabel" or "category"). Group rows show the average of their quizzes; click to expand. */
+  /** Row key to group by (e.g. "sublabel" or "category"). Group rows show the average of their evals; click to expand. */
   groupBy?: string;
   /** Header word for groups, default "Category" */
   groupLabel?: string;
   /** Group names expanded on first render */
   defaultExpanded?: string[];
-  /** Used in the group tooltip: "2 of 4 quizzes below 80%". Default 0.8 */
+  /** Used in the group tooltip: "2 of 4 evals below 80%". Default 0.8 */
   threshold?: number;
-  /** Bottom row averaging every quiz per run (default true) */
+  /** Bottom row averaging every eval per run (default true) */
   showTotals?: boolean;
   /** Default "Overall" */
   totalsLabel?: string;

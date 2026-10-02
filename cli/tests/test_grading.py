@@ -150,7 +150,7 @@ def test_grade_accuracy_extract_match_requires_client():
 def test_grade_extract_match_within_tolerance_still_scores_full():
     """The case that motivated this: a raw query result (311928357.7805)
     against a rounded expected_answer (311928357.78) -- the agent reported
-    the data faithfully, the mismatch is a quiz-authoring precision issue,
+    the data faithfully, the mismatch is an eval-authoring precision issue,
     not something worth failing over.
     """
     client = _FakeClient(extracted_answer="311928357.7805")

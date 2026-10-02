@@ -1,7 +1,7 @@
 [project]
 name = "honest-agent"
 version = "0.1.0"
-description = "CLI that runs LLM quizzes against an agent, grades accuracy/provenance, and stores the results."
+description = "CLI that runs LLM evals against an agent, grades accuracy/provenance, and stores the results."
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"

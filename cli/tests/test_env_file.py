@@ -27,7 +27,7 @@ def project(tmp_path: Path, monkeypatch) -> Path:
     for var in _VARS:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "quizzes").mkdir()
+    (tmp_path / "evals").mkdir()
     return tmp_path
 
 
@@ -38,7 +38,7 @@ def _run(monkeypatch, *args: str):
         captured["model"] = a[2]
 
     monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
-    result = CliRunner().invoke(main, [*args, "run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py"])
+    result = CliRunner().invoke(main, [*args, "run", "--evals-dir", "evals", "--mcp-command", "python server.py"])
     return result, captured
 
 

@@ -11,7 +11,7 @@ version: 1
 # demo actually runs, which is why these ask about a fixed historical year
 # (1996) rather than anything relative to "today".
 
-quizzes:
+evals:
   - category: finance
     grading:
       method: extract_match

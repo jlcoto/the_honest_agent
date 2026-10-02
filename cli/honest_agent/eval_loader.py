@@ -15,15 +15,15 @@ DEFAULT_PROVENANCE_MIN_SCORE = 0.7
 
 
 @dataclass
-class QuizDefinition:
-    quiz_id: str
+class EvalDefinition:
+    eval_id: str
     prompt: str
     category: str
     expected_answer: str
     grading_method: str
     expected_sources: list[str]
     tags: list[str]
-    # Optional human-readable name for reports; they fall back to quiz_id.
+    # Optional human-readable name for reports; they fall back to eval_id.
     title: str | None = None
     # Optional -- tightens expected_sources to require the matched table
     # resolve to this database/schema (inline-qualified, or via a preceding
@@ -42,43 +42,45 @@ class QuizDefinition:
     tolerance: float | None = None
     tolerance_percent: float | None = None
     # Maps a tool name to the input field of its calls that holds SQL text,
-    # e.g. {"query_warehouse": "sql"} -- declared per-quiz because the field
+    # e.g. {"query_warehouse": "sql"} -- declared per-eval because the field
     # name is whatever that tool's author (local YAML author, or an MCP
     # server we don't control) chose to call it. See sql_capture.py.
     sql_fields: dict[str, str] = field(default_factory=dict)
 
 
-def load_quizzes(quizzes_dir: Path) -> list[QuizDefinition]:
-    """Reads every *.yml in `quizzes_dir`. A `quizzes:` entry is either a quiz or a
-    group (a category with `tests:`) whose settings its quizzes inherit -- see _inherit.
-    A quiz's id is its explicit `id:`, else derived from its `title:` (see slugify)."""
-    definitions: list[QuizDefinition] = []
+def load_evals(evals_dir: Path) -> list[EvalDefinition]:
+    """Reads every *.yml in `evals_dir`. An `evals:` entry is either an eval or a
+    group (a category with `tests:`) whose settings its evals inherit -- see _inherit.
+    An eval's id is its explicit `id:`, else derived from its `title:` (see slugify)."""
+    definitions: list[EvalDefinition] = []
     seen_in: dict[str, tuple[Path, str, str]] = {}
 
-    for yml_path in sorted(quizzes_dir.glob("*.yml")):
+    for yml_path in sorted(evals_dir.glob("*.yml")):
         doc = yaml.safe_load(yml_path.read_text()) or {}
 
-        for item in _quiz_items(doc):
+        for item in _eval_items(doc):
             title = item.get("title")
             if item.get("id"):
-                quiz_id, source = item["id"], ("id", item["id"])
+                eval_id, source = item["id"], ("id", item["id"])
             elif title:
-                quiz_id, source = slugify(title), ("title", title)
-                if not quiz_id:
-                    raise ValueError(f"Can't derive a quiz id from the title {title!r} in {yml_path.name}. Add an id:.")
+                eval_id, source = slugify(title), ("title", title)
+                if not eval_id:
+                    raise ValueError(
+                        f"Can't derive an eval id from the title {title!r} in {yml_path.name}. Add an id:."
+                    )
             else:
-                raise ValueError(f"A quiz in {yml_path.name} has no title. Each quiz needs a title (or an id).")
+                raise ValueError(f"An eval in {yml_path.name} has no title. Each eval needs a title (or an id).")
 
-            if quiz_id in seen_in:
-                raise ValueError(_duplicate_id_message(quiz_id, seen_in[quiz_id], (yml_path, *source)))
-            seen_in[quiz_id] = (yml_path, *source)
+            if eval_id in seen_in:
+                raise ValueError(_duplicate_id_message(eval_id, seen_in[eval_id], (yml_path, *source)))
+            seen_in[eval_id] = (yml_path, *source)
 
             grading = item.get("grading", {})
             provenance = item.get("provenance", {})
 
             definitions.append(
-                QuizDefinition(
-                    quiz_id=quiz_id,
+                EvalDefinition(
+                    eval_id=eval_id,
                     title=title,
                     prompt=item["prompt"],
                     category=item.get("category", ""),
@@ -105,25 +107,25 @@ def slugify(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", ascii_title.lower()).strip("_")
 
 
-def _quiz_items(doc: dict) -> Iterator[dict]:
-    for item in doc.get("quizzes", []):
+def _eval_items(doc: dict) -> Iterator[dict]:
+    for item in doc.get("evals", []):
         if "tests" in item:
-            for quiz in item["tests"]:
-                yield _inherit(item, quiz)
+            for eval in item["tests"]:
+                yield _inherit(item, eval)
         else:
             yield item
 
 
-# Settings a group can't pass down: they identify one quiz.
+# Settings a group can't pass down: they identify one eval.
 _NOT_INHERITED = {"tests", "id", "title"}
 
 
-def _inherit(group: dict, quiz: dict) -> dict:
-    """Follows dbt's config precedence: the most specific value wins, so a quiz's own
-    setting overrides its group's. `grading`/`provenance` merge key by key (a quiz can
+def _inherit(group: dict, eval: dict) -> dict:
+    """Follows dbt's config precedence: the most specific value wins, so an eval's own
+    setting overrides its group's. `grading`/`provenance` merge key by key (an eval can
     override just `min_score`), and `tags` add up instead of replacing."""
     merged = {key: value for key, value in group.items() if key not in _NOT_INHERITED}
-    for key, value in quiz.items():
+    for key, value in eval.items():
         if key in ("grading", "provenance") and isinstance(merged.get(key), dict):
             merged[key] = {**merged[key], **value}
         elif key == "tags":
@@ -138,7 +140,7 @@ def _lines(path: Path, field: str, value: str) -> list[int]:
     return [n for n, line in enumerate(path.read_text().splitlines(), start=1) if pattern.match(line)]
 
 
-def _duplicate_id_message(quiz_id: str, first: tuple[Path, str, str], second: tuple[Path, str, str]) -> str:
+def _duplicate_id_message(eval_id: str, first: tuple[Path, str, str], second: tuple[Path, str, str]) -> str:
     """Names every place the id comes from, with line numbers when they can be found."""
 
     def where(path: Path, lines: list[int]) -> str:
@@ -153,8 +155,8 @@ def _duplicate_id_message(quiz_id: str, first: tuple[Path, str, str], second: tu
         places = f"{where(path1, _lines(path1, field1, value1))} and {where(path2, _lines(path2, field2, value2))}"
     hint = ""
     if "title" in (field1, field2):
-        hint = " Quizzes without an id: get one from their title, so change one title or give it an id:."
-    return f"Duplicate quiz id {quiz_id!r} in {places}.{hint} Quiz ids must be unique within a quizzes directory."
+        hint = " Evals without an id: get one from their title, so change one title or give it an id:."
+    return f"Duplicate eval id {eval_id!r} in {places}.{hint} Eval ids must be unique within an evals directory."
 
 
 def _parse_selector(selector: str) -> list[set[str]]:
@@ -163,7 +165,7 @@ def _parse_selector(selector: str) -> list[set[str]]:
     (intersection) -- mirrors dbt's `--select`/`--exclude` set-operator
     semantics (space=union, comma=intersection). A `tag:` prefix is
     accepted but optional, for parity with dbt's `method:value` grammar --
-    it's currently the only method, since quizzes have no dependency graph
+    it's currently the only method, since evals have no dependency graph
     to support path/fqn/graph-operator selectors.
     """
     groups: list[set[str]] = []
@@ -180,12 +182,12 @@ def _matches_selector(definition_tags: list[str], groups: list[set[str]]) -> boo
 
 
 def filter_by_tags(
-    definitions: list[QuizDefinition],
+    definitions: list[EvalDefinition],
     select: str | None = None,
     exclude: str | None = None,
-) -> list[QuizDefinition]:
-    """Filter quiz definitions by tag, dbt-`--select`/`--exclude`-style.
-    `select` keeps only quizzes matching at least one OR-group (each group
+) -> list[EvalDefinition]:
+    """Filter eval definitions by tag, dbt-`--select`/`--exclude`-style.
+    `select` keeps only evals matching at least one OR-group (each group
     itself an AND of its comma-separated tags); `exclude` is then applied
     the same way, subtractively, on top of that result.
     """

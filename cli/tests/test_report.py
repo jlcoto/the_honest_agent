@@ -14,7 +14,7 @@ def _row() -> dict:
         "result_id": "r1",
         "run_id": "run_1",
         "run_timestamp": "2026-01-01 00:00:00",
-        "quiz_id": "q1",
+        "eval_id": "q1",
         "prompt": "What is 2+2?",
         "expected_answer": "4",
         "agent_answer": "<b>4</b>",

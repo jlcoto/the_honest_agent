@@ -11,7 +11,7 @@ const METRICS=[{id:'overall',label:'Combined'},{id:'accuracy',label:'Accuracy'},
 const MLABEL={overall:'Combined',accuracy:'Accuracy',provenance:'Provenance',values:'Score'};
 const colMean=(kids,key,n)=>Array.from({length:n},(_,i)=>mean(kids.map(k=>k[key]?k[key][i]:null)));
 
-export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Quiz',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick}){
+export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Eval',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick}){
   const dual=rows.length>0&&rows[0].accuracy!=null;
   const [mLocal,setMLocal]=React.useState(defaultMetric);
   const m=dual?(metric||mLocal):'values';
@@ -61,7 +61,7 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
     if(item.kind==='group'){
       const vals=item.kids.map(k=>i==null?summaryOf(k):valueAt(k,i)).filter(x=>x!=null);
       const below=vals.filter(x=>x<threshold).length;
-      note=below+' of '+vals.length+' quizzes below '+Math.round(threshold*100)+'%';
+      note=below+' of '+vals.length+' evals below '+Math.round(threshold*100)+'%';
     }
     setTip({x:rc.left+rc.width/2,y:rc.top,row:r.label,col,v,b:bucketOf(v),lines,note});
   };
@@ -83,7 +83,7 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
 
   const labelCell=item=>{
     const r=item.r;const isG=item.kind==='group';const isC=item.kind==='child';const on=isG&&open.has(item.g);
-    const sub=isG?(item.kids.length+(item.kids.length===1?' quiz':' quizzes')):(isC&&groupBy==='sublabel'?null:r.sublabel);
+    const sub=isG?(item.kids.length+(item.kids.length===1?' eval':' evals')):(isC&&groupBy==='sublabel'?null:r.sublabel);
     return <td onClick={isG?()=>toggle(item.g):undefined} aria-expanded={isG?on:undefined}
       style={{position:'sticky',left:0,zIndex:1,background:'var(--bg-surface)',minWidth:rowLabelWidth,maxWidth:rowLabelWidth,height:cellHeight,padding:isC?'0 12px 0 36px':'0 12px',borderBottom:'1px solid var(--border-1)',cursor:isG?'pointer':'default',userSelect:isG?'none':undefined}}>
       <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>

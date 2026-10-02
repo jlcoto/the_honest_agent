@@ -23,17 +23,17 @@ def notify_on_failures(results_path: str, webhook_url: str) -> None:
 
     failures = failing_rows(rows)
     if not failures:
-        print("No quizzes below threshold in the latest run -- nothing to notify.")
+        print("No evals below threshold in the latest run -- nothing to notify.")
         return
 
-    lines = [f"*honest-agent*: {len(failures)}/{len(rows)} quiz(zes) below threshold (run {rows[0]['run_id']})"]
+    lines = [f"*honest-agent*: {len(failures)}/{len(rows)} eval(s) below threshold (run {rows[0]['run_id']})"]
     for f in failures:
         bits = []
         if not f["accuracy_pass"]:
             bits.append(f"accuracy {f['accuracy_score']:.2f} < {f['accuracy_min_score']}")
         if not f["provenance_pass"]:
             bits.append(f"provenance {f['provenance_score']:.2f} < {f['provenance_min_score']}")
-        lines.append(f"- `{f['quiz_id']}`: {', '.join(bits)}")
+        lines.append(f"- `{f['eval_id']}`: {', '.join(bits)}")
 
     _post_to_slack(webhook_url, "\n".join(lines))
-    print(f"Posted Slack alert for {len(failures)} failing quiz(zes).")
+    print(f"Posted Slack alert for {len(failures)} failing eval(s).")

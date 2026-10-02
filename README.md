@@ -1,12 +1,12 @@
 # The Honest Agent (`honest-agent`)
 
-Quiz an analytics AI agent with known prompts/answers and check two things about
+Evaluate an analytics AI agent with known prompts/answers and check two things about
 each response:
 
 - **accuracy** — is the answer correct?
 - **provenance** — did the agent use the right sources/tools to derive it?
 
-Results are stored in a local DuckDB file, graded against per-quiz
+Results are stored in a local DuckDB file, graded against per-eval
 thresholds, and can be visualized, alerted on, and (optionally) exported to
 S3 as Parquet for sharing with a team or other tools.
 
@@ -17,7 +17,7 @@ never a hand-rolled `venv`/`pip install`.
 ## Layout
 
 - **`cli/`** — the `honest-agent` Python CLI. Owns every LLM call (running the
-  quiz, LLM-judge grading, provenance scoring), the threshold checks, and
+  eval, LLM-judge grading, provenance scoring), the threshold checks, and
   everything else (Slack notifications, the static HTML report). Results
   storage is a local DuckDB file by default; `honest-agent export` can push a
   Parquet snapshot to S3 (via DuckDB's own `httpfs` extension) for sharing
@@ -27,7 +27,7 @@ never a hand-rolled `venv`/`pip install`.
   locally reimplemented stand-in whose behavior can drift out of sync with
   the real tool. Needs Python >=3.10 — see `example_project/README.md`.
 - **`example_project/`** — a real-world-shaped consumer of the CLI: its own
-  example quiz YAML and a README showing the actual install/run flow. This
+  example eval YAML and a README showing the actual install/run flow. This
   is the only place example data lives.
 
 ## Quickstart (using the bundled example)
@@ -38,15 +38,15 @@ uv python install 3.11                                       # one-time; honest-
 uv sync --python 3.11                                         # installs honest-agent, editable, from ../cli
 uv run python warehouse/seed.py                               # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                                 # or put it in a .env here or in a parent folder -- auto-loaded
-uv run honest-agent run                                        # quizzes the default target in honest_agent_config.yml
+uv run honest-agent run                                        # evaluates the default target in honest_agent_config.yml
 uv run honest-agent report                                     # writes the web report to honest_agent_report/
 uv run honest-agent serve                                      # opens the report in your browser, like `dbt docs serve`
 uv run honest-agent notify --webhook-url ...                   # Slack alert on regressions
 ```
 
 `honest_agent_config.yml` holds the project's settings, with one target
-per agent being quizzed, like the targets in a dbt profile: `honest-agent run --target
-motherduck` quizzes another one. The default target calls Claude with the
+per agent being evaluated, like the targets in a dbt profile: `honest-agent run --target
+motherduck` evaluates another one. The default target calls Claude with the
 `query_warehouse` tool sourced live from the
 bundled demo MCP server (`mcp_server/server.py`), against a real seeded
 TPC-H warehouse — real SQL, real data, real provenance checking (does the
@@ -55,7 +55,7 @@ agent's SQL actually hit the table we expect). By default results land in
 s3://...` afterward if you want a Parquet snapshot in S3 too — see
 `example_project/README.md` for details, including how to point at a real
 MCP server (MotherDuck, Snowflake, or your own) instead of the bundled demo
-one, and `example_project/quizzes/example_quiz.yml` for how each quiz
+one, and `example_project/evals/example_eval.yml` for how each eval
 declares its own accuracy/provenance thresholds (`grading.min_score` /
 `provenance.min_score`).
 

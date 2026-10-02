@@ -87,9 +87,9 @@ def _source_recall(
     expected_schema: str | None = None,
 ) -> float:
     combined_sql = "\n".join(sql_statements).lower()
-    # Only pay for session-context tracking when a quiz actually asks for
+    # Only pay for session-context tracking when an eval actually asks for
     # location checking -- otherwise this is the same bare word-boundary
-    # check it's always been, so existing quizzes' scores can't shift.
+    # check it's always been, so existing evals' scores can't shift.
     resolved = _track_session_context(sql_statements) if (expected_database or expected_schema) else None
 
     def is_hit(source: str) -> bool:
@@ -109,7 +109,7 @@ def score_provenance(
     expected_database: str | None = None,
     expected_schema: str | None = None,
 ) -> float:
-    """Recall over one provenance claim a quiz can make: does the SQL the
+    """Recall over one provenance claim an eval can make: does the SQL the
     agent actually ran reference the tables/models we expected -- e.g. an
     aggregated mart or semantic-layer model, not the agent reconstructing
     the number by hand from raw tables. Checked against `sql_statements`
@@ -121,11 +121,11 @@ def score_provenance(
     to the given database/schema -- otherwise a query against a same-named
     table in the wrong database (e.g. Snowflake's built-in
     `snowflake_sample_data` instead of the real target) would still count as
-    a hit. Neither is required; a quiz that only cares *which table*, not
+    a hit. Neither is required; an eval that only cares *which table*, not
     *which database it lives in*, can leave both unset and get the old,
     looser behavior.
 
-    A quiz with no `expected_sources` declared at all is trivially satisfied
+    An eval with no `expected_sources` declared at all is trivially satisfied
     (1.0).
 
     There used to be a second dimension here, `expected_tools` (did the
@@ -136,7 +136,7 @@ def score_provenance(
     it already implies tool use, more precisely than a bare tool-name check
     ever could. The only place `expected_tools` wasn't redundant was for
     tools that produce no checkable SQL/source content at all (e.g. a
-    calculator) -- no quiz in this project currently needs that, so it's
+    calculator) -- no eval in this project currently needs that, so it's
     not worth carrying the dead weight until one does. See
     memory/expected_tools_removed_from_provenance.md (or its successor) for
     the full reasoning if this needs revisiting once semantic-layer tool

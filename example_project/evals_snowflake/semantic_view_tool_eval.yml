@@ -1,6 +1,6 @@
 version: 1
 
-# Path B of testing the TPC-H semantic view (see semantic_view_quiz.yml for Path A):
+# Path B of testing the TPC-H semantic view (see semantic_view_eval.yml for Path A):
 # here the agent has a dedicated MCP tool (query_semantic_view, CORTEX_ANALYST_MESSAGE)
 # pointed directly at agent_quiz_demo.public.tpch_semantic_view -- see README.md's
 # Snowflake section. Its input is a plain-language `message`, not SQL, and the
@@ -17,7 +17,7 @@ version: 1
 # Run with (target in ../honest_agent_config.yml):
 #   honest-agent run --target snowflake --select semantic_view_tool
 
-quizzes:
+evals:
   - category: finance
     tests:
       - id: q_revenue_1996_semantic_view_tool

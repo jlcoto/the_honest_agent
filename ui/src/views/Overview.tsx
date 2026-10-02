@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { QuizLabel } from '../components/QuizLabel'
+import { EvalLabel } from '../components/EvalLabel'
 import {
   accuracyPasses,
   agentsOf,
@@ -10,9 +10,9 @@ import {
   modelsOf,
   passes,
   provenancePasses,
-  quizHeatRow,
-  quizTitles,
-  quizzesOf,
+  evalHeatRow,
+  evalTitles,
+  evalsOf,
   runColumns,
   runsOf,
   stripMarkdown,
@@ -33,10 +33,10 @@ const openResult = (r: ResultRow) => navigate({ name: 'result', resultId: r.resu
 
 function downloadCsv(filename: string, rows: ResultRow[], titles: Map<string, string>) {
   const csv = toCsv(
-    ['quiz_id', 'quiz_title', 'category', 'accuracy_score', 'accuracy_min_score', 'provenance_score', 'provenance_min_score', 'failed', 'accuracy_method', 'expected_answer', 'agent_answer'],
+    ['eval_id', 'eval_title', 'category', 'accuracy_score', 'accuracy_min_score', 'provenance_score', 'provenance_min_score', 'failed', 'accuracy_method', 'expected_answer', 'agent_answer'],
     rows.map((r) => [
-      r.quiz_id,
-      titles.get(r.quiz_id) ?? null,
+      r.eval_id,
+      titles.get(r.eval_id) ?? null,
       r.category,
       r.accuracy_score,
       r.accuracy_min_score,
@@ -65,7 +65,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 export function Overview({ data }: { data: ReportData }) {
   const allRuns = useMemo(() => runsOf(data.results), [data])
   const agents = useMemo(() => agentsOf(data.results), [data])
-  const titles = useMemo(() => quizTitles(data.results), [data])
+  const titles = useMemo(() => evalTitles(data.results), [data])
   const allDates = useMemo(() => [...new Set(allRuns.map((r) => r.date))], [allRuns])
 
   // Scores are only meaningful for one agent and one model at a time, so both
@@ -101,19 +101,19 @@ export function Overview({ data }: { data: ReportData }) {
   const failing = latest ? latest.results.filter((r) => !passes(r)) : []
 
   const columns = runColumns(runs)
-  const quizzes = quizzesOf(runs.flatMap((r) => r.results), titles)
-  const scoreIn = (runIndex: number, quizId: string, key: 'accuracy_score' | 'provenance_score') => {
-    const rows = runs[runIndex].results.filter((r) => r.quiz_id === quizId)
+  const evals = evalsOf(runs.flatMap((r) => r.results), titles)
+  const scoreIn = (runIndex: number, evalId: string, key: 'accuracy_score' | 'provenance_score') => {
+    const rows = runs[runIndex].results.filter((r) => r.eval_id === evalId)
     return rows.length ? mean(rows.map((r) => r[key])) : null
   }
-  const heatRows = quizzes.map((q) =>
-    quizHeatRow(
+  const heatRows = evals.map((q) =>
+    evalHeatRow(
       q,
-      runs.map((_, i) => scoreIn(i, q.quiz_id, 'accuracy_score')),
-      runs.map((_, i) => scoreIn(i, q.quiz_id, 'provenance_score')),
+      runs.map((_, i) => scoreIn(i, q.eval_id, 'accuracy_score')),
+      runs.map((_, i) => scoreIn(i, q.eval_id, 'provenance_score')),
     ),
   )
-  const categories = [...new Set(quizzes.map((q) => q.category))]
+  const categories = [...new Set(evals.map((q) => q.category))]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -175,7 +175,7 @@ export function Overview({ data }: { data: ReportData }) {
             <Heatmap
               metric={metric}
               showToggle={false}
-              rowHeader="Quiz"
+              rowHeader="Eval"
               rowLabelWidth={360}
               groupBy="category"
               defaultExpanded={categories}
@@ -183,8 +183,8 @@ export function Overview({ data }: { data: ReportData }) {
               columns={columns}
               onCellClick={(row, column, value) => {
                 const run = runs[columns.indexOf(column)]
-                const quizId = (row as ReturnType<typeof quizHeatRow>).quiz_id
-                const result = value == null ? undefined : run?.results.find((r) => r.quiz_id === quizId)
+                const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id
+                const result = value == null ? undefined : run?.results.find((r) => r.eval_id === evalId)
                 if (result) openResult(result)
               }}
             />
@@ -192,7 +192,7 @@ export function Overview({ data }: { data: ReportData }) {
 
           <Card
             title="Below threshold"
-            subtitle={`Latest eval run, ${formatRunDate(latest.timestamp)} · ${failing.length} ${failing.length === 1 ? 'quiz' : 'quizzes'} failed accuracy or provenance min score`}
+            subtitle={`Latest eval run, ${formatRunDate(latest.timestamp)} · ${failing.length} ${failing.length === 1 ? 'eval' : 'evals'} failed accuracy or provenance min score`}
             actions={
               <IconButton
                 icon="download"
@@ -215,9 +215,9 @@ export function Overview({ data }: { data: ReportData }) {
                 rows={failing}
                 columns={[
                   {
-                    key: 'quiz_id',
-                    label: 'Quiz',
-                    render: (r: ResultRow) => <QuizLabel quizId={r.quiz_id} title={titles.get(r.quiz_id)} />,
+                    key: 'eval_id',
+                    label: 'Eval',
+                    render: (r: ResultRow) => <EvalLabel evalId={r.eval_id} title={titles.get(r.eval_id)} />,
                   },
                   { key: 'category', label: 'Category' },
                   {

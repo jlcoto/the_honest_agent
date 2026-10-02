@@ -18,7 +18,7 @@ def _row(**overrides) -> dict:
         "result_id": "r1",
         "run_id": "run_1",
         "run_timestamp": "2026-01-01 00:00:00",
-        "quiz_id": "q1",
+        "eval_id": "q1",
         "prompt": "What is 2+2?",
         "category": "math",
         "tags": ["smoke"],
@@ -56,10 +56,10 @@ def test_logs_prints_answer_and_scores(tmp_path: Path):
 
 def test_logs_surfaces_turn_limit_error_message():
     """Regression test for the gap found in review: `logs` used to print only
-    the trace and tool calls, so a quiz that hit MCPAgentClient's
+    the trace and tool calls, so an eval that hit MCPAgentClient's
     max_tool_turns limit (see mcp_agent_runner.py) had its diagnostic
     `agent_answer` -- already stored in `results` -- invisible here, even
-    though this command's whole job is explaining *why* a quiz came out the
+    though this command's whole job is explaining *why* an eval came out the
     way it did.
     """
     with CliRunner().isolated_filesystem():
@@ -111,9 +111,9 @@ def _run_capturing_mcp_target(monkeypatch, args: list[str], env: dict[str, str])
 
     monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
     with CliRunner().isolated_filesystem():
-        Path("quizzes").mkdir()
+        Path("evals").mkdir()
         result = CliRunner().invoke(
-            main, ["run", "--quizzes-dir", "quizzes", *args], env={"ANTHROPIC_API_KEY": "test", **env}
+            main, ["run", "--evals-dir", "evals", *args], env={"ANTHROPIC_API_KEY": "test", **env}
         )
     return result, captured
 
@@ -154,18 +154,18 @@ def test_both_mcp_targets_only_in_env_is_an_error(monkeypatch):
     assert "Pass --mcp-command or --mcp-url to choose one" in result.output
 
 
-def test_duplicate_quiz_id_is_a_clean_cli_error():
+def test_duplicate_eval_id_is_a_clean_cli_error():
     with CliRunner().isolated_filesystem():
-        Path("quizzes").mkdir()
-        Path("quizzes/a.yml").write_text("quizzes:\n  - id: q_dup\n    prompt: one\n  - id: q_dup\n    prompt: two\n")
+        Path("evals").mkdir()
+        Path("evals/a.yml").write_text("evals:\n  - id: q_dup\n    prompt: one\n  - id: q_dup\n    prompt: two\n")
         result = CliRunner().invoke(
             main,
-            ["run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py"],
+            ["run", "--evals-dir", "evals", "--mcp-command", "python server.py"],
             env={"ANTHROPIC_API_KEY": "test"},
         )
 
     assert result.exit_code == 1
-    assert "Error: Duplicate quiz id 'q_dup' in a.yml (lines 2 and 4)" in result.output
+    assert "Error: Duplicate eval id 'q_dup' in a.yml (lines 2 and 4)" in result.output
     assert "Traceback" not in result.output
 
 
@@ -187,10 +187,10 @@ def _run_capturing_models(monkeypatch, args: list[str]):
 
     monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
     with CliRunner().isolated_filesystem():
-        Path("quizzes").mkdir()
+        Path("evals").mkdir()
         result = CliRunner().invoke(
             main,
-            ["run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py", *args],
+            ["run", "--evals-dir", "evals", "--mcp-command", "python server.py", *args],
             env={"ANTHROPIC_API_KEY": "test", "HONEST_AGENT_JUDGE_MODEL": ""},
         )
     assert result.exit_code == 0, result.output

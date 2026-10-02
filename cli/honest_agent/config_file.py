@@ -1,5 +1,5 @@
 """Reads `honest_agent_config.yml`: a project's non-secret settings, with one target per
-agent being quizzed (like the targets in a dbt profile). It's optional -- without it, every setting comes
+agent being evaluated (like the targets in a dbt profile). It's optional -- without it, every setting comes
 from flags, environment variables or built-in defaults, as before.
 
     results_path: ./honest_agent_results/results.duckdb   # shared by every target
@@ -8,11 +8,11 @@ from flags, environment variables or built-in defaults, as before.
     targets:
       demo:
         mcp_command: python mcp_server/server.py
-        quizzes_dir: quizzes
+        evals_dir: evals
       motherduck:
         mcp_url: https://api.motherduck.com/mcp
         bearer_token_env: MOTHERDUCK_TOKEN                # names the variable, never the secret
-        quizzes_dir: quizzes_motherduck
+        evals_dir: evals_motherduck
         max_tool_turns: 10
 
 Precedence, per setting: command-line flag > environment variable > this file > built-in
@@ -39,11 +39,11 @@ _TARGET_KEYS = _SHARED_KEYS | {
     "mcp_command",
     "mcp_url",
     "bearer_token_env",
-    "quizzes_dir",
+    "evals_dir",
     "ignore_tools",
     "agent_name",
 }
-_PATH_KEYS = {"results_path", "quizzes_dir"}
+_PATH_KEYS = {"results_path", "evals_dir"}
 
 
 class ConfigError(ValueError):

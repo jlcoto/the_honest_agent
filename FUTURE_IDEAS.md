@@ -6,7 +6,7 @@ these are rougher ideas worth exploring later, not committed designs.
 
 ## Auto root-cause investigation + PR-on-fix for regressions
 
-When a quiz that used to pass starts failing, today the only thing that
+When an eval that used to pass starts failing, today the only thing that
 happens is a human gets alerted (`honest-agent notify` → Slack) and can dig in
 manually via `honest-agent logs` / the report. The idea: wire a failing result
 into a second agent whose job is to investigate *why* it regressed and, if it
@@ -14,7 +14,7 @@ finds a genuine, fixable cause, open a PR with the fix.
 
 ### The idea
 
-1. `thresholds.failing_rows` already identifies which quiz(zes) regressed
+1. `thresholds.failing_rows` already identifies which eval(s) regressed
    this run. We already capture rich forensic context per result: the full
    reasoning trace (`agent_logs.agent_trace`), every tool/SQL call it made
    (`tool_calls`), which model ran it (`results.model_name`), and the run
@@ -36,7 +36,7 @@ finds a genuine, fixable cause, open a PR with the fix.
      two apart is the hard part of this whole idea.
 3. If the investigator is confident it found a real, fixable bug (not a
    stale `expected_answer`), open a PR with a proposed fix -- against
-   `honest-agent`'s own quiz definitions if the *expected answer* is what's
+   `honest-agent`'s own eval definitions if the *expected answer* is what's
    stale, or against the tested system's own codebase if the *agent/data*
    actually broke.
 
@@ -54,7 +54,7 @@ and read.
   PRs for non-bugs or, worse, silently patch `expected_answer` to hide a
   real regression.
 - **Scope of what the investigator can even see.** Today `honest-agent` only
-  knows about its own quiz results -- root-causing a regression means
+  knows about its own eval results -- root-causing a regression means
   reading the tested agent's own codebase/config, which `honest-agent` has no
   concept of yet (not even a pointer to where that lives).
 - **Auto-opening a PR is a real, hard-to-reverse action against someone

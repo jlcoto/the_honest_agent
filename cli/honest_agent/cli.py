@@ -23,10 +23,10 @@ from .config_file import (
     find_config_file,
     load_config,
 )
+from .eval_loader import EvalDefinition, filter_by_tags, load_evals
 from .grading import grade_accuracy
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
 from .provenance import score_provenance
-from .quiz_loader import QuizDefinition, filter_by_tags, load_quizzes
 from .sql_capture import extract_sql_calls
 from .storage import export_to_s3_parquet, read_agent_logs, read_all_results, read_tool_calls, write_run_results
 from .thresholds import failing_rows
@@ -57,7 +57,7 @@ _REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
 )
 @click.pass_context
 def main(ctx: click.Context, env_file: str | None, config_file: str | None):
-    """honest-agent: run LLM quizzes against an agent, grade them, and store the results."""
+    """honest-agent: run LLM evals against an agent, grade them, and store the results."""
     # usecwd: look from where the command runs, not from where honest-agent is installed --
     # otherwise a tool or editable install would find some other project's .env, or none.
     load_dotenv(env_file or find_dotenv(usecwd=True))
@@ -105,9 +105,9 @@ def _envvar(ctx: click.Context, param: str) -> str:
     return next(p.envvar for p in ctx.command.params if p.name == param)
 
 
-async def _quiz_loop(
+async def _eval_loop(
     agent: AgentClient,
-    definitions: list[QuizDefinition],
+    definitions: list[EvalDefinition],
     judge: Judge,
     judge_model: str,
     run_id: str,
@@ -116,10 +116,10 @@ async def _quiz_loop(
 ) -> list[dict]:
     rows: list[dict] = []
     for definition in definitions:
-        click.echo(f"  - {definition.quiz_id}: {definition.prompt!r}")
+        click.echo(f"  - {definition.eval_id}: {definition.prompt!r}")
         result = await agent.run(definition.prompt)
         if result.hit_turn_limit:
-            click.echo(f"    WARNING: {definition.quiz_id} hit the tool-turn limit without a final answer.")
+            click.echo(f"    WARNING: {definition.eval_id} hit the tool-turn limit without a final answer.")
 
         accuracy_score, rationale, grading_input_tokens, grading_output_tokens = await grade_accuracy(
             definition.grading_method,
@@ -146,8 +146,8 @@ async def _quiz_loop(
                 "result_id": result_id,
                 "run_id": run_id,
                 "run_timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                "quiz_id": definition.quiz_id,
-                "quiz_title": definition.title,
+                "eval_id": definition.eval_id,
+                "eval_title": definition.title,
                 "prompt": definition.prompt,
                 "category": definition.category,
                 "tags": definition.tags,
@@ -257,7 +257,7 @@ def _resolve_agent_name(explicit: str | None, connected_client) -> str:
 
 
 async def _run_async(
-    quizzes_dir_p: Path,
+    evals_dir_p: Path,
     results_path: str,
     model: str,
     max_tool_turns: int,
@@ -272,41 +272,41 @@ async def _run_async(
     judge_model: str,
 ) -> None:
     try:
-        definitions = load_quizzes(quizzes_dir_p)
+        definitions = load_evals(evals_dir_p)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     if not definitions:
-        raise click.ClickException(f"No quizzes found in {quizzes_dir_p}")
+        raise click.ClickException(f"No evals found in {evals_dir_p}")
 
     definitions = filter_by_tags(definitions, select=select, exclude=exclude)
     if not definitions:
-        raise click.ClickException(f"No quizzes matched --select {select!r} --exclude {exclude!r}")
+        raise click.ClickException(f"No evals matched --select {select!r} --exclude {exclude!r}")
 
     from .mcp_agent_runner import MCPAgentClient, build_mcp_client
 
     judge = make_judge(provider_for(judge_model))
     run_id = str(uuid.uuid4())
-    click.echo(f"Starting quiz run {run_id} ({len(definitions)} quizzes)...")
+    click.echo(f"Starting eval run {run_id} ({len(definitions)} eval{'' if len(definitions) == 1 else 's'})...")
 
     mcp_client = build_mcp_client(command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token, cwd=mcp_cwd)
-    # Deliberately split from the quiz loop below: a failure *here* means
+    # Deliberately split from the eval loop below: a failure *here* means
     # the MCP handshake itself never completed (wrong token, unreachable
-    # server, server crashed on startup, ...) -- every quiz would fail
+    # server, server crashed on startup, ...) -- every eval would fail
     # identically for a reason that has nothing to do with the agent, so
     # this fails the whole run loudly instead of grading N unusable
-    # results. A tool call failing *during* a quiz (bad SQL, a query the
+    # results. A tool call failing *during* an eval (bad SQL, a query the
     # agent got wrong) is a different, legitimate grading failure and is
-    # deliberately NOT caught here -- see _quiz_loop.
+    # deliberately NOT caught here -- see _eval_loop.
     try:
         connected = await mcp_client.__aenter__()
     except Exception as exc:
         raise click.ClickException(
-            "Could not establish the MCP connection -- no quizzes were run, nothing was graded.\n"
+            "Could not establish the MCP connection -- no evals were run, nothing was graded.\n"
             f"{_describe_mcp_connection_error(exc)}"
         ) from exc
     try:
         agent_name = _resolve_agent_name(agent_name, connected)
-        click.echo(f"Quizzing agent: {agent_name}")
+        click.echo(f"Evaluating agent: {agent_name}")
         if provider_for(model) == OPENAI:
             from .openai_agent_runner import OpenAIMCPAgentClient
 
@@ -314,7 +314,7 @@ async def _run_async(
         else:
             agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
         click.echo(f"Model: {model} · judge model: {judge_model}")
-        rows = await _quiz_loop(agent, definitions, judge, judge_model, run_id, agent_name, ignore_tools)
+        rows = await _eval_loop(agent, definitions, judge, judge_model, run_id, agent_name, ignore_tools)
     finally:
         await mcp_client.__aexit__(None, None, None)
 
@@ -323,16 +323,16 @@ async def _run_async(
 
     failures = failing_rows(rows)
     if failures:
-        click.echo(f"{len(failures)}/{len(rows)} quiz(zes) below threshold this run:")
+        click.echo(f"{len(failures)}/{len(rows)} eval(s) below threshold this run:")
         for f in failures:
             bits = []
             if not f["accuracy_pass"]:
                 bits.append(f"accuracy {f['accuracy_score']:.2f} < {f['accuracy_min_score']}")
             if not f["provenance_pass"]:
                 bits.append(f"provenance {f['provenance_score']:.2f} < {f['provenance_min_score']}")
-            click.echo(f"  - {f['quiz_id']}: {', '.join(bits)}")
+            click.echo(f"  - {f['eval_id']}: {', '.join(bits)}")
     else:
-        click.echo("All quizzes met their thresholds.")
+        click.echo("All evals met their thresholds.")
 
     click.echo(f"Run {run_id} complete. Next: `honest-agent report` / `honest-agent notify`.")
 
@@ -342,20 +342,20 @@ async def _run_async(
     "--target",
     "-t",
     default=None,
-    help=f"Target (agent) from {CONFIG_FILE_NAME} to quiz. Defaults to its default_target.",
+    help=f"Target (agent) from {CONFIG_FILE_NAME} to evaluate. Defaults to its default_target.",
 )
 @click.option(
-    "--quizzes-dir",
+    "--evals-dir",
     default=None,
     type=click.Path(exists=True, file_okay=False),
-    help="Directory of quiz YAML files. Defaults to the target's quizzes_dir, else ./quizzes.",
+    help="Directory of eval YAML files. Defaults to the target's evals_dir, else ./evals.",
 )
 @click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option(
     "--model",
     envvar="HONEST_AGENT_MODEL",
     default=None,
-    help="Model to quiz (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
+    help="Model to evaluate (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
     "Only the API key for its provider is needed. Defaults to claude-haiku-4-5 if ANTHROPIC_API_KEY is set, "
     "else gpt-5.4-mini if OPENAI_API_KEY is set.",
 )
@@ -363,15 +363,15 @@ async def _run_async(
     "--judge-model",
     envvar="HONEST_AGENT_JUDGE_MODEL",
     default=None,
-    help="Model that grades extract_match/llm_judge quizzes. Defaults to --model. A fixed judge across "
+    help="Model that grades extract_match/llm_judge evals. Defaults to --model. A fixed judge across "
     "runs keeps comparisons between agent models fair.",
 )
 @click.option(
     "--max-tool-turns",
     type=click.IntRange(min=1),
     default=DEFAULT_MAX_TOOL_TURNS,
-    help="Max rounds of tool calls per quiz before giving up (each round is one model API call). "
-    "If Claude is still requesting tools when this is hit, that quiz fails with a clear error "
+    help="Max rounds of tool calls per eval before giving up (each round is one model API call). "
+    "If Claude is still requesting tools when this is hit, that eval fails with a clear error "
     "instead of silently returning an empty answer.",
 )
 @click.option(
@@ -400,7 +400,7 @@ async def _run_async(
     "--agent-name",
     envvar="HONEST_AGENT_AGENT_NAME",
     default=None,
-    help="Label for the agent being quizzed (e.g. snowflake, motherduck), stored with every result "
+    help="Label for the agent being evaluated (e.g. snowflake, motherduck), stored with every result "
     "so reports can filter by agent. Defaults to the target's agent_name or name, else the name the "
     "MCP server reports about itself.",
 )
@@ -408,21 +408,21 @@ async def _run_async(
     "--select",
     "-s",
     default=None,
-    help="Only run quizzes matching this tag selector, dbt-`--select`-style: space-separated "
+    help="Only run evals matching this tag selector, dbt-`--select`-style: space-separated "
     "groups are OR'd, comma-separated tags within a group are AND'd, e.g. "
-    "'--select \"smoke,provenance motherduck\"' runs quizzes tagged both smoke AND "
+    "'--select \"smoke,provenance motherduck\"' runs evals tagged both smoke AND "
     "provenance, OR tagged motherduck. A `tag:` prefix (e.g. `tag:smoke`) is accepted but optional.",
 )
 @click.option(
     "--exclude",
     default=None,
-    help="Skip quizzes matching this tag selector (same syntax as --select), applied after --select.",
+    help="Skip evals matching this tag selector (same syntax as --select), applied after --select.",
 )
 @click.pass_context
 def run(
     ctx: click.Context,
     target: str | None,
-    quizzes_dir: str | None,
+    evals_dir: str | None,
     results_path: str | None,
     model: str | None,
     judge_model: str | None,
@@ -434,7 +434,7 @@ def run(
     select: str | None,
     exclude: str | None,
 ):
-    """Run every quiz, grade the answers, and write results to storage."""
+    """Run every eval, grade the answers, and write results to storage."""
     config = _config(ctx)
     if config is None and target is not None:
         raise click.ClickException(f"--target {target} needs a {CONFIG_FILE_NAME}, and none was found.")
@@ -450,9 +450,9 @@ def run(
     model = _from_layers(ctx, "model", model, layer)
     judge_model = _from_layers(ctx, "judge_model", judge_model, layer)
     max_tool_turns = _from_layers(ctx, "max_tool_turns", max_tool_turns, layer)
-    quizzes_dir = quizzes_dir or (chosen and chosen.settings.get("quizzes_dir")) or "quizzes"
-    if not Path(quizzes_dir).is_dir():
-        raise click.ClickException(f"Quizzes folder {quizzes_dir} not found. Pass --quizzes-dir or set quizzes_dir.")
+    evals_dir = evals_dir or (chosen and chosen.settings.get("evals_dir")) or "evals"
+    if not Path(evals_dir).is_dir():
+        raise click.ClickException(f"Evals folder {evals_dir} not found. Pass --evals-dir or set evals_dir.")
     if chosen:
         # A target names the agent: its agent_name, else the target's own name.
         named = Target(chosen.name, {"agent_name": chosen.settings.get("agent_name") or chosen.name})
@@ -480,7 +480,7 @@ def run(
 
     asyncio.run(
         _run_async(
-            Path(quizzes_dir).resolve(),
+            Path(evals_dir).resolve(),
             _results_path(ctx, results_path),
             model,
             max_tool_turns,
@@ -526,7 +526,7 @@ def serve(out: str, port: int, open_browser: bool):
 @click.option("--webhook-url", envvar="SLACK_WEBHOOK_URL", default=None)
 @click.pass_context
 def notify(ctx: click.Context, results_path: str | None, webhook_url: str | None):
-    """Send a Slack alert if the most recent run had any quiz below its threshold."""
+    """Send a Slack alert if the most recent run had any eval below its threshold."""
     results_path = _results_path(ctx, results_path)
     if not webhook_url:
         raise click.ClickException("No Slack webhook URL. Pass --webhook-url or set SLACK_WEBHOOK_URL.")
@@ -558,14 +558,14 @@ def export(ctx: click.Context, results_path: str | None, s3_path: str, run_id: s
 @main.command()
 @click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option("--run-id", default=None, help="Only show logs for this run.")
-@click.option("--quiz-id", default=None, help="Only show logs for this quiz id.")
+@click.option("--eval-id", default=None, help="Only show logs for this eval id.")
 @click.pass_context
-def logs(ctx: click.Context, results_path: str | None, run_id: str | None, quiz_id: str | None):
-    """Print each matching quiz's agent trace and any captured SQL, for digging into
+def logs(ctx: click.Context, results_path: str | None, run_id: str | None, eval_id: str | None):
+    """Print each matching eval's agent trace and any captured SQL, for digging into
     *why* a result came out the way it did (as opposed to `report`, which only shows
     scores)."""
     results_path = _results_path(ctx, results_path)
-    rows = read_agent_logs(results_path, run_id=run_id, quiz_id=quiz_id)
+    rows = read_agent_logs(results_path, run_id=run_id, eval_id=eval_id)
     if not rows:
         click.echo("No matching logs found.")
         return
@@ -573,11 +573,11 @@ def logs(ctx: click.Context, results_path: str | None, run_id: str | None, quiz_
     # stays a pure trace table -- `results` already carries the answer/scores.
     results_by_id = {r["result_id"]: r for r in read_all_results(results_path)}
     calls_by_result: dict[str, list[dict]] = {}
-    for call_row in read_tool_calls(results_path, run_id=run_id, quiz_id=quiz_id):
+    for call_row in read_tool_calls(results_path, run_id=run_id, eval_id=eval_id):
         calls_by_result.setdefault(call_row["result_id"], []).append(call_row)
 
     for row in rows:
-        click.echo(f"=== quiz {row['quiz_id']} (run {row['run_id']}, result {row['result_id']}) ===")
+        click.echo(f"=== eval {row['eval_id']} (run {row['run_id']}, result {row['result_id']}) ===")
         result_row = results_by_id.get(row["result_id"])
         if result_row:
             click.echo(f"Answer: {result_row['agent_answer']}")

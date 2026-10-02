@@ -18,7 +18,7 @@ def _row(**overrides) -> dict:
         "result_id": "r1",
         "run_id": "run_1",
         "run_timestamp": "2026-01-01 00:00:00",
-        "quiz_id": "q1",
+        "eval_id": "q1",
         "prompt": "What is 2+2?",
         "category": "math",
         "tags": ["smoke"],
@@ -45,7 +45,7 @@ def _row(**overrides) -> dict:
 ROW_1 = _row()
 ROW_2 = _row(
     result_id="r2",
-    quiz_id="q2",
+    eval_id="q2",
     run_timestamp="2026-01-01 00:00:05",
     agent_answer="wrong",
     accuracy_score=0.0,
@@ -91,7 +91,7 @@ def test_write_then_read_agent_logs_roundtrips(tmp_path: Path):
     assert json.loads(by_id["r1"]["agent_trace"]) == [{"role": "user", "content": "What is 2+2?"}]
     assert "sql_calls" not in by_id["r1"]  # lives in tool_calls, not agent_logs
     assert by_id["r1"]["run_id"] == "run_1"
-    assert by_id["r1"]["quiz_id"] == "q1"
+    assert by_id["r1"]["eval_id"] == "q1"
 
 
 def test_write_then_read_tool_calls_roundtrips_and_expands_per_call(tmp_path: Path):
@@ -102,12 +102,12 @@ def test_write_then_read_tool_calls_roundtrips_and_expands_per_call(tmp_path: Pa
 
     assert len(calls) == 2  # ROW_1 had no sql_calls, ROW_2 had two
     assert all(c["result_id"] == "r2" for c in calls)
-    assert all(c["run_id"] == "run_1" and c["quiz_id"] == "q2" for c in calls)
+    assert all(c["run_id"] == "run_1" and c["eval_id"] == "q2" for c in calls)
     by_index = {c["call_index"]: c for c in calls}
     assert by_index[0] == {
         "result_id": "r2",
         "run_id": "run_1",
-        "quiz_id": "q2",
+        "eval_id": "q2",
         "call_index": 0,
         "tool_name": "query_warehouse",
         "type": "sql",
@@ -127,13 +127,13 @@ def test_read_tool_calls_filters_by_result_id(tmp_path: Path):
     assert read_tool_calls(db_path, result_id="r1") == []
 
 
-def test_read_tool_calls_filters_by_run_and_quiz_id(tmp_path: Path):
+def test_read_tool_calls_filters_by_run_and_eval_id(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [ROW_1, ROW_2])
     write_run_results(db_path, "run_2", [ROW_3_LATER_RUN])
 
     assert read_tool_calls(db_path, run_id="run_2") == []  # ROW_3 has no sql_calls
-    assert {c["result_id"] for c in read_tool_calls(db_path, quiz_id="q2")} == {"r2"}
+    assert {c["result_id"] for c in read_tool_calls(db_path, eval_id="q2")} == {"r2"}
 
 
 def test_read_tool_calls_on_missing_path_returns_empty(tmp_path: Path):
@@ -150,11 +150,11 @@ def test_read_agent_logs_filters_by_run_id(tmp_path: Path):
     assert {r["result_id"] for r in logs} == {"r3"}
 
 
-def test_read_agent_logs_filters_by_quiz_id(tmp_path: Path):
+def test_read_agent_logs_filters_by_eval_id(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [ROW_1, ROW_2])
 
-    logs = read_agent_logs(db_path, quiz_id="q2")
+    logs = read_agent_logs(db_path, eval_id="q2")
 
     assert {r["result_id"] for r in logs} == {"r2"}
 
@@ -271,3 +271,23 @@ def test_an_existing_folder_never_gets_the_ignore_marker(tmp_path: Path):
     write_run_results(str(tmp_path / "results.duckdb"), "run_1", [_row()])
 
     assert not (tmp_path / ".gitignore").exists()
+
+
+def test_a_results_file_from_before_the_eval_rename_is_migrated_on_open(tmp_path: Path):
+    import duckdb
+
+    db_path = str(tmp_path / "results.duckdb")
+    con = duckdb.connect(db_path)
+    con.execute("create table results (result_id varchar, quiz_id varchar, quiz_title varchar)")
+    con.execute("insert into results values ('r1', 'q_old', 'Old title')")
+    con.execute("create table agent_logs (result_id varchar, quiz_id varchar)")
+    con.execute("create table tool_calls (result_id varchar, quiz_id varchar)")
+    con.close()
+
+    (row,) = read_all_results(db_path)
+
+    assert (row["eval_id"], row["eval_title"]) == ("q_old", "Old title")
+    con = duckdb.connect(db_path)
+    for table in ("agent_logs", "tool_calls"):
+        columns = {r[0] for r in con.execute(f"describe {table}").fetchall()}
+        assert "eval_id" in columns and "quiz_id" not in columns

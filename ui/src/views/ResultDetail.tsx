@@ -7,7 +7,7 @@ import {
   formatRunTime,
   pct,
   provenancePasses,
-  quizTitles,
+  evalTitles,
   stripMarkdown,
   toolCallsFor,
 } from '../data/derive'
@@ -204,16 +204,16 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
   const calls = toolCallsFor(data, r.result_id)
   const trace = data.agent_logs.find((l) => l.result_id === r.result_id)?.agent_trace
   const tokens = (r.agent_input_tokens ?? 0) + (r.agent_output_tokens ?? 0)
-  const title = quizTitles(data.results).get(r.quiz_id)
+  const title = evalTitles(data.results).get(r.eval_id)
   const fmt = (n: number | null) => (n ?? 0).toLocaleString('en-US')
 
   return (
     <div style={stack(20)}>
       <PageHeader
-        title={title ?? <span style={{ ...mono, fontWeight: 500 }}>{r.quiz_id}</span>}
+        title={title ?? <span style={{ ...mono, fontWeight: 500 }}>{r.eval_id}</span>}
         subtitle={
           <>
-            <span style={mono}>{r.quiz_id}</span> · {r.category ?? 'Uncategorized'} · {formatRunTime(r.run_timestamp)} ·{' '}
+            <span style={mono}>{r.eval_id}</span> · {r.category ?? 'Uncategorized'} · {formatRunTime(r.run_timestamp)} ·{' '}
             {agentOf(r)} · <span style={mono}>{r.model_name}</span>
           </>
         }

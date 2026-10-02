@@ -3,7 +3,7 @@ version: 1
 # Path A of testing the TPC-H semantic view (agent_quiz_demo.public.tpch_semantic_view --
 # see README.md's Snowflake section): the agent still only has access to the plain
 # query_warehouse (SYSTEM_EXECUTE_SQL) tool -- no new MCP tool, no code changes. It's free
-# to answer either by joining raw tables itself (as it did in example_quiz.yml) or by
+# to answer either by joining raw tables itself (as it did in example_eval.yml) or by
 # querying the semantic view directly (`select * from semantic_view(...)`), which is just
 # SQL text either way, so sql_capture.py already sees it. expected_sources checks *which*
 # path it actually took.
@@ -19,7 +19,7 @@ version: 1
 # Run with (target in ../honest_agent_config.yml):
 #   honest-agent run --target snowflake --select semantic_view
 
-quizzes:
+evals:
   - category: finance
     grading:
       method: extract_match

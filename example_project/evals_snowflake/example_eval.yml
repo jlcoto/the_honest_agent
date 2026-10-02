@@ -1,16 +1,16 @@
 version: 1
 
-# Same two quizzes as ../quizzes/example_quiz.yml, but pointed at a real
+# Same two evals as ../evals/example_eval.yml, but pointed at a real
 # Snowflake account's managed MCP server (`create mcp server` -- see
 # README.md's "Connecting to a real Snowflake account" section) instead of
 # our bundled demo server. Its tool is `query_warehouse` (sql field: `sql`).
 # Data is a byte-identical copy of ../warehouse.duckdb, loaded into Snowflake
-# (see README.md). Same quiz IDs on purpose, so results from all targets
-# land side by side in the same results.duckdb, comparable by quiz_id.
+# (see README.md). Same eval IDs on purpose, so results from all targets
+# land side by side in the same results.duckdb, comparable by eval_id.
 #
 # Run with `honest-agent run --target snowflake` (see ../honest_agent_config.yml).
 
-quizzes:
+evals:
   - category: finance
     grading:
       method: extract_match

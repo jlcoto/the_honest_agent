@@ -16,7 +16,7 @@ Deterministic: `dbgen(sf=...)` is itself fully deterministic for a given
 scale factor (that's the whole point of a benchmark generator -- no random
 seed needed here, unlike a hand-rolled generator). TPC-H's own order dates
 always fall in 1992-01-01..1998-08-02 regardless of when this is actually
-run, which is why the quiz YAML asks about a fixed historical year (1996)
+run, which is why the eval YAML asks about a fixed historical year (1996)
 rather than anything relative to "today".
 
 Run with: uv run python warehouse/seed.py

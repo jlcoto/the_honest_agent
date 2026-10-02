@@ -5,8 +5,8 @@ export interface ResultRow {
   result_id: string
   run_id: string
   run_timestamp: string
-  quiz_id: string
-  quiz_title: string | null // optional `title:` from the quiz YAML
+  eval_id: string
+  eval_title: string | null // optional `title:` from the eval YAML
   prompt: string
   category: string | null
   tags: string[] | null
@@ -36,14 +36,14 @@ export interface ResultRow {
 export interface AgentLogRow {
   result_id: string
   run_id: string
-  quiz_id: string
+  eval_id: string
   agent_trace: string // JSON-encoded turn-by-turn trace
 }
 
 export interface ToolCallRow {
   result_id: string
   run_id: string
-  quiz_id: string
+  eval_id: string
   call_index: number
   tool_name: string
   type: string // "sql" today

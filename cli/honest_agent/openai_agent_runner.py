@@ -1,4 +1,4 @@
-"""An AgentClient that quizzes an OpenAI model (GPT) against a live MCP server --
+"""An AgentClient that evaluates an OpenAI model (GPT) against a live MCP server --
 the same loop as MCPAgentClient (mcp_agent_runner.py), on OpenAI's Chat
 Completions API instead of Anthropic's.
 
@@ -6,7 +6,7 @@ The conversation is sent to OpenAI in its own message format, but the trace it
 returns is recorded in the format MCPAgentClient produces (`tool_use` blocks
 with `input`, `tool_result` blocks linked by `tool_use_id`). sql_capture.py,
 provenance scoring, storage, and the report's trace view all read that one
-format, so none of them needs to know which provider ran the quiz.
+format, so none of them needs to know which provider ran the eval.
 """
 
 from __future__ import annotations

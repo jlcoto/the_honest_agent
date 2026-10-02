@@ -29,14 +29,14 @@ def _values_match(
     requiring an exact match -- for cases like an unrounded raw query result
     (311928357.7805) against a rounded expected_answer (311928357.78), where
     the agent reported the data faithfully and the mismatch is purely a
-    quiz-authoring precision issue, not an error worth failing over.
+    eval-authoring precision issue, not an error worth failing over.
 
     Naming and the absolute/percent split both mirror dbt-expectations'
     `expect_table_aggregation_to_equal_other_table` (`tolerance` /
     `tolerance_percent`), rather than inventing our own convention.
 
     A value counts as matching if it's within *either* tolerance (an OR, not
-    an AND) -- a quiz typically sets only one, but there's no reason to force
+    an AND) -- an eval typically sets only one, but there's no reason to force
     a choice if both happen to be set. `tolerance_percent` is relative to
     `expected`'s magnitude (e.g. 0.01 = within 1% of the expected value), so
     it scales sensibly across very different magnitudes the way a single
@@ -93,7 +93,7 @@ async def grade_extract_match(
     This is the reliable replacement for what the old `exact` method tried
     to do: it tolerates however the agent phrases its answer, but the actual
     pass/fail comparison is still deterministic, not a model's holistic
-    opinion. Only fits quizzes whose `expected_answer` really is a single
+    opinion. Only fits evals whose `expected_answer` really is a single
     literal value (a name, a number, a short phrase) -- for anything where
     correctness itself requires judgment, use `llm_judge` instead.
 

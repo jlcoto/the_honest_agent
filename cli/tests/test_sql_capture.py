@@ -136,7 +136,7 @@ def test_extract_skips_built_in_non_sql_tools():
     assert extract_sql_calls(trace) == []
 
 
-def test_extract_skips_tools_the_quiz_ignores():
+def test_extract_skips_tools_the_eval_ignores():
     trace = _tool_use_trace("find_tables", {"query": "orders"})
 
     assert extract_sql_calls(trace, ignore_tools=["find_tables"]) == []

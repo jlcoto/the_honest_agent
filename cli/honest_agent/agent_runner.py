@@ -13,7 +13,7 @@ class AgentRunResult:
     model_name: str
     latency_ms: int
     # Summed across every turn of the tool-use loop (each turn is its own
-    # `messages.create` call, so a multi-turn quiz genuinely spends tokens
+    # `messages.create` call, so a multi-turn eval genuinely spends tokens
     # more than once) -- not just the final turn's usage.
     input_tokens: int
     output_tokens: int
@@ -42,14 +42,14 @@ def plain_content(content: Any) -> Any:
 
 
 class AgentClient(ABC):
-    """Interface any agent backend must implement to be quizzable.
+    """Interface any agent backend must implement to be evalzable.
 
     `MCPAgentClient` (mcp_agent_runner.py) is currently the only
     implementation -- it sources tools from a live MCP server rather than a
     local stand-in, which is what `honest-agent` needs to test the actual
     agent employees connect to (see mcp_agent_runner.py's module docstring).
     This stays an ABC, rather than `cli.py` depending on `MCPAgentClient`
-    directly, so the quiz loop doesn't need to know which concrete backend
+    directly, so the eval loop doesn't need to know which concrete backend
     it's driving if another one is ever added.
     """
 

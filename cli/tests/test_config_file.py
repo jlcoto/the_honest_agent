@@ -20,17 +20,17 @@ default_target: demo
 targets:
   demo:
     mcp_command: python mcp_server/server.py
-    quizzes_dir: quizzes
+    evals_dir: evals
   motherduck:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN
-    quizzes_dir: quizzes_motherduck
+    evals_dir: evals_motherduck
     max_tool_turns: 10
     ignore_tools: [list_shares]
 """
 
 _RUN_ARGS = [
-    "quizzes_dir",
+    "evals_dir",
     "results_path",
     "model",
     "max_tool_turns",
@@ -63,8 +63,8 @@ def project(tmp_path: Path, monkeypatch) -> Path:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     monkeypatch.chdir(tmp_path)
     (tmp_path / "honest_agent_config.yml").write_text(PROJECT_YML)
-    (tmp_path / "quizzes").mkdir()
-    (tmp_path / "quizzes_motherduck").mkdir()
+    (tmp_path / "evals").mkdir()
+    (tmp_path / "evals_motherduck").mkdir()
     return tmp_path
 
 
@@ -84,7 +84,7 @@ def test_the_default_target_runs_without_any_flags(project, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert run["mcp_command"] == "python mcp_server/server.py"
-    assert run["quizzes_dir"] == project / "quizzes"
+    assert run["evals_dir"] == project / "evals"
     assert run["results_path"] == str(project / "out" / "results.duckdb")
     assert run["model"] == "claude-haiku-4-5"
     assert run["max_tool_turns"] == 5
@@ -99,7 +99,7 @@ def test_a_named_target_brings_its_own_settings(project, monkeypatch):
     assert result.exit_code == 0, result.output
     assert (run["mcp_command"], run["mcp_url"]) == (None, "https://api.motherduck.com/mcp")
     assert run["bearer_token"] == "md-token"
-    assert run["quizzes_dir"] == project / "quizzes_motherduck"
+    assert run["evals_dir"] == project / "evals_motherduck"
     assert run["max_tool_turns"] == 10
     assert run["ignore_tools"] == ["list_shares"]
     assert run["agent_name"] == "motherduck"
@@ -169,7 +169,7 @@ def test_the_file_is_found_from_a_subfolder_and_its_paths_stay_relative_to_it(pr
     result, run = _run(monkeypatch)
 
     assert result.exit_code == 0, result.output
-    assert run["quizzes_dir"] == project / "quizzes"
+    assert run["evals_dir"] == project / "evals"
     assert run["mcp_cwd"] == str(project)
     assert find_config_file(project / "sub") == project / "honest_agent_config.yml"
 

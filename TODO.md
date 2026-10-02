@@ -44,8 +44,8 @@ Lower severity:
 6. **CSV export** (`ui/src/data/derive.ts` `toCsv`) doesn't neutralise
    cells starting with `= + - @`, so an answer can run as a spreadsheet
    formula. Prefix those cells with `'`.
-7. **Slack:** `notify.py` puts quiz ids into the message unescaped, so a
-   quiz file can trigger `<!channel>` or disguise a link. Escape `< > &`.
+7. **Slack:** `notify.py` puts eval ids into the message unescaped, so a
+   eval file can trigger `<!channel>` or disguise a link. Escape `< > &`.
 
 ## High priority: cleanup (review of 2026-10-02)
 
@@ -60,8 +60,8 @@ From a refactoring review; tests and lint were clean. All small unless noted.
 - **Stale docs and comments:** Claude-only wording in now provider-neutral
   code (`agent_runner.py` docstrings, `--max-tool-turns` help, `storage.py`
   token comment, `mcp_agent_runner.py` "MCP backend selected"); references
-  to removed things (the quiz YAML `tools:` key in `sql_capture.py`, the
-  dbt `schema.yml` in `quiz_loader.py`, the old `exact` method and a missing
+  to removed things (the eval YAML `tools:` key in `sql_capture.py`, the
+  dbt `schema.yml` in `eval_loader.py`, the old `exact` method and a missing
   "module-level note" in `grading.py`, a memory file in `provenance.py`);
   `read_agent_logs` claims to return extracted SQL. The semantic-layer
   explanation is repeated four times; keep it in one place.
@@ -113,7 +113,7 @@ they describe someone else's tool contract, not ours:
 1. **Which tool names are semantic-layer calls** -- so their whole structured
    input gets captured as a payload instead of honest-agent looking for a "sql"
    field that doesn't exist. Likely shape: a `provenance.semantic_tools` list
-   in the quiz YAML, alongside the existing `sql_fields`.
+   in the eval YAML, alongside the existing `sql_fields`.
 2. **Which field inside that structured input names the model/metric being
    hit** -- so `score_provenance`'s source-checking has something to compare
    `expected_sources` against. This varies by vendor (MetricFlow's
@@ -138,7 +138,7 @@ column list growing one flag per vendor integrated.
 and its actual schema are in scope -- right now there's nothing concrete to
 design against.
 
-**Candidates to extend quiz coverage to, once picked up:** SLayer
+**Candidates to extend eval coverage to, once picked up:** SLayer
 (https://github.com/MotleyAI/slayer) and the dbt Semantic Layer (MetricFlow).
 Neither has been wired into `example_project` yet -- this is a pointer for
 future work, not a confirmed schema to design against.
@@ -147,7 +147,7 @@ future work, not a confirmed schema to design against.
   actually generates real SQL under the hood, so `type="sql"` capture may
   already mostly work. But its `query` tool only includes the generated SQL
   in the response when the caller passes `show_sql=true` (opt-in per call,
-  not guaranteed to happen unless the quiz prompt or tool description nudges
+  not guaranteed to happen unless the eval prompt or tool description nudges
   the agent to ask for it), and the exact response field name holding that
   SQL isn't documented -- needs confirming against a real response before
   assuming the existing `sql`/`query`/`statement` heuristic (or a
@@ -286,8 +286,8 @@ users can pick what fits their setup.
 
 ## Move `sql_fields` into the config file's targets
 
-Which tool argument holds SQL is a fact about the MCP server, not about a quiz,
+Which tool argument holds SQL is a fact about the MCP server, not about an eval,
 so `provenance.sql_fields` belongs with the target in
-`honest_agent_config.yml` (next to `ignore_tools`), not in each quiz file. Left
-in the quizzes for now: no current server needs it, since honest-agent finds
+`honest_agent_config.yml` (next to `ignore_tools`), not in each eval file. Left
+in the evals for now: no current server needs it, since honest-agent finds
 `sql`/`query`/`statement` arguments by itself. Move it when a real server does.

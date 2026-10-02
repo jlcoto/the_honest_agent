@@ -7,8 +7,8 @@ Python dependencies here are managed with [`uv`](https://docs.astral.sh/uv/);
 `honest-agent` is pulled in as an **editable local path dependency** on `../cli`
 (see `pyproject.toml`'s `[tool.uv.sources]`) rather than published to PyPI.
 
-This demo's example quizzes (`quizzes/`, and `quizzes_motherduck/`,
-`quizzes_snowflake/` for pointing at real warehouses) ask real questions
+This demo's example evals (`evals/`, and `evals_motherduck/`,
+`evals_snowflake/` for pointing at real warehouses) ask real questions
 against a warehouse (`warehouse.duckdb`) seeded from DuckDB's own built-in
 TPC-H generator — a standard multi-table schema (`orders`, `lineitem`,
 `customer`, `part`, `supplier`, `nation`, `region`, ...) with real joins, not
@@ -34,7 +34,7 @@ export ANTHROPIC_API_KEY=...                     # needed for the agent + the ex
 # it's the nearest .env above this folder.
 ```
 
-## Run the quiz end to end
+## Run the eval end to end
 
 ```bash
 uv run honest-agent run
@@ -45,15 +45,15 @@ uv run honest-agent notify --webhook-url https://hooks.slack.com/services/...
 
 `run` takes its settings from `honest_agent_config.yml` (see "The project
 file" below). Its default target, `demo`, starts the bundled MCP server and
-reads the quizzes in `quizzes/`.
+reads the evals in `evals/`.
 
-- `honest-agent run` reads `quizzes/example_quiz.yml`, connects to the MCP
+- `honest-agent run` reads `evals/example_eval.yml`, connects to the MCP
   server, calls Claude with the live `query_warehouse` tool for each prompt,
   grades accuracy (`extract_match`: a cheap extraction call normalizes the
   answer, then compares it exactly against `expected_answer`) and provenance
   — by inspecting the SQL a tool actually ran, *which table* it queried
   (`expected_sources`, optionally narrowed to a specific database/schema via
-  `expected_database`/`expected_schema`) — against each quiz's own
+  `expected_database`/`expected_schema`) — against each eval's own
   thresholds (`grading.min_score` / `provenance.min_score` in the YAML —
   default to 0.8 / 0.7 if omitted), and appends the results into a local
   DuckDB file at `./honest_agent_results/results.duckdb` (created on first
@@ -104,14 +104,14 @@ another DuckDB (anyone's laptop, a scheduled job) can query directly with
 in this project requires it, and if you never run it nothing ever touches
 S3.
 
-## Writing quizzes
+## Writing evals
 
-A quizzes directory holds one or more `*.yml` files. Each has a `quizzes:`
+An evals directory holds one or more `*.yml` files. Each has an `evals:`
 list of category groups, and each group has `tests:`:
 
 ```yaml
 version: 1
-quizzes:
+evals:
   - category: finance
     grading:
       method: extract_match
@@ -138,19 +138,19 @@ quizzes:
   from the title (`Total revenue in 1996` → `total_revenue_in_1996`) and is
   what ties its results together across runs, agents and models. Set an
   explicit `id:` to keep that history when you reword a title; without one,
-  renaming a title starts the quiz over under a new id. The example quizzes
+  renaming a title starts the eval over under a new id. The example evals
   here keep explicit ids for that reason.
-- **The same title or id in different quizzes directories is intended:**
+- **The same title or id in different evals directories is intended:**
   that's how results for the same question line up across agents (e.g.
-  `quizzes_motherduck/` and `quizzes_snowflake/`). Within one directory,
+  `evals_motherduck/` and `evals_snowflake/`). Within one directory,
   ids must be unique, and `honest-agent run` stops with an error naming both
   places if two collide.
-- A plain list of quizzes without groups also works, each quiz carrying all
+- A plain list of evals without groups also works, each eval carrying all
   of its own settings.
 
 ## Choosing a grading method
 
-Each quiz picks exactly one `grading.method` in its YAML entry — there's no
+Each eval picks exactly one `grading.method` in its YAML entry — there's no
 blending or fallback between them (see `honest_agent/grading.py`):
 
 - **`contains`** (default) — a plain string check, no LLM call at all: does
@@ -168,7 +168,7 @@ blending or fallback between them (see `honest_agent/grading.py`):
   literal answer — a number, a name, a short fact. If the expected value
   might legitimately differ slightly (an unrounded raw query result vs. a
   rounded `expected_answer`, e.g. `q_revenue_1996` in
-  `quizzes/example_quiz.yml`), add `tolerance` (an absolute delta) or
+  `evals/example_eval.yml`), add `tolerance` (an absolute delta) or
   `tolerance_percent` (relative to `expected_answer`'s magnitude) so a
   numeric answer within that range still scores 1.0 instead of failing on a
   precision mismatch. One caveat: this relies on the extraction call
@@ -183,7 +183,7 @@ blending or fallback between them (see `honest_agent/grading.py`):
   a judgment call on quality. Also the least deterministic and most
   expensive of the three (a full reasoning call, not just extraction), so
   reach for it only when `contains`/`extract_match` genuinely can't express
-  what "correct" means for that quiz.
+  what "correct" means for that eval.
 
 | If the expected answer is...                          | Use              |
 |---------------------------------------------------------|------------------|
@@ -194,8 +194,8 @@ blending or fallback between them (see `honest_agent/grading.py`):
 ### The judge model
 
 `extract_match` and `llm_judge` call a model to grade. By default that's the
-same model being quizzed (`--model`). Pass `--judge-model` (or set
-`HONEST_AGENT_JUDGE_MODEL`) to grade with a different one, e.g. quiz Sonnet and
+same model being evaluated (`--model`). Pass `--judge-model` (or set
+`HONEST_AGENT_JUDGE_MODEL`) to grade with a different one, e.g. evaluate Sonnet and
 grade with Haiku:
 
 ```bash
@@ -228,7 +228,7 @@ command as everyone else:
 uv run honest-agent run --target motherduck
 ```
 
-Without `--judge-model`, the quiz model also grades. The
+Without `--judge-model`, the eval model also grades. The
 agent runs the same loop either way (same MCP tools, same SQL capture and
 provenance checks), and the report shows GPT runs alongside Claude ones in
 the model menus and Model comparison.
@@ -236,7 +236,7 @@ the model menus and Model comparison.
 ## The config file
 
 `honest_agent_config.yml` holds the project's settings, with one **target**
-per agent being quizzed, like the targets in a dbt profile. It's committed and shared with
+per agent being evaluated, like the targets in a dbt profile. It's committed and shared with
 the team; secrets stay in `.env`, which the file never contains.
 
 ```yaml
@@ -246,16 +246,16 @@ default_target: demo
 targets:
   demo:
     mcp_command: uv run python mcp_server/server.py
-    quizzes_dir: quizzes
+    evals_dir: evals
   motherduck:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN   # names the variable in .env, never the token
-    quizzes_dir: quizzes_motherduck
+    evals_dir: evals_motherduck
     max_tool_turns: 10
 ```
 
-- `honest-agent run` quizzes the `default_target`; `honest-agent run --target
-  motherduck` quizzes another one.
+- `honest-agent run` evaluates the `default_target`; `honest-agent run --target
+  motherduck` evaluates another one.
 - honest-agent finds the file in the folder you run it from, or the nearest
   parent folder, like `.env`. `--config-file PATH` (before the command) or
   `HONEST_AGENT_CONFIG_FILE` points to another one. Without a file,
@@ -269,7 +269,7 @@ targets:
 | `model`, `judge_model`, `max_tool_turns` | top level, or per target | `--model`, `--judge-model`, `--max-tool-turns` |
 | `mcp_command` or `mcp_url` (one of them) | target | `--mcp-command`, `--mcp-url` |
 | `bearer_token_env`: the variable holding the server's token | target | `--mcp-bearer-token` |
-| `quizzes_dir` | target | `--quizzes-dir` |
+| `evals_dir` | target | `--evals-dir` |
 | `agent_name`: defaults to the target's name | target | `--agent-name` |
 | `ignore_tools`: tools whose `sql`/`query`/`statement` argument isn't SQL | target | none |
 
@@ -294,11 +294,11 @@ one vendor isn't sent to another.
 ## Pointing at a real MCP server instead of the bundled demo one
 
 Add a target with the server's `mcp_url` (and `bearer_token_env`, if it
-requires auth) or `mcp_command`, and rewrite its quizzes' `expected_sources`
+requires auth) or `mcp_command`, and rewrite its evals' `expected_sources`
 to match that server's actual table/model names.
 
 honest-agent finds the SQL by itself in any tool argument named `sql`,
-`query` or `statement`. Two settings cover the rare exceptions: the quiz's
+`query` or `statement`. Two settings cover the rare exceptions: the eval's
 `provenance.sql_fields` names the argument for a tool that keeps its SQL
 somewhere else, and the target's `ignore_tools` lists tools whose
 `query`-style argument isn't SQL (a search term, say). MotherDuck's
@@ -307,7 +307,7 @@ somewhere else, and the target's `ignore_tools` lists tools whose
 
 ### Naming the agent
 
-Every result records which agent was quizzed, so the report can filter and
+Every result records which agent was evaluated, so the report can filter and
 compare by agent.
 
 - **With a target:** the target's name (`demo`, `motherduck`, ...), or its
@@ -315,7 +315,7 @@ compare by agent.
 - **Without a config file:** the name the MCP server reports about itself
   when it connects, e.g. `agent_quiz_demo` for the demo server. Pass
   `--agent-name` to choose your own.
-- `honest-agent run` prints the name it used (`Quizzing agent: ...`).
+- `honest-agent run` prints the name it used (`Evaluating agent: ...`).
 - **Labels must match exactly to group together.** Results stored before
   targets existed may carry the server's own name (e.g.
   `mcp-server-motherduck`) and show up as a separate agent in the report.
@@ -342,9 +342,9 @@ uv run honest-agent run --target motherduck
   and tools that create and delete dives, flights and guides, so an agent
   under test could change or delete things in your account with a
   read/write token.
-- **Expect more tokens per quiz.** The server describes 45 tools to the model
+- **Expect more tokens per eval.** The server describes 45 tools to the model
   on every call, and the agent explores (databases, tables, columns) before
-  it queries: about 75k–140k input tokens per quiz, against about 7k with the
+  it queries: about 75k–140k input tokens per eval, against about 7k with the
   demo server. That's also why the target sets `max_tool_turns: 10`.
 
 MotherDuck also publishes a local server (`uvx mcp-server-motherduck`). To

@@ -19,7 +19,7 @@ UI_DIR = Path(__file__).parent / "report_ui"
 
 
 def build_report_data(results_path: str) -> dict:
-    results = sorted(read_all_results(results_path), key=lambda r: (r["run_timestamp"], r["quiz_id"]))
+    results = sorted(read_all_results(results_path), key=lambda r: (r["run_timestamp"], r["eval_id"]))
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "results": results,

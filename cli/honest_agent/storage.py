@@ -1,12 +1,12 @@
-"""Reads and writes quiz results in a local DuckDB file, with an optional
+"""Reads and writes eval results in a local DuckDB file, with an optional
 Parquet export to S3 built on DuckDB's own `httpfs` extension.
 
 Three tables, kept deliberately separate:
 
-- `results`: one row per graded quiz, the cheap-to-scan summary everything
+- `results`: one row per graded eval, the cheap-to-scan summary everything
   else (report/notify/thresholds) reads day to day -- whether the agent got
   it right, scores, thresholds, timing.
-- `agent_logs`: one row per graded quiz, joined to `results` by `result_id`,
+- `agent_logs`: one row per graded eval, joined to `results` by `result_id`,
   for people who want to dig into *why* -- the agent's full turn-by-turn
   trace. Nothing reads this by default; it's there to be explored on demand
   (see `read_agent_logs` / `honest-agent logs`).
@@ -15,9 +15,9 @@ Three tables, kept deliberately separate:
   matching `provenance.sql_fields`/the `sql`/`query`/`statement` heuristic --
   see sql_capture.py) leaves zero rows here, even though it's still recorded
   in `results.tools_used` and the full `agent_logs.agent_trace`. One row per
-  *SQL* call that produced something worth auditing (a quiz can produce
+  *SQL* call that produced something worth auditing (an eval can produce
   zero, one, or many), normalized so it's directly queryable -- "which
-  quizzes touched `fct_orders`", "how many calls did run X issue" -- without
+  evals touched `fct_orders`", "how many calls did run X issue" -- without
   unnesting a list column or parsing `agent_logs.agent_trace`'s JSON. The
   `type` column exists for a future `"semantic"` call kind (structured
   semantic-layer calls like `{"metric": "revenue", "grain": "daily"}` that
@@ -27,7 +27,7 @@ Three tables, kept deliberately separate:
   until a real semantic-layer tool is actually in scope, not an oversight.
   `payload` is JSON for both, so the column doesn't need reshaping once that
   lands: `{"sql": "..."}` today, `{"metric": ..., "grain": ...}` later.
-  Carries `run_id`/`quiz_id` alongside `result_id` (denormalized on purpose,
+  Carries `run_id`/`eval_id` alongside `result_id` (denormalized on purpose,
   same reasoning as `agent_logs`: convenience filtering without a join).
 
 The local .duckdb file is always the live, queryable store -- DuckDB (like
@@ -42,8 +42,8 @@ calls that automatically; it's an explicit, optional step (`honest-agent
 export`). It exports `results` only -- `agent_logs`/`tool_calls` can be
 large and are meant for local/ad-hoc exploration, not the shared dashboard.
 
-There's no separate "quiz definitions" table: every result row carries its
-own copy of the quiz fields it was graded against (prompt, expected_answer,
+There's no separate "eval definitions" table: every result row carries its
+own copy of the eval fields it was graded against (prompt, expected_answer,
 thresholds, ...), since there's no live warehouse to join against and the
 data volume here is trivial.
 """
@@ -54,15 +54,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-# One row per graded quiz result. List-valued fields use DuckDB's native
+# One row per graded eval result. List-valued fields use DuckDB's native
 # LIST type (VARCHAR[]) rather than JSON-encoded strings, since DuckDB's
 # Python API accepts/returns Python lists for those columns directly.
 _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("result_id", "VARCHAR"),
     ("run_id", "VARCHAR"),
     ("run_timestamp", "VARCHAR"),
-    ("quiz_id", "VARCHAR"),
-    ("quiz_title", "VARCHAR"),  # optional `title:` from the quiz YAML; NULL when not set
+    ("eval_id", "VARCHAR"),
+    ("eval_title", "VARCHAR"),  # optional `title:` from the eval YAML; NULL when not set
     ("prompt", "VARCHAR"),
     ("category", "VARCHAR"),
     ("tags", "VARCHAR[]"),
@@ -82,14 +82,14 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("provenance_min_score", "DOUBLE"),
     ("model_name", "VARCHAR"),
     ("agent_backend", "VARCHAR"),  # always "mcp" today; kept for a possible future backend
-    # Which agent was quizzed: `run --agent-name`, else the name the MCP server
+    # Which agent was evaluated: `run --agent-name`, else the name the MCP server
     # reports at connect time. NULL for rows written before this column existed.
     ("agent_name", "VARCHAR"),
     ("latency_ms", "INTEGER"),
     # Two cost centers, kept separate rather than one combined total: the
     # agent's own tool-use loop (one or more `messages.create` calls) vs. the
     # grading call (extract_match/llm_judge; zero for contains, which makes
-    # no LLM call) -- conflating them would hide whether a quiz is expensive
+    # no LLM call) -- conflating them would hide whether an eval is expensive
     # because the agent is chatty/looping or because grading itself is.
     # Input/output are split too since Anthropic prices them differently.
     ("agent_input_tokens", "INTEGER"),
@@ -103,7 +103,7 @@ _RESULTS_COLUMN_NAMES = [name for name, _ in _RESULTS_COLUMNS]
 _AGENT_LOGS_COLUMNS: list[tuple[str, str]] = [
     ("result_id", "VARCHAR"),
     ("run_id", "VARCHAR"),
-    ("quiz_id", "VARCHAR"),
+    ("eval_id", "VARCHAR"),
     # JSON-encoded copy of the agent's full turn-by-turn trace (text output,
     # tool_use calls, tool_result responses) -- the closest thing to "the
     # agent's reasoning" we can capture without a hidden extended-thinking
@@ -116,7 +116,7 @@ _AGENT_LOGS_COLUMN_NAMES = [name for name, _ in _AGENT_LOGS_COLUMNS]
 # One row per auditable SQL call captured from the trace (see
 # sql_capture.py) -- despite the table name, only `type="sql"` is ever
 # written today; a tool call with no SQL-shaped field anywhere contributes
-# zero rows here. A single graded quiz can contribute zero, one, or many
+# zero rows here. A single graded eval can contribute zero, one, or many
 # rows. `payload` is JSON, shaped according to `type` -- e.g. {"sql": "..."}
 # for type="sql" -- so a future type="semantic" for structured
 # semantic-layer args (not built yet -- see module docstring) won't need a
@@ -124,8 +124,8 @@ _AGENT_LOGS_COLUMN_NAMES = [name for name, _ in _AGENT_LOGS_COLUMNS]
 _TOOL_CALLS_COLUMNS: list[tuple[str, str]] = [
     ("result_id", "VARCHAR"),
     ("run_id", "VARCHAR"),
-    ("quiz_id", "VARCHAR"),
-    ("call_index", "INTEGER"),  # 0-based order the calls happened in, within this quiz
+    ("eval_id", "VARCHAR"),
+    ("call_index", "INTEGER"),  # 0-based order the calls happened in, within this eval
     ("tool_name", "VARCHAR"),
     ("type", "VARCHAR"),  # "sql" today; "semantic" once that capture exists
     ("payload", "VARCHAR"),  # JSON, shape depends on `type`
@@ -145,11 +145,31 @@ def make_output_dir(path: Path) -> None:
     (path / ".gitignore").write_text("# Created by honest-agent: keeps these generated files out of git.\n*\n")
 
 
+# Results files written before "quiz" was renamed to "eval" (2026-10-02) have the old
+# column names. They're renamed on open, so reads and writes see one schema.
+_RENAMED_COLUMNS = {
+    "results": {"quiz_id": "eval_id", "quiz_title": "eval_title"},
+    "agent_logs": {"quiz_id": "eval_id"},
+    "tool_calls": {"quiz_id": "eval_id"},
+}
+
+
 def _connect(results_path: str):
     import duckdb
 
     make_output_dir(Path(results_path).parent)
-    return duckdb.connect(results_path)
+    con = duckdb.connect(results_path)
+    _rename_old_columns(con)
+    return con
+
+
+def _rename_old_columns(con) -> None:
+    for table, renames in _RENAMED_COLUMNS.items():
+        rows = con.execute("select column_name from information_schema.columns where table_name = ?", [table])
+        existing = {row[0] for row in rows.fetchall()}
+        for old, new in renames.items():
+            if old in existing and new not in existing:
+                con.execute(f"alter table {table} rename column {old} to {new}")
 
 
 def _ensure_schema(con) -> None:
@@ -173,14 +193,14 @@ def _table_exists(con, table_name: str) -> bool:
 
 
 def write_run_results(results_path: str, run_id: str, rows: list[dict[str, Any]]) -> str:
-    """Writes every graded quiz result from one `honest-agent run` invocation.
+    """Writes every graded eval result from one `honest-agent run` invocation.
 
     Each row in `rows` is expected to carry the union of `results` and
     `agent_logs` fields (result_id, scores, ..., agent_trace), plus an
     optional `sql_calls` key -- a list of `{"tool_name", "sql"}` dicts (see
     sql_capture.extract_sql_calls) that gets expanded into zero or more
     `tool_calls` rows (each written as `type="sql"`, `payload={"sql": ...}`
-    JSON-encoded). The CLI builds one flat dict per quiz; this function is
+    JSON-encoded). The CLI builds one flat dict per eval; this function is
     the only place that knows how to split/expand it across all three
     tables. Creates the local DuckDB file (and its parent directory) if this
     is the first run. Returns `results_path`, for logging.
@@ -204,7 +224,7 @@ def write_run_results(results_path: str, run_id: str, rows: list[dict[str, Any]]
                 [
                     row.get("result_id"),
                     row.get("run_id"),
-                    row.get("quiz_id"),
+                    row.get("eval_id"),
                     call_index,
                     call.get("tool_name"),
                     "sql",
@@ -228,7 +248,7 @@ def write_run_results(results_path: str, run_id: str, rows: list[dict[str, Any]]
 def read_all_results(results_path: str) -> list[dict[str, Any]]:
     """Reads every stored `results` row across every run. Returns [] if
     nothing's been written yet, rather than raising -- a fresh project that
-    hasn't run a quiz yet shouldn't error on `report`/`notify`.
+    hasn't run an eval yet shouldn't error on `report`/`notify`.
     """
     if not Path(results_path).exists():
         return []
@@ -253,9 +273,9 @@ def read_latest_run_results(results_path: str) -> list[dict[str, Any]]:
     return [r for r in all_rows if r["run_id"] == latest_run_id]
 
 
-def read_agent_logs(results_path: str, run_id: str | None = None, quiz_id: str | None = None) -> list[dict[str, Any]]:
+def read_agent_logs(results_path: str, run_id: str | None = None, eval_id: str | None = None) -> list[dict[str, Any]]:
     """Reads `agent_logs` rows (trace + extracted SQL) for exploration --
-    optionally filtered to one run and/or one quiz. Returns [] if nothing's
+    optionally filtered to one run and/or one eval. Returns [] if nothing's
     been written yet.
     """
     if not Path(results_path).exists():
@@ -269,9 +289,9 @@ def read_agent_logs(results_path: str, run_id: str | None = None, quiz_id: str |
         if run_id is not None:
             clauses.append("run_id = ?")
             params.append(run_id)
-        if quiz_id is not None:
-            clauses.append("quiz_id = ?")
-            params.append(quiz_id)
+        if eval_id is not None:
+            clauses.append("eval_id = ?")
+            params.append(eval_id)
         where_sql = f" where {' and '.join(clauses)}" if clauses else ""
         cursor = con.execute(f"select * from agent_logs{where_sql}", params)
         columns = [d[0] for d in cursor.description]
@@ -283,11 +303,11 @@ def read_agent_logs(results_path: str, run_id: str | None = None, quiz_id: str |
 def read_tool_calls(
     results_path: str,
     run_id: str | None = None,
-    quiz_id: str | None = None,
+    eval_id: str | None = None,
     result_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Reads `tool_calls` rows, optionally filtered by run/quiz/result,
-    ordered so each quiz's calls come back in the order they happened.
+    """Reads `tool_calls` rows, optionally filtered by run/eval/result,
+    ordered so each eval's calls come back in the order they happened.
     Returns [] if nothing's been written yet.
     """
     if not Path(results_path).exists():
@@ -301,9 +321,9 @@ def read_tool_calls(
         if run_id is not None:
             clauses.append("run_id = ?")
             params.append(run_id)
-        if quiz_id is not None:
-            clauses.append("quiz_id = ?")
-            params.append(quiz_id)
+        if eval_id is not None:
+            clauses.append("eval_id = ?")
+            params.append(eval_id)
         if result_id is not None:
             clauses.append("result_id = ?")
             params.append(result_id)

@@ -1,4 +1,4 @@
-# honest-agent settings: one target per agent being quizzed, like the targets in a dbt profile.
+# honest-agent settings: one target per agent being evaluated, like the targets in a dbt profile.
 # Secrets never go here: a target names the environment variable holding its token
 # (bearer_token_env), and the token itself stays in .env.
 #
@@ -15,14 +15,14 @@ targets:
   # The bundled demo server: no account needed.
   demo:
     mcp_command: uv run python mcp_server/server.py
-    quizzes_dir: quizzes
+    evals_dir: evals
 
   # MotherDuck's hosted MCP server. Use a read-only token: the server also offers tools
   # that write to and delete from your account.
   motherduck:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN
-    quizzes_dir: quizzes_motherduck
+    evals_dir: evals_motherduck
     # The agent explores (databases, tables, columns) before it queries, so 5 turns is
     # too few here.
     max_tool_turns: 10
@@ -31,4 +31,4 @@ targets:
   snowflake:
     mcp_url: https://<account_identifier>.snowflakecomputing.com/api/v2/databases/agent_quiz_demo/schemas/public/mcp-servers/agent_quiz_mcp
     bearer_token_env: SNOWFLAKE_MCP_TOKEN
-    quizzes_dir: quizzes_snowflake
+    evals_dir: evals_snowflake

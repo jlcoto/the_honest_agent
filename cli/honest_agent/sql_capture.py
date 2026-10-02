@@ -2,11 +2,11 @@
 (written there as `type="sql"` rows -- see storage.py).
 
 Tool input schemas aren't something honest-agent controls: a locally-defined
-tool's schema is whatever the quiz YAML's author wrote, and an MCP tool's
+tool's schema is whatever the eval YAML's author wrote, and an MCP tool's
 schema is whatever that MCP server's author wrote -- there's no field name
-guaranteed to hold SQL in either case. So extraction is two-tier: a quiz can
+guaranteed to hold SQL in either case. So extraction is two-tier: an eval can
 declare exactly which field to read per tool name (`provenance.sql_fields` in
-the quiz YAML, loaded into `QuizDefinition.sql_fields`), and any tool call
+the eval YAML, loaded into `EvalDefinition.sql_fields`), and any tool call
 not covered by that falls back to a best-effort scan for common field names.
 Tools whose matching field holds something else (a search term, say) are
 skipped: a built-in list (`_NON_SQL_TOOLS`) plus any the config file's target
@@ -40,7 +40,7 @@ contract, not ours -- there's no way to auto-detect either:
   1. Which tool names are semantic-layer calls (so their whole structured
      input/output gets captured as a payload, instead of honest-agent looking
      for a "sql"/"query"/"statement" field that doesn't exist) -- e.g. a
-     `provenance.semantic_tools` list in the quiz YAML, alongside
+     `provenance.semantic_tools` list in the eval YAML, alongside
      `sql_fields`.
   2. Which field inside that structured input/output actually names the
      model/metric being hit, so `score_provenance`'s source-checking has

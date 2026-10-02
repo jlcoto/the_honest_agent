@@ -58,34 +58,34 @@ export function agentsOf(results: ResultRow[]): string[] {
 
 export const modelsOf = (results: ResultRow[]) => [...new Set(results.map((r) => r.model_name))].sort()
 
-/** Each quiz's most recent title, so runs from before a title was added still show it. */
-export function quizTitles(results: ResultRow[]): Map<string, string> {
+/** Each eval's most recent title, so runs from before a title was added still show it. */
+export function evalTitles(results: ResultRow[]): Map<string, string> {
   const titles = new Map<string, string>()
   const byTime = [...results].sort((a, b) => a.run_timestamp.localeCompare(b.run_timestamp))
-  for (const r of byTime) if (r.quiz_title) titles.set(r.quiz_id, r.quiz_title)
+  for (const r of byTime) if (r.eval_title) titles.set(r.eval_id, r.eval_title)
   return titles
 }
 
-export interface Quiz {
-  quiz_id: string
+export interface Eval {
+  eval_id: string
   category: string
   title: string | null
 }
 
-/** Quizzes in first-seen order, with their category and title. */
-export function quizzesOf(results: ResultRow[], titles: Map<string, string>): Quiz[] {
+/** Evals in first-seen order, with their category and title. */
+export function evalsOf(results: ResultRow[], titles: Map<string, string>): Eval[] {
   const seen = new Map<string, string>()
-  for (const r of results) if (!seen.has(r.quiz_id)) seen.set(r.quiz_id, r.category ?? 'Uncategorized')
-  return [...seen.entries()].map(([quiz_id, category]) => ({ quiz_id, category, title: titles.get(quiz_id) ?? null }))
+  for (const r of results) if (!seen.has(r.eval_id)) seen.set(r.eval_id, r.category ?? 'Uncategorized')
+  return [...seen.entries()].map(([eval_id, category]) => ({ eval_id, category, title: titles.get(eval_id) ?? null }))
 }
 
-/** Heatmap row for a quiz: the title as label with the quiz_id underneath, or the quiz_id alone. */
-export function quizHeatRow(q: Quiz, accuracy: (number | null)[], provenance: (number | null)[]) {
+/** Heatmap row for an eval: the title as label with the eval_id underneath, or the eval_id alone. */
+export function evalHeatRow(q: Eval, accuracy: (number | null)[], provenance: (number | null)[]) {
   return {
-    label: q.title ?? q.quiz_id,
-    sublabel: q.title ? q.quiz_id : undefined,
+    label: q.title ?? q.eval_id,
+    sublabel: q.title ? q.eval_id : undefined,
     category: q.category,
-    quiz_id: q.quiz_id,
+    eval_id: q.eval_id,
     accuracy,
     provenance,
   }

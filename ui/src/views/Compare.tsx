@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { agentOf, agentsOf, bucketCounts, mean, modelsOf, quizHeatRow, quizTitles, quizzesOf, runsOf } from '../data/derive'
+import { agentOf, agentsOf, bucketCounts, mean, modelsOf, evalHeatRow, evalTitles, evalsOf, runsOf } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { AccuracyBar, Card, DataTable, Heatmap, ScoreCell, Select, Tabs } from '../ds'
 import { navigate } from '../router'
@@ -44,15 +44,15 @@ export function Compare({ data }: { data: ReportData }) {
   // One agent at a time: models are only comparable on the same agent. Defaults to the latest run's.
   const [agent, setAgent] = useState(() => runsOf(data.results).at(-1)?.agent ?? '')
 
-  const { rows, quizzes, current } = useMemo(() => {
+  const { rows, evals, current } = useMemo(() => {
     const results = data.results.filter((r) => agentOf(r) === agent)
     const runs = runsOf(results)
     const current = runs.length ? runs[runs.length - 1].model : null
-    // Each model's most recent result per quiz (runs are sorted oldest first).
+    // Each model's most recent result per eval (runs are sorted oldest first).
     const latestByModel = new Map<string, Map<string, ResultRow>>()
     for (const run of runs) {
       const latest = latestByModel.get(run.model) ?? new Map<string, ResultRow>()
-      for (const r of run.results) latest.set(r.quiz_id, r)
+      for (const r of run.results) latest.set(r.eval_id, r)
       latestByModel.set(run.model, latest)
     }
     const base = current ? latestByModel.get(current)! : new Map<string, ResultRow>()
@@ -75,15 +75,15 @@ export function Compare({ data }: { data: ReportData }) {
         dProvenance: sharedDelta('provenance_score'),
       }
     })
-    return { rows, quizzes: quizzesOf(results, quizTitles(data.results)), current }
+    return { rows, evals: evalsOf(results, evalTitles(data.results)), current }
   }, [data, agent])
 
 
-  const heatRows = quizzes.map((q) =>
-    quizHeatRow(
+  const heatRows = evals.map((q) =>
+    evalHeatRow(
       q,
-      rows.map((m) => m.latest.get(q.quiz_id)?.accuracy_score ?? null),
-      rows.map((m) => m.latest.get(q.quiz_id)?.provenance_score ?? null),
+      rows.map((m) => m.latest.get(q.eval_id)?.accuracy_score ?? null),
+      rows.map((m) => m.latest.get(q.eval_id)?.provenance_score ?? null),
     ),
   )
 
@@ -91,7 +91,7 @@ export function Compare({ data }: { data: ReportData }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="Model comparison"
-        subtitle={`${agent} · ${rows.length} models · each model's latest result per quiz`}
+        subtitle={`${agent} · ${rows.length} models · each model's latest result per eval`}
       >
         <Select size="sm" icon="bot" options={agents} value={agent} onChange={setAgent} />
       </PageHeader>
@@ -105,7 +105,7 @@ export function Compare({ data }: { data: ReportData }) {
         <>
           <Card
             title="Results by model"
-            subtitle={`Differences in points vs the current model, ${current}, on the quizzes both ran`}
+            subtitle={`Differences in points vs the current model, ${current}, on the evals both ran`}
           >
             <DataTable
               rowKey="model"
@@ -125,10 +125,10 @@ export function Compare({ data }: { data: ReportData }) {
                 },
                 {
                   key: 'coverage',
-                  label: 'Quizzes',
+                  label: 'Evals',
                   render: (r: ModelRow) => (
                     <span style={{ font: '400 13px var(--font-mono)', color: 'var(--fg-2)', whiteSpace: 'nowrap' }}>
-                      {r.latest.size} of {quizzes.length} · {r.runs} {r.runs === 1 ? 'run' : 'runs'}
+                      {r.latest.size} of {evals.length} · {r.runs} {r.runs === 1 ? 'run' : 'runs'}
                     </span>
                   ),
                 },
@@ -165,23 +165,23 @@ export function Compare({ data }: { data: ReportData }) {
           </Card>
           <Card
             title="Scores by model"
-            subtitle="Grey cells: that model never ran the quiz · click a cell to see the answer"
+            subtitle="Grey cells: that model never ran the eval · click a cell to see the answer"
             actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
           >
             <Heatmap
               metric={metric}
               showToggle={false}
               showSummary={false}
-              rowHeader="Quiz"
+              rowHeader="Eval"
               rowLabelWidth={360}
               groupBy="category"
-              defaultExpanded={[...new Set(quizzes.map((q) => q.category))]}
+              defaultExpanded={[...new Set(evals.map((q) => q.category))]}
               rows={heatRows}
               columns={rows.map((m) => m.model)}
               cellWidth={56}
               onCellClick={(row, column) => {
-                const quizId = (row as ReturnType<typeof quizHeatRow>).quiz_id
-                const result = rows.find((m) => m.model === column)?.latest.get(quizId)
+                const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id
+                const result = rows.find((m) => m.model === column)?.latest.get(evalId)
                 if (result) navigate({ name: 'result', resultId: result.result_id })
               }}
             />

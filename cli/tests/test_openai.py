@@ -123,10 +123,10 @@ def _invoke_run(monkeypatch, args, env, captured=None):
 
     monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
     with CliRunner().isolated_filesystem():
-        Path("quizzes").mkdir()
+        Path("evals").mkdir()
         return CliRunner().invoke(
             main,
-            ["run", "--quizzes-dir", "quizzes", "--mcp-command", "python server.py", *args],
+            ["run", "--evals-dir", "evals", "--mcp-command", "python server.py", *args],
             env={
                 "ANTHROPIC_API_KEY": "",
                 "OPENAI_API_KEY": "",
