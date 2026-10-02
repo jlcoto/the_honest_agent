@@ -9,7 +9,7 @@ from pathlib import Path
 
 import click
 from click.core import ParameterSource
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from . import notify as notify_mod
 from . import report as report_mod
@@ -23,10 +23,6 @@ from .sql_capture import extract_sql_calls
 from .storage import export_to_s3_parquet, read_agent_logs, read_all_results, read_tool_calls, write_run_results
 from .thresholds import failing_rows
 
-# picks up a .env from the cwd or any parent directory (e.g. the repo root's), if
-# one exists -- never overrides variables already set in the environment.
-load_dotenv()
-
 DEFAULT_RESULTS_PATH = "./honest_agent_results/results.duckdb"
 _RESULTS_PATH_HELP = "Local DuckDB file where results are stored (created on first `run`)."
 DEFAULT_REPORT_DIR = "honest_agent_report"
@@ -34,8 +30,19 @@ _REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
 
 
 @click.group()
-def main():
+@click.option(
+    "--env-file",
+    envvar="HONEST_AGENT_ENV_FILE",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Load settings and API keys from this file instead of the .env found from the current directory "
+    "(or its parents). Variables already set in your shell take precedence.",
+)
+def main(env_file: str | None):
     """honest-agent: run LLM quizzes against an agent, grade them, and store the results."""
+    # usecwd: look from where the command runs, not from where honest-agent is installed --
+    # otherwise a tool or editable install would find some other project's .env, or none.
+    load_dotenv(env_file or find_dotenv(usecwd=True))
 
 
 async def _quiz_loop(

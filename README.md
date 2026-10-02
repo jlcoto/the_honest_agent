@@ -37,7 +37,7 @@ cd example_project
 uv python install 3.11                                       # one-time; honest-agent needs Python >=3.10
 uv sync --python 3.11                                         # installs honest-agent, editable, from ../cli
 uv run python warehouse/seed.py                               # seeds warehouse.duckdb from DuckDB's TPC-H generator
-export ANTHROPIC_API_KEY=...                                 # or put it in a .env at the repo root -- auto-loaded
+export ANTHROPIC_API_KEY=...                                 # or put it in a .env here or in a parent folder -- auto-loaded
 uv run honest-agent run --quizzes-dir quizzes \
   --mcp-command "$(pwd)/.venv/bin/python mcp_server/server.py"
 uv run honest-agent report                                     # writes the web report to honest_agent_report/

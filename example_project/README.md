@@ -30,8 +30,8 @@ uv sync --python 3.11                            # installs honest-agent, editab
 uv run python warehouse/seed.py                  # seeds warehouse.duckdb from DuckDB's TPC-H generator
 export ANTHROPIC_API_KEY=...                     # needed for the agent + the extract_match grader
 # or put it (and SLACK_WEBHOOK_URL / MCP_BEARER_TOKEN / AWS_* as needed) in a
-# .env at the repo root -- auto-loaded on every `honest-agent` command, no
-# export/--env-file needed.
+# .env at the repo root -- auto-loaded on every `honest-agent` command, since
+# it's the nearest .env above this folder.
 ```
 
 ## Run the quiz end to end
@@ -273,8 +273,14 @@ compare by agent.
 
 ### `.env` and choosing the MCP server
 
-`.env` is loaded automatically, so `MCP_URL`/`MCP_BEARER_TOKEN` there (e.g.
-for Snowflake) apply to every run. A flag typed on the command line wins
+honest-agent loads the `.env` in the folder you run it from, or the nearest
+one in a parent folder. To use a different file, pass `--env-file PATH`
+(before the command, e.g. `honest-agent --env-file .env.snowflake run ...`)
+or set `HONEST_AGENT_ENV_FILE`; a path that doesn't exist is an error.
+Variables already set in your shell always win over the file.
+
+Whatever `.env` sets applies to every run, so `MCP_URL`/`MCP_BEARER_TOKEN`
+there (e.g. for Snowflake) are used unless overridden. A flag typed on the command line wins
 over a value that only comes from the environment: `--mcp-command ...` runs
 the local server even with `MCP_URL` in `.env`, and `--mcp-url ...` likewise
 overrides `MCP_COMMAND`. Passing both `--mcp-command` and `--mcp-url` as flags

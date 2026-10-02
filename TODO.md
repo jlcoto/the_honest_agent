@@ -31,24 +31,20 @@ Fix first:
    use structured output instead of the regex, and recommend
    `--judge-model` in the docs. (`extract_match` is less exposed: its final
    comparison is done in code.)
-4. **`.env` is found from the package's folder, not the working
-   directory.** `load_dotenv()` without `usecwd=True` searches upward from
-   `cli.py`, so with an editable install this repo's `.env` applies in every
-   project. Use `load_dotenv(find_dotenv(usecwd=True))`.
 
 Lower severity:
 
-5. **`serve`** has no Host-header check (DNS rebinding can read
+4. **`serve`** has no Host-header check (DNS rebinding can read
    `report.json`) and lists directories; `serve --out .` would expose
    `.env`. Check Host, disable listings, refuse folders without the report
    marker from item 2.
-6. **`honest-agent logs`** prints `agent_answer` and tool payloads raw, so
+5. **`honest-agent logs`** prints `agent_answer` and tool payloads raw, so
    model/tool output can inject terminal escape sequences (OSC 52 clipboard
    writes, disguised links). Strip control characters before printing.
-7. **CSV export** (`ui/src/data/derive.ts` `toCsv`) doesn't neutralise
+6. **CSV export** (`ui/src/data/derive.ts` `toCsv`) doesn't neutralise
    cells starting with `= + - @`, so an answer can run as a spreadsheet
    formula. Prefix those cells with `'`.
-8. **Slack:** `notify.py` puts quiz ids into the message unescaped, so a
+7. **Slack:** `notify.py` puts quiz ids into the message unescaped, so a
    quiz file can trigger `<!channel>` or disguise a link. Escape `< > &`.
 
 ## High priority: cleanup (review of 2026-10-02)
