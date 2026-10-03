@@ -58,58 +58,58 @@ from typing import Any
 # LIST type (VARCHAR[]) rather than JSON-encoded strings, since DuckDB's
 # Python API accepts/returns Python lists for those columns directly.
 _RESULTS_COLUMNS: list[tuple[str, str]] = [
-    ("result_id", "VARCHAR"),
-    ("run_id", "VARCHAR"),
-    ("run_timestamp", "VARCHAR"),
-    ("eval_id", "VARCHAR"),
-    ("eval_title", "VARCHAR"),  # optional `title:` from the eval YAML; NULL when not set
-    ("prompt", "VARCHAR"),
-    ("category", "VARCHAR"),
-    ("tags", "VARCHAR[]"),
-    ("expected_answer", "VARCHAR"),
-    ("agent_answer", "VARCHAR"),
-    ("tools_used", "VARCHAR[]"),
-    ("accuracy_score", "DOUBLE"),
-    ("accuracy_method", "VARCHAR"),
+    ("result_id", "varchar"),
+    ("run_id", "varchar"),
+    ("run_timestamp", "varchar"),
+    ("eval_id", "varchar"),
+    ("eval_title", "varchar"),  # optional `title:` from the eval YAML; NULL when not set
+    ("prompt", "varchar"),
+    ("category", "varchar"),
+    ("tags", "varchar[]"),
+    ("expected_answer", "varchar"),
+    ("agent_answer", "varchar"),
+    ("tools_used", "varchar[]"),
+    ("accuracy_score", "double"),
+    ("accuracy_method", "varchar"),
     # Model that graded the answer (extract_match/llm_judge); NULL for contains, which uses none.
-    ("grading_model", "VARCHAR"),
-    ("accuracy_rationale", "VARCHAR"),
-    ("accuracy_min_score", "DOUBLE"),
-    ("provenance_score", "DOUBLE"),
-    ("expected_sources", "VARCHAR[]"),
-    ("expected_database", "VARCHAR"),
-    ("expected_schema", "VARCHAR"),
-    ("provenance_min_score", "DOUBLE"),
-    ("model_name", "VARCHAR"),
-    ("agent_backend", "VARCHAR"),  # always "mcp" today; kept for a possible future backend
+    ("grading_model", "varchar"),
+    ("accuracy_rationale", "varchar"),
+    ("accuracy_min_score", "double"),
+    ("provenance_score", "double"),
+    ("expected_sources", "varchar[]"),
+    ("expected_database", "varchar"),
+    ("expected_schema", "varchar"),
+    ("provenance_min_score", "double"),
+    ("model_name", "varchar"),
+    ("agent_backend", "varchar"),  # always "mcp" today; kept for a possible future backend
     # Which agent was evaluated: `run --agent-name`, else the name the MCP server
     # reports at connect time. NULL for rows written before this column existed.
-    ("agent_name", "VARCHAR"),
-    ("latency_ms", "INTEGER"),
+    ("agent_name", "varchar"),
+    ("latency_ms", "integer"),
     # Two cost centers, kept separate rather than one combined total: the
     # agent's own tool-use loop (one or more `messages.create` calls) vs. the
     # grading call (extract_match/llm_judge; zero for contains, which makes
     # no LLM call) -- conflating them would hide whether an eval is expensive
     # because the agent is chatty/looping or because grading itself is.
     # Input/output are split too since Anthropic prices them differently.
-    ("agent_input_tokens", "INTEGER"),
-    ("agent_output_tokens", "INTEGER"),
-    ("grading_input_tokens", "INTEGER"),
-    ("grading_output_tokens", "INTEGER"),
+    ("agent_input_tokens", "integer"),
+    ("agent_output_tokens", "integer"),
+    ("grading_input_tokens", "integer"),
+    ("grading_output_tokens", "integer"),
 ]
 _RESULTS_COLUMN_NAMES = [name for name, _ in _RESULTS_COLUMNS]
 
 # The deep-dive companion row for one `results` row (same result_id).
 _AGENT_LOGS_COLUMNS: list[tuple[str, str]] = [
-    ("result_id", "VARCHAR"),
-    ("run_id", "VARCHAR"),
-    ("eval_id", "VARCHAR"),
+    ("result_id", "varchar"),
+    ("run_id", "varchar"),
+    ("eval_id", "varchar"),
     # JSON-encoded copy of the agent's full turn-by-turn trace (text output,
     # tool_use calls, tool_result responses) -- the closest thing to "the
     # agent's reasoning" we can capture without a hidden extended-thinking
     # channel. Query it with DuckDB's json_extract* functions, or hand the
     # raw string to a browser-side json.parse().
-    ("agent_trace", "VARCHAR"),
+    ("agent_trace", "varchar"),
 ]
 _AGENT_LOGS_COLUMN_NAMES = [name for name, _ in _AGENT_LOGS_COLUMNS]
 
@@ -122,13 +122,13 @@ _AGENT_LOGS_COLUMN_NAMES = [name for name, _ in _AGENT_LOGS_COLUMNS]
 # semantic-layer args (not built yet -- see module docstring) won't need a
 # schema change, just a new payload shape.
 _TOOL_CALLS_COLUMNS: list[tuple[str, str]] = [
-    ("result_id", "VARCHAR"),
-    ("run_id", "VARCHAR"),
-    ("eval_id", "VARCHAR"),
-    ("call_index", "INTEGER"),  # 0-based order the calls happened in, within this eval
-    ("tool_name", "VARCHAR"),
-    ("type", "VARCHAR"),  # "sql" today; "semantic" once that capture exists
-    ("payload", "VARCHAR"),  # JSON, shape depends on `type`
+    ("result_id", "varchar"),
+    ("run_id", "varchar"),
+    ("eval_id", "varchar"),
+    ("call_index", "integer"),  # 0-based order the calls happened in, within this eval
+    ("tool_name", "varchar"),
+    ("type", "varchar"),  # "sql" today; "semantic" once that capture exists
+    ("payload", "varchar"),  # JSON, shape depends on `type`
 ]
 _TOOL_CALLS_COLUMN_NAMES = [name for name, _ in _TOOL_CALLS_COLUMNS]
 

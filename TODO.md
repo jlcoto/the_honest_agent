@@ -36,44 +36,36 @@ Lower severity:
 7. **Slack:** `notify.py` puts eval ids into the message unescaped, so an
    eval file can trigger `<!channel>` or disguise a link. Escape `< > &`.
 
-## High priority: cleanup (review of 2026-10-02)
+## Cleanup (review of 2026-10-02)
 
-From a refactoring review; tests and lint were clean. All small unless noted.
+Done on 2026-10-03: `_run_async` takes named arguments and tests share one
+fake-run fixture (`tests/conftest.py`); tests use `tmp_path` instead of the
+deprecated `isolated_filesystem`; SQL is lowercase per CLAUDE.md; the root
+README no longer says "static HTML report" or Claude-only.
+
+Left on purpose, low value for now (small, rarely-changing code):
 
 - **Dead code:** `agent_backend` (always `"mcp"`, read by nothing; drop from
-  `cli.py`, `storage.py`, `ui/src/data/types.ts`, tests). Grader and agent
-  functions still default `model="claude-haiku-4-5-20251001"` and treat the
-  judge as optional although `cli.py` always passes both; make them
-  required and drop the dead branches. `storage.read_tool_calls(result_id=)`
+  `cli.py`, `storage.py`, `ui/src/data/types.ts`, tests, and the column in
+  existing results files by hand). Grader and agent functions still default
+  `model="claude-haiku-4-5-20251001"` and treat the judge as optional
+  although `cli.py` always passes both. `storage.read_tool_calls(result_id=)`
   is used only by tests.
-- **Stale docs and comments:** Claude-only wording in now provider-neutral
-  code (`agent_runner.py` docstrings, `--max-tool-turns` help, `storage.py`
-  token comment, `mcp_agent_runner.py` "MCP backend selected"); references
-  to removed things (the eval YAML `tools:` key in `sql_capture.py`, the
-  dbt `schema.yml` in `eval_loader.py`, the old `exact` method and a missing
-  "module-level note" in `grading.py`, a memory file in `provenance.py`);
-  `read_agent_logs` claims to return extracted SQL. The semantic-layer
-  explanation is repeated four times; keep it in one place.
-- **CLAUDE.md lowercase-SQL rule:** column types in `storage.py` and SQL in
-  `test_provenance.py` / `test_sql_capture.py` are uppercase (keep
-  `FCT_ORDERS` in `test_provenance.py`, which tests case-insensitivity).
-- **Docs drift:** root `README.md` still says "static HTML report" and
-  Claude-only.
-- **Duplication:** failure-line formatting in `cli.py` and `notify.py`
-  (move a `describe_failure` into `thresholds.py`); the turn-limit message
-  and tool-result text join copied between the two agent runners (share in
-  `agent_runner.py`; keep the loops separate); identical `_row()` test
-  helpers in `test_cli.py` / `test_storage.py`; UI score bands hard-coded
+- **Stale comments:** Claude-only wording in provider-neutral code
+  (`agent_runner.py` docstrings, `--max-tool-turns` help, `storage.py` token
+  comment, `mcp_agent_runner.py` "MCP backend selected"); references to
+  removed things (the eval YAML `tools:` key in `sql_capture.py`, the dbt
+  `schema.yml` in `eval_loader.py`, the old `exact` method in `grading.py`, a
+  memory file in `provenance.py`); `read_agent_logs` claims to return
+  extracted SQL. The semantic-layer explanation is repeated four times.
+- **Duplication:** failure-line formatting in `cli.py` and `notify.py`; the
+  turn-limit message and tool-result text join in the two agent runners;
+  `_row()` test helpers in `test_cli.py` / `test_storage.py`; UI score bands
   in `Overview.tsx` and `derive.ts` instead of `bucketOf`/`pct` from
   `ui/src/ds/components/data/scale.js`; `METRICS` and the empty-state card
-  duplicated in `Overview.tsx` / `Compare.tsx`.
-- **Fragile tests:** `_run_async` takes 11 positional arguments and tests
-  read them by index (`a[4]`, `a[-1]`), so a reorder breaks them silently.
-  Call it with keywords and share the fake-run helper in `tests/conftest.py`.
-  While there, replace click's `CliRunner().isolated_filesystem()` (deprecated,
-  removed in Click 9; tests now emit DeprecationWarnings) with `tmp_path`.
-- **Naming (medium):** `mcp_agent_runner.MCPAgentClient` is the Claude one,
-  next to `OpenAIMCPAgentClient`; rename to `anthropic_agent_runner` /
+  in `Overview.tsx` / `Compare.tsx`.
+- **Naming:** `mcp_agent_runner.MCPAgentClient` is the Claude one, next to
+  `OpenAIMCPAgentClient`; rename to `anthropic_agent_runner` /
   `AnthropicMCPAgentClient`.
 
 ## Semantic-layer provenance checking

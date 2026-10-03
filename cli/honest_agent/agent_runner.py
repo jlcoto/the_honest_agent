@@ -42,7 +42,7 @@ def plain_content(content: Any) -> Any:
 
 
 class AgentClient(ABC):
-    """Interface any agent backend must implement to be evalzable.
+    """Interface any agent backend must implement to be evaluated.
 
     `MCPAgentClient` (mcp_agent_runner.py) is currently the only
     implementation -- it sources tools from a live MCP server rather than a

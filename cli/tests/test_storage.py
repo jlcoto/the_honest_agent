@@ -52,8 +52,8 @@ ROW_2 = _row(
     tools_used=["calculator"],
     agent_backend="mcp",
     sql_calls=[
-        {"tool_name": "query_warehouse", "sql": "SELECT 1"},
-        {"tool_name": "query_warehouse", "sql": "SELECT 2"},
+        {"tool_name": "query_warehouse", "sql": "select 1"},
+        {"tool_name": "query_warehouse", "sql": "select 2"},
     ],
 )
 ROW_3_LATER_RUN = _row(
@@ -111,9 +111,9 @@ def test_write_then_read_tool_calls_roundtrips_and_expands_per_call(tmp_path: Pa
         "call_index": 0,
         "tool_name": "query_warehouse",
         "type": "sql",
-        "payload": json.dumps({"sql": "SELECT 1"}),
+        "payload": json.dumps({"sql": "select 1"}),
     }
-    assert json.loads(by_index[1]["payload"]) == {"sql": "SELECT 2"}
+    assert json.loads(by_index[1]["payload"]) == {"sql": "select 2"}
 
 
 def test_read_tool_calls_filters_by_result_id(tmp_path: Path):
@@ -212,7 +212,7 @@ def test_export_to_parquet_writes_readable_file(tmp_path: Path):
 
     import duckdb
 
-    rows = duckdb.connect().execute(f"SELECT result_id FROM read_parquet('{out_path}')").fetchall()
+    rows = duckdb.connect().execute(f"select result_id from read_parquet('{out_path}')").fetchall()
     assert {r[0] for r in rows} == {"r1", "r2", "r3"}
 
 
@@ -226,7 +226,7 @@ def test_export_to_parquet_filters_by_run_id(tmp_path: Path):
 
     import duckdb
 
-    rows = duckdb.connect().execute(f"SELECT result_id FROM read_parquet('{out_path}')").fetchall()
+    rows = duckdb.connect().execute(f"select result_id from read_parquet('{out_path}')").fetchall()
     assert {r[0] for r in rows} == {"r3"}
 
 

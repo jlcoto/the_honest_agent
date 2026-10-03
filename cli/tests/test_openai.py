@@ -114,71 +114,58 @@ def test_openai_agent_reports_the_turn_limit():
     assert result.answer.startswith("[honest-agent error] Exceeded max_tool_turns=1")
 
 
-def _invoke_run(monkeypatch, args, env, captured=None):
-    import honest_agent.cli as cli_mod
-
-    async def fake_run_async(*a):
-        if captured is not None:
-            captured["model"], captured["judge_model"] = a[2], a[-1]
-
-    monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
-    with CliRunner().isolated_filesystem():
-        Path("evals").mkdir()
-        return CliRunner().invoke(
-            main,
-            ["run", "--evals-dir", "evals", "--mcp-command", "python server.py", *args],
-            env={
-                "ANTHROPIC_API_KEY": "",
-                "OPENAI_API_KEY": "",
-                "HONEST_AGENT_MODEL": "",
-                "HONEST_AGENT_JUDGE_MODEL": "",
-                **env,
-            },
-        )
+def _invoke_run(args, env):
+    Path("evals").mkdir()
+    return CliRunner().invoke(
+        main,
+        ["run", "--evals-dir", "evals", "--mcp-command", "python server.py", *args],
+        env={
+            "ANTHROPIC_API_KEY": "",
+            "OPENAI_API_KEY": "",
+            "HONEST_AGENT_MODEL": "",
+            "HONEST_AGENT_JUDGE_MODEL": "",
+            **env,
+        },
+    )
 
 
-def test_an_openai_only_run_needs_only_the_openai_key(monkeypatch):
-    result = _invoke_run(monkeypatch, ["--model", "gpt-5.4-mini"], {"OPENAI_API_KEY": "test"})
+def test_an_openai_only_run_needs_only_the_openai_key(fake_run, in_tmp_dir):
+    result = _invoke_run(["--model", "gpt-5.4-mini"], {"OPENAI_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
 
 
-def test_a_missing_key_names_the_provider_it_is_for(monkeypatch):
-    result = _invoke_run(
-        monkeypatch, ["--model", "gpt-5.4-mini", "--judge-model", "claude-haiku-4-5"], {"OPENAI_API_KEY": "test"}
-    )
+def test_a_missing_key_names_the_provider_it_is_for(fake_run, in_tmp_dir):
+    result = _invoke_run(["--model", "gpt-5.4-mini", "--judge-model", "claude-haiku-4-5"], {"OPENAI_API_KEY": "test"})
 
     assert result.exit_code != 0
     assert "ANTHROPIC_API_KEY not set" in result.output
 
 
-def test_without_model_an_openai_only_user_gets_the_openai_default(monkeypatch):
-    captured = {}
-    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test"}, captured)
+def test_without_model_an_openai_only_user_gets_the_openai_default(fake_run, in_tmp_dir):
+    result = _invoke_run([], {"OPENAI_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
-    assert captured == {"model": "gpt-5.4-mini", "judge_model": "gpt-5.4-mini"}
+    assert (fake_run["model"], fake_run["judge_model"]) == ("gpt-5.4-mini", "gpt-5.4-mini")
     assert "No --model given; using gpt-5.4-mini (OPENAI_API_KEY is set)" in result.output
 
 
-def test_without_model_claude_is_the_default_when_both_keys_are_set(monkeypatch):
-    captured = {}
-    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test", "ANTHROPIC_API_KEY": "test"}, captured)
+def test_without_model_claude_is_the_default_when_both_keys_are_set(fake_run, in_tmp_dir):
+    result = _invoke_run([], {"OPENAI_API_KEY": "test", "ANTHROPIC_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
-    assert captured["model"] == "claude-haiku-4-5-20251001"
+    assert fake_run["model"] == "claude-haiku-4-5-20251001"
 
 
-def test_honest_agent_model_sets_the_default_model(monkeypatch):
-    captured = {}
-    result = _invoke_run(monkeypatch, [], {"OPENAI_API_KEY": "test", "HONEST_AGENT_MODEL": "gpt-5.4"}, captured)
+def test_honest_agent_model_sets_the_default_model(fake_run, in_tmp_dir):
+    result = _invoke_run([], {"OPENAI_API_KEY": "test", "HONEST_AGENT_MODEL": "gpt-5.4"})
 
     assert result.exit_code == 0, result.output
-    assert captured["model"] == "gpt-5.4"
+    assert fake_run["model"] == "gpt-5.4"
 
 
-def test_without_any_api_key_run_says_which_keys_it_accepts(monkeypatch):
-    result = _invoke_run(monkeypatch, [], {})
+def test_without_any_api_key_run_says_which_keys_it_accepts(fake_run, in_tmp_dir):
+    result = _invoke_run([], {})
 
     assert result.exit_code != 0
     assert "Add ANTHROPIC_API_KEY (Claude) or OPENAI_API_KEY (GPT)" in result.output

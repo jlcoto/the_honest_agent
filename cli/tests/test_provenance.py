@@ -3,12 +3,12 @@ from honest_agent.provenance import score_provenance
 
 def test_no_expected_sources_is_trivially_satisfied():
     assert score_provenance() == 1.0
-    assert score_provenance(sql_statements=["SELECT * FROM anything"]) == 1.0
+    assert score_provenance(sql_statements=["select * from anything"]) == 1.0
 
 
 def test_source_found_in_sql_scores_full():
     score = score_provenance(
-        sql_statements=["SELECT * FROM analytics.fct_orders"],
+        sql_statements=["select * from analytics.fct_orders"],
         expected_sources=["fct_orders"],
     )
     assert score == 1.0
@@ -16,7 +16,7 @@ def test_source_found_in_sql_scores_full():
 
 def test_source_missing_from_sql_scores_zero():
     score = score_provenance(
-        sql_statements=["SELECT * FROM raw_orders"],
+        sql_statements=["select * from raw_orders"],
         expected_sources=["fct_orders"],
     )
     assert score == 0.0
@@ -34,7 +34,7 @@ def test_source_check_respects_word_boundaries():
     incorrectly pass.
     """
     score = score_provenance(
-        sql_statements=["SELECT * FROM customer_fct_orders_summary"],
+        sql_statements=["select * from customer_fct_orders_summary"],
         expected_sources=["fct_orders"],
     )
     assert score == 0.0
@@ -42,7 +42,7 @@ def test_source_check_respects_word_boundaries():
 
 def test_source_check_is_case_insensitive():
     score = score_provenance(
-        sql_statements=["SELECT * FROM FCT_ORDERS"],
+        sql_statements=["select * from FCT_ORDERS"],
         expected_sources=["fct_orders"],
     )
     assert score == 1.0
@@ -50,7 +50,7 @@ def test_source_check_is_case_insensitive():
 
 def test_partial_source_overlap():
     score = score_provenance(
-        sql_statements=["SELECT * FROM fct_orders"],
+        sql_statements=["select * from fct_orders"],
         expected_sources=["fct_orders", "agg_daily_revenue"],
     )
     assert score == 0.5
@@ -62,7 +62,7 @@ def test_expected_database_requires_qualified_match():
     count as a source-check hit once expected_database is declared.
     """
     score = score_provenance(
-        sql_statements=["SELECT * FROM snowflake_sample_data.tpch_sf1.orders"],
+        sql_statements=["select * from snowflake_sample_data.tpch_sf1.orders"],
         expected_sources=["orders"],
         expected_database="agent_quiz_demo",
     )
@@ -71,7 +71,7 @@ def test_expected_database_requires_qualified_match():
 
 def test_expected_database_passes_for_inline_qualified_match():
     score = score_provenance(
-        sql_statements=["SELECT * FROM agent_quiz_demo.public.orders"],
+        sql_statements=["select * from agent_quiz_demo.public.orders"],
         expected_sources=["orders"],
         expected_database="agent_quiz_demo",
         expected_schema="public",
@@ -88,7 +88,7 @@ def test_expected_database_resolves_bare_table_via_preceding_use_statements():
         sql_statements=[
             "use database agent_quiz_demo",
             "use schema public",
-            "SELECT * FROM orders",
+            "select * from orders",
         ],
         expected_sources=["orders"],
         expected_database="agent_quiz_demo",
@@ -101,7 +101,7 @@ def test_expected_schema_alone_ignores_database():
     """Declaring only expected_schema shouldn't require a database match --
     each of expected_database/expected_schema is independently optional."""
     score = score_provenance(
-        sql_statements=["SELECT * FROM some_other_db.public.orders"],
+        sql_statements=["select * from some_other_db.public.orders"],
         expected_sources=["orders"],
         expected_schema="public",
     )
@@ -112,7 +112,7 @@ def test_expected_database_wrong_use_statement_fails():
     score = score_provenance(
         sql_statements=[
             "use database snowflake_sample_data",
-            "SELECT * FROM orders",
+            "select * from orders",
         ],
         expected_sources=["orders"],
         expected_database="agent_quiz_demo",

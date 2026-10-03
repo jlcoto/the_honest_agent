@@ -257,7 +257,8 @@ def _resolve_agent_name(explicit: str | None, connected_client) -> str:
 
 
 async def _run_async(
-    evals_dir_p: Path,
+    *,
+    evals_dir: Path,
     results_path: str,
     model: str,
     max_tool_turns: int,
@@ -273,11 +274,11 @@ async def _run_async(
     judge_model: str,
 ) -> None:
     try:
-        definitions = load_evals(evals_dir_p)
+        definitions = load_evals(evals_dir)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     if not definitions:
-        raise click.ClickException(f"No evals found in {evals_dir_p}")
+        raise click.ClickException(f"No evals found in {evals_dir}")
 
     definitions = filter_by_tags(definitions, select=select, exclude=exclude)
     if not definitions:
@@ -499,20 +500,20 @@ def run(
 
     asyncio.run(
         _run_async(
-            Path(evals_dir).resolve(),
-            _results_path(ctx, results_path),
-            model,
-            max_tool_turns,
-            mcp_command,
-            mcp_url,
-            mcp_bearer_token,
-            select,
-            exclude,
-            agent_name,
-            chosen.settings.get("ignore_tools", []) if chosen else [],
-            mcp_cwd,
-            env_names,
-            judge_model,
+            evals_dir=Path(evals_dir).resolve(),
+            results_path=_results_path(ctx, results_path),
+            model=model,
+            max_tool_turns=max_tool_turns,
+            mcp_command=mcp_command,
+            mcp_url=mcp_url,
+            mcp_bearer_token=mcp_bearer_token,
+            select=select,
+            exclude=exclude,
+            agent_name=agent_name,
+            ignore_tools=chosen.settings.get("ignore_tools", []) if chosen else [],
+            mcp_cwd=mcp_cwd,
+            mcp_env=env_names,
+            judge_model=judge_model,
         )
     )
 

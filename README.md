@@ -18,14 +18,17 @@ never a hand-rolled `venv`/`pip install`.
 
 - **`cli/`** — the `honest-agent` Python CLI. Owns every LLM call (running the
   eval, LLM-judge grading, provenance scoring), the threshold checks, and
-  everything else (Slack notifications, the static HTML report). Results
+  everything else (Slack notifications, the web report and `serve`). Results
   storage is a local DuckDB file by default; `honest-agent export` can push a
   Parquet snapshot to S3 (via DuckDB's own `httpfs` extension) for sharing
   with a team, but that's an explicit, optional step. `honest-agent run` calls
-  Claude with tools sourced live from an MCP server (`--mcp-command`/
-  `--mcp-url`) — this tests the actual agent employees connect to, not a
-  locally reimplemented stand-in whose behavior can drift out of sync with
-  the real tool. Needs Python >=3.10 — see `example_project/README.md`.
+  the model you choose, Claude or OpenAI (GPT), with tools sourced live from
+  the MCP server a target in `honest_agent_config.yml` points to — this tests
+  the actual tools employees connect to, not a locally reimplemented stand-in
+  whose behavior can drift out of sync with the real tool. Needs Python
+  >=3.10.
+- **`ui/`** — the source of the web report (React + Vite). Its build is
+  committed to `cli/honest_agent/report_ui/`, so users don't need Node.
 - **`example_project/`** — a real-world-shaped consumer of the CLI: its own
   example eval YAML and a README showing the actual install/run flow. This
   is the only place example data lives.
@@ -169,7 +172,7 @@ uv run honest-agent notify --webhook-url ...                   # Slack alert on 
 
 `honest_agent_config.yml` holds the project's settings, with one target
 per agent being evaluated, like the targets in a dbt profile: `honest-agent run --target
-motherduck` evaluates another one. The default target calls Claude with the
+motherduck` evaluates another one. The default target calls the model with the
 `query_warehouse` tool sourced live from the
 bundled demo MCP server (`mcp_server/server.py`), against a real seeded
 TPC-H warehouse — real SQL, real data, real provenance checking (does the

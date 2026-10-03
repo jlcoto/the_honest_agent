@@ -11,19 +11,19 @@ def _tool_use_trace(name: str, input_: dict) -> list[dict]:
 
 
 def test_extract_uses_declared_field_for_named_tool():
-    trace = _tool_use_trace("query_warehouse", {"sql_text": "SELECT 1", "sql": "should be ignored"})
+    trace = _tool_use_trace("query_warehouse", {"sql_text": "select 1", "sql": "should be ignored"})
 
     calls = extract_sql_calls(trace, sql_fields={"query_warehouse": "sql_text"})
 
-    assert calls == [{"tool_name": "query_warehouse", "sql": "SELECT 1"}]
+    assert calls == [{"tool_name": "query_warehouse", "sql": "select 1"}]
 
 
 def test_extract_falls_back_to_heuristic_when_tool_not_declared():
-    trace = _tool_use_trace("query_warehouse", {"query": "SELECT 2"})
+    trace = _tool_use_trace("query_warehouse", {"query": "select 2"})
 
     calls = extract_sql_calls(trace, sql_fields={})
 
-    assert calls == [{"tool_name": "query_warehouse", "sql": "SELECT 2"}]
+    assert calls == [{"tool_name": "query_warehouse", "sql": "select 2"}]
 
 
 def test_extract_skips_tools_with_no_matching_field():
@@ -68,32 +68,32 @@ def test_extract_falls_back_to_result_content_when_input_has_no_sql():
     trace = _tool_use_and_result_trace(
         "query_semantic_view",
         {"message": "What was total revenue in 1996?"},
-        json.dumps([{"text": "interpretation..."}, {"statement": "SELECT 1", "confidence": {}}]),
+        json.dumps([{"text": "interpretation..."}, {"statement": "select 1", "confidence": {}}]),
     )
 
-    assert extract_sql_calls(trace) == [{"tool_name": "query_semantic_view", "sql": "SELECT 1"}]
+    assert extract_sql_calls(trace) == [{"tool_name": "query_semantic_view", "sql": "select 1"}]
 
 
 def test_extract_prefers_input_over_result_when_both_present():
     trace = _tool_use_and_result_trace(
         "query_warehouse",
-        {"sql": "SELECT 1"},
-        json.dumps({"sql": "SELECT 2"}),
+        {"sql": "select 1"},
+        json.dumps({"sql": "select 2"}),
     )
 
-    assert extract_sql_calls(trace) == [{"tool_name": "query_warehouse", "sql": "SELECT 1"}]
+    assert extract_sql_calls(trace) == [{"tool_name": "query_warehouse", "sql": "select 1"}]
 
 
 def test_extract_declared_field_checked_on_result_side_too():
     trace = _tool_use_and_result_trace(
         "query_semantic_view",
         {"message": "..."},
-        json.dumps({"generated_sql": "SELECT 1"}),
+        json.dumps({"generated_sql": "select 1"}),
     )
 
     calls = extract_sql_calls(trace, sql_fields={"query_semantic_view": "generated_sql"})
 
-    assert calls == [{"tool_name": "query_semantic_view", "sql": "SELECT 1"}]
+    assert calls == [{"tool_name": "query_semantic_view", "sql": "select 1"}]
 
 
 def test_extract_ignores_non_json_result_content():
@@ -117,15 +117,15 @@ def test_extract_collects_multiple_calls_in_order_with_tool_names():
         {
             "role": "assistant",
             "content": [
-                {"type": "tool_use", "id": "1", "name": "query_warehouse", "input": {"query": "SELECT 1"}},
-                {"type": "tool_use", "id": "2", "name": "run_metric_query", "input": {"statement": "SELECT 2"}},
+                {"type": "tool_use", "id": "1", "name": "query_warehouse", "input": {"query": "select 1"}},
+                {"type": "tool_use", "id": "2", "name": "run_metric_query", "input": {"statement": "select 2"}},
             ],
         }
     ]
 
     assert extract_sql_calls(trace) == [
-        {"tool_name": "query_warehouse", "sql": "SELECT 1"},
-        {"tool_name": "run_metric_query", "sql": "SELECT 2"},
+        {"tool_name": "query_warehouse", "sql": "select 1"},
+        {"tool_name": "run_metric_query", "sql": "select 2"},
     ]
 
 
