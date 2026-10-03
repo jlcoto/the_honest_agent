@@ -21,6 +21,9 @@ targets:
   demo:
     mcp_command: python mcp_server/server.py
     evals_dir: evals
+  local_md:
+    mcp_command: uvx mcp-server-motherduck
+    mcp_env: [MOTHERDUCK_TOKEN]
   motherduck:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN
@@ -42,6 +45,7 @@ _RUN_ARGS = [
     "agent_name",
     "ignore_tools",
     "mcp_cwd",
+    "mcp_env",
     "judge_model",
 ]
 _ENV_VARS = [
@@ -149,7 +153,7 @@ def test_an_unknown_target_lists_the_real_ones(project, monkeypatch):
     result, _ = _run(monkeypatch, "--target", "snowflak")
 
     assert result.exit_code != 0
-    assert "No target 'snowflak' in honest_agent_config.yml. Targets: demo, motherduck." in result.output
+    assert "No target 'snowflak' in honest_agent_config.yml. Targets: demo, local_md, motherduck." in result.output
 
 
 def test_target_without_a_config_file_is_an_error(tmp_path, monkeypatch):
@@ -204,3 +208,28 @@ def test_several_targets_need_a_default_or_a_flag(tmp_path):
     with pytest.raises(ConfigError, match="no default_target"):
         config.target(None)
     assert config.target("b").settings == {"mcp_command": "y"}
+
+
+def test_a_local_server_gets_the_variables_its_target_lists(project, monkeypatch):
+    monkeypatch.setenv("MOTHERDUCK_TOKEN", "md-token")
+
+    result, run = _run(monkeypatch, "--target", "local_md")
+
+    assert result.exit_code == 0, result.output
+    assert run["mcp_env"] == ["MOTHERDUCK_TOKEN"]
+
+
+def test_a_listed_variable_that_is_not_set_is_an_error(project, monkeypatch):
+    result, _ = _run(monkeypatch, "--target", "local_md")
+
+    assert result.exit_code != 0
+    assert "MOTHERDUCK_TOKEN not set" in result.output
+
+
+def test_mcp_env_flags_replace_the_targets_list(project, monkeypatch):
+    monkeypatch.setenv("OTHER_TOKEN", "x")
+
+    result, run = _run(monkeypatch, "--target", "local_md", "--mcp-env", "OTHER_TOKEN")
+
+    assert result.exit_code == 0, result.output
+    assert run["mcp_env"] == ["OTHER_TOKEN"]

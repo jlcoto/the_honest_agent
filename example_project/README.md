@@ -272,6 +272,7 @@ targets:
 | `evals_dir` | target | `--evals-dir` |
 | `agent_name`: defaults to the target's name | target | `--agent-name` |
 | `ignore_tools`: tools whose `sql`/`query`/`statement` argument isn't SQL | target | none |
+| `mcp_env`: variables a local server (`mcp_command`) needs, e.g. `[MOTHERDUCK_TOKEN]`. It gets only these plus PATH, HOME and similar, never the rest of `.env` | target | `--mcp-env` (repeatable) |
 
 ### Which value wins
 
@@ -348,12 +349,19 @@ uv run honest-agent run --target motherduck
   demo server. That's also why the target sets `max_tool_turns: 10`.
 
 MotherDuck also publishes a local server (`uvx mcp-server-motherduck`). To
-use it instead, set the target's `mcp_command` to `uvx
-mcp-server-motherduck --read-write --db-path md:agent_quiz_demo`.
+use it instead:
+
+```yaml
+  motherduck_local:
+    mcp_command: uvx mcp-server-motherduck --read-write --db-path md:agent_quiz_demo
+    mcp_env: [MOTHERDUCK_TOKEN]
+    evals_dir: evals_motherduck
+```
+
 `--read-write` is needed unless you have a [read-scaling
-token][motherduck-read-scaling] (Business plan only). Note that a local
-server is started with your whole environment, so it can read every key in
-`.env`.
+token][motherduck-read-scaling] (Business plan only). The server gets only
+the variables in `mcp_env`, so it can't read your model API keys or other
+secrets in `.env`.
 
 [motherduck-read-scaling]: https://motherduck.com/docs/key-tasks/authenticating-and-connecting-to-motherduck/read-scaling/
 

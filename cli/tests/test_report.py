@@ -29,9 +29,10 @@ def _row() -> dict:
 def test_report_writes_ui_and_all_three_tables(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [_row()])
-    out = tmp_path / "report"
+    out = tmp_path / "report"  # a previous report, with an old bundle to clear
     (out / "assets").mkdir(parents=True)
     (out / "assets" / "stale-old-bundle.js").write_text("")
+    (out / ".honest_agent_report").write_text("")
 
     result = CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(out)])
 
@@ -66,3 +67,31 @@ def test_a_report_folder_honest_agent_creates_ignores_itself_but_an_existing_one
     assert (tmp_path / "new_report" / ".gitignore").read_text().endswith("*\n")
     assert (tmp_path / "new_report" / "index.html").exists()
     assert not (existing / ".gitignore").exists()
+
+
+def test_report_refuses_a_folder_with_someone_elses_files(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [_row()])
+    docs = tmp_path / "docs"
+    (docs / "assets").mkdir(parents=True)
+    (docs / "assets" / "logo.png").write_text("not ours")
+
+    result = CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(docs)])
+
+    assert result.exit_code != 0
+    assert "isn't an honest-agent report folder" in result.output
+    assert (docs / "assets" / "logo.png").read_text() == "not ours"
+
+
+def test_report_rewrites_its_own_folder_and_accepts_an_empty_one(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [_row()])
+    empty = tmp_path / "empty"
+    empty.mkdir()
+
+    for out in (tmp_path / "new", tmp_path / "new", empty):
+        result = CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(out)])
+        assert result.exit_code == 0, result.output
+
+    for out in (tmp_path / "new", empty):
+        assert (out / ".honest_agent_report").exists()

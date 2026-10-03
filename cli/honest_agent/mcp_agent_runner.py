@@ -26,12 +26,16 @@ def build_mcp_client(
     url: str | None = None,
     bearer_token: str | None = None,
     cwd: str | None = None,
+    env_names: list[str] | None = None,
 ):
     """Builds an (unconnected) mcp.Client.
 
     Pass exactly one of:
       - `command`: a shell command launching a local MCP server over stdio,
-        e.g. "python mcp_server/server.py", started in `cwd` if given.
+        e.g. "python mcp_server/server.py", started in `cwd` if given. The server
+        gets only the MCP SDK's minimal environment (PATH, HOME, ...) plus the
+        variables named in `env_names` -- never the rest of .env, so a
+        third-party server can't read the model API keys or other secrets.
       - `url`: a remote MCP server's streamable-HTTP endpoint, e.g.
         "https://mcp.internal.example.com/mcp". `bearer_token`, if given, is
         sent as an `Authorization: Bearer <token>` header on every request.
@@ -52,13 +56,10 @@ def build_mcp_client(
 
     if command:
         parts = shlex.split(command)
-        # The MCP SDK deliberately does NOT inherit the parent process's full
-        # environment for a stdio-launched server (it merges a minimal default
-        # set with whatever `env=` is passed here) -- without this, any server
-        # that needs a credential via an env var (MOTHERDUCK_TOKEN, etc.) fails
-        # to authenticate even though the CLI's own process has it (e.g. from
-        # .env via load_dotenv()).
-        return Client(StdioServerParameters(command=parts[0], args=parts[1:], env=dict(os.environ), cwd=cwd))
+        from mcp.client.stdio import get_default_environment
+
+        env = {**get_default_environment(), **{name: os.environ[name] for name in env_names or []}}
+        return Client(StdioServerParameters(command=parts[0], args=parts[1:], env=env, cwd=cwd))
 
     if bearer_token:
         import httpx2

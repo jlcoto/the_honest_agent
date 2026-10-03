@@ -269,6 +269,7 @@ async def _run_async(
     agent_name: str | None,
     ignore_tools: list[str],
     mcp_cwd: str | None,
+    mcp_env: list[str],
     judge_model: str,
 ) -> None:
     try:
@@ -288,7 +289,9 @@ async def _run_async(
     run_id = str(uuid.uuid4())
     click.echo(f"Starting eval run {run_id} ({len(definitions)} eval{'' if len(definitions) == 1 else 's'})...")
 
-    mcp_client = build_mcp_client(command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token, cwd=mcp_cwd)
+    mcp_client = build_mcp_client(
+        command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token, cwd=mcp_cwd, env_names=mcp_env
+    )
     # Deliberately split from the eval loop below: a failure *here* means
     # the MCP handshake itself never completed (wrong token, unreachable
     # server, server crashed on startup, ...) -- every eval would fail
@@ -397,6 +400,14 @@ async def _run_async(
     help="[--mcp-url only] Bearer token sent as the Authorization header.",
 )
 @click.option(
+    "--mcp-env",
+    multiple=True,
+    metavar="NAME",
+    help="[--mcp-command only] Environment variable the local MCP server needs, e.g. MOTHERDUCK_TOKEN. "
+    "Repeat for several. The server gets only these plus a minimal environment (PATH, HOME, ...), "
+    "never the rest of .env. Defaults to the target's mcp_env.",
+)
+@click.option(
     "--agent-name",
     envvar="HONEST_AGENT_AGENT_NAME",
     default=None,
@@ -430,6 +441,7 @@ def run(
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
+    mcp_env: tuple[str, ...],
     agent_name: str | None,
     select: str | None,
     exclude: str | None,
@@ -477,6 +489,13 @@ def run(
     # A target's mcp_command runs from the config file's folder, wherever `run` is started.
     from_target = chosen is not None and mcp_command is not None and mcp_command == chosen.settings.get("mcp_command")
     mcp_cwd = str(config.path.parent) if from_target else None
+    # Like its token, a target's mcp_env belongs to its own server.
+    env_names = list(mcp_env) or (chosen.settings.get("mcp_env", []) if from_target else [])
+    unset = [name for name in env_names if name not in os.environ]
+    if unset:
+        raise click.ClickException(
+            f"{', '.join(unset)} not set, but the MCP server needs it (mcp_env). Add it to .env or export it."
+        )
 
     asyncio.run(
         _run_async(
@@ -492,6 +511,7 @@ def run(
             agent_name,
             chosen.settings.get("ignore_tools", []) if chosen else [],
             mcp_cwd,
+            env_names,
             judge_model,
         )
     )
@@ -506,7 +526,7 @@ def report(ctx: click.Context, results_path: str | None, out: str):
     results_path = _results_path(ctx, results_path)
     try:
         report_mod.generate(results_path, Path(out))
-    except FileNotFoundError as e:
+    except (FileNotFoundError, report_mod.ReportFolderError) as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"Wrote {out}/. View it with `honest-agent serve --out {out}`.")
 

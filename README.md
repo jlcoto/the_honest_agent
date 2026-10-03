@@ -86,8 +86,9 @@ Other servers work the same way, for example MotherDuck's hosted one:
     max_tool_turns: 10
 ```
 
-A server you run locally takes `mcp_command:` instead of `mcp_url:`. Every
-setting is described in [`example_project/README.md`](example_project/README.md#the-config-file).
+A server you run locally takes `mcp_command:` instead of `mcp_url:`, plus
+`mcp_env:` listing the variables it needs (e.g. `[MOTHERDUCK_TOKEN]`): it gets
+only those, never the rest of `.env`. Every setting is described in [`example_project/README.md`](example_project/README.md#the-config-file).
 
 ### 4. Write an eval in `evals/`
 
@@ -147,6 +148,8 @@ same version, instead of the one pinned in its `uv.lock`.
 | `--mcp-command or --mcp-url is required` | honest-agent found no `honest_agent_config.yml`: run it from your project folder. |
 | `Note: MCP_URL from the environment overrides target ...` | An environment variable beats the config file. Remove `MCP_URL`/`MCP_COMMAND` from `.env` and your shell. |
 | `Unknown setting(s) in target ...` | A typo in `honest_agent_config.yml`; the message lists the allowed settings. |
+| A local server fails to log in to its database | It only gets the variables listed in its target's `mcp_env`; add the one it needs. |
+| `report` says a folder `isn't an honest-agent report folder` | `report` only writes into a new or empty folder, or one it wrote before, because it clears old files there. Pick another `--out`. |
 | `Address already in use` from `serve` | Another server uses the port: `serve --port 8001`. |
 | `hit the tool-turn limit without a final answer` | The agent needed more steps: set `max_tool_turns: 10` on the target. |
 

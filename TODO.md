@@ -9,42 +9,31 @@ waiting on information we don't have yet.
 Found by a security review of the CLI. No command injection, SQL injection,
 unsafe YAML loading or XSS was found; these are trust-boundary issues.
 
-Fix first:
-
-1. **Every secret is passed to stdio MCP servers.** `mcp_agent_runner.py`
-   builds the server process with `env=dict(os.environ)`, after `.env` has
-   been loaded, so a third-party server (e.g. the unpinned
-   `uvx mcp-server-motherduck` the docs recommend, resolved fresh each run)
-   receives ANTHROPIC_API_KEY, OPENAI_API_KEY, AWS_*, SLACK_WEBHOOK_URL and
-   MCP_BEARER_TOKEN. Pass the SDK's default environment plus variables the
-   user names (e.g. `--mcp-env MOTHERDUCK_TOKEN`), and pin versions in the
-   docs (`uvx mcp-server-motherduck==X.Y.Z`).
-2. **`report --out` can delete files.** `report.py` runs
-   `shutil.rmtree(out_dir / "assets", ignore_errors=True)` and overwrites
-   `index.html` in whatever folder `--out` names (`--out .`, `--out docs`).
-   Only clean folders honest-agent created, marked with a file it writes on
-   first run; refuse non-empty unmarked folders.
-3. **Prompt injection can change `llm_judge` scores.** `grading.py` pastes
-   the agent's answer unescaped into the judge prompt and reads the score
-   with a greedy `\{.*\}`, so warehouse text can make an answer contain
-   `{"score": 1.0}`. Wrap the answer in tags and tell the judge it's data,
-   use structured output instead of the regex, and recommend
-   `--judge-model` in the docs. (`extract_match` is less exposed: its final
-   comparison is done in code.)
+Items 1 and 2 were fixed on 2026-10-03: local MCP servers get only the
+variables in their target's `mcp_env`, and `report` only writes into a new or
+empty folder or one it wrote before (`.honest_agent_report` marker).
 
 Lower severity:
 
+3. **Prompt injection can change `llm_judge` scores.** Half fixed on
+   2026-10-03: the agent's answer now goes into the judge and extraction
+   prompts inside `<answer>` tags, with a note that it's data, not
+   instructions. Still open: `grading.py` reads the judge's score with a
+   greedy `\{.*\}` regex; use structured output instead (for both the Claude
+   and OpenAI judges, checking grades don't shift). Low priority unless an
+   agent answers from free text written by outsiders (support tickets,
+   reviews, CRM notes); `extract_match` compares in code and is less exposed.
 4. **`serve`** has no Host-header check (DNS rebinding can read
    `report.json`) and lists directories; `serve --out .` would expose
    `.env`. Check Host, disable listings, refuse folders without the report
-   marker from item 2.
+   marker (`.honest_agent_report`, see `report.py`).
 5. **`honest-agent logs`** prints `agent_answer` and tool payloads raw, so
    model/tool output can inject terminal escape sequences (OSC 52 clipboard
    writes, disguised links). Strip control characters before printing.
 6. **CSV export** (`ui/src/data/derive.ts` `toCsv`) doesn't neutralise
    cells starting with `= + - @`, so an answer can run as a spreadsheet
    formula. Prefix those cells with `'`.
-7. **Slack:** `notify.py` puts eval ids into the message unescaped, so a
+7. **Slack:** `notify.py` puts eval ids into the message unescaped, so an
    eval file can trigger `<!channel>` or disguise a link. Escape `< > &`.
 
 ## High priority: cleanup (review of 2026-10-02)

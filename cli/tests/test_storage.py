@@ -271,23 +271,3 @@ def test_an_existing_folder_never_gets_the_ignore_marker(tmp_path: Path):
     write_run_results(str(tmp_path / "results.duckdb"), "run_1", [_row()])
 
     assert not (tmp_path / ".gitignore").exists()
-
-
-def test_a_results_file_from_before_the_eval_rename_is_migrated_on_open(tmp_path: Path):
-    import duckdb
-
-    db_path = str(tmp_path / "results.duckdb")
-    con = duckdb.connect(db_path)
-    con.execute("create table results (result_id varchar, quiz_id varchar, quiz_title varchar)")
-    con.execute("insert into results values ('r1', 'q_old', 'Old title')")
-    con.execute("create table agent_logs (result_id varchar, quiz_id varchar)")
-    con.execute("create table tool_calls (result_id varchar, quiz_id varchar)")
-    con.close()
-
-    (row,) = read_all_results(db_path)
-
-    assert (row["eval_id"], row["eval_title"]) == ("q_old", "Old title")
-    con = duckdb.connect(db_path)
-    for table in ("agent_logs", "tool_calls"):
-        columns = {r[0] for r in con.execute(f"describe {table}").fetchall()}
-        assert "eval_id" in columns and "quiz_id" not in columns

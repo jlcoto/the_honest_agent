@@ -145,31 +145,11 @@ def make_output_dir(path: Path) -> None:
     (path / ".gitignore").write_text("# Created by honest-agent: keeps these generated files out of git.\n*\n")
 
 
-# Results files written before "quiz" was renamed to "eval" (2026-10-02) have the old
-# column names. They're renamed on open, so reads and writes see one schema.
-_RENAMED_COLUMNS = {
-    "results": {"quiz_id": "eval_id", "quiz_title": "eval_title"},
-    "agent_logs": {"quiz_id": "eval_id"},
-    "tool_calls": {"quiz_id": "eval_id"},
-}
-
-
 def _connect(results_path: str):
     import duckdb
 
     make_output_dir(Path(results_path).parent)
-    con = duckdb.connect(results_path)
-    _rename_old_columns(con)
-    return con
-
-
-def _rename_old_columns(con) -> None:
-    for table, renames in _RENAMED_COLUMNS.items():
-        rows = con.execute("select column_name from information_schema.columns where table_name = ?", [table])
-        existing = {row[0] for row in rows.fetchall()}
-        for old, new in renames.items():
-            if old in existing and new not in existing:
-                con.execute(f"alter table {table} rename column {old} to {new}")
+    return duckdb.connect(results_path)
 
 
 def _ensure_schema(con) -> None:

@@ -16,6 +16,12 @@ from pathlib import Path
 from .storage import make_output_dir, read_agent_logs, read_all_results, read_tool_calls
 
 UI_DIR = Path(__file__).parent / "report_ui"
+# Marks a folder as honest-agent's report, which `report` may clear and rewrite.
+REPORT_MARKER = ".honest_agent_report"
+
+
+class ReportFolderError(Exception):
+    pass
 
 
 def build_report_data(results_path: str) -> dict:
@@ -32,7 +38,7 @@ def generate(results_path: str, out_dir: Path) -> None:
     if not (UI_DIR / "index.html").exists():
         raise FileNotFoundError(f"Report UI not found at {UI_DIR}. Build it first: `cd ui && npm ci && npm run build`.")
 
-    make_output_dir(out_dir)
+    _claim_report_dir(out_dir)
     # Asset filenames are content-hashed, so a previous report's bundles would
     # pile up. Only this folder is cleared -- out_dir itself may be user-chosen.
     shutil.rmtree(out_dir / "assets", ignore_errors=True)
@@ -41,3 +47,17 @@ def generate(results_path: str, out_dir: Path) -> None:
     data_dir = out_dir / "data"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "report.json").write_text(json.dumps(build_report_data(results_path)))
+
+
+def _claim_report_dir(out_dir: Path) -> None:
+    """`report` clears `assets/` and overwrites `index.html`, so it only writes into a new
+    folder, an empty one, or one it wrote before -- never, say, `--out .` or `--out docs`
+    with someone's files in it."""
+    if not out_dir.exists():
+        make_output_dir(out_dir)
+    elif not (out_dir / REPORT_MARKER).exists() and any(out_dir.iterdir()):
+        raise ReportFolderError(
+            f"{out_dir} isn't empty and isn't an honest-agent report folder, so `report` won't write into it "
+            "(it would delete and overwrite files there). Pick a new or empty folder with --out."
+        )
+    (out_dir / REPORT_MARKER).write_text("Written by `honest-agent report`, which may clear and rewrite this folder.\n")

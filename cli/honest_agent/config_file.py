@@ -41,6 +41,7 @@ _TARGET_KEYS = _SHARED_KEYS | {
     "bearer_token_env",
     "evals_dir",
     "ignore_tools",
+    "mcp_env",
     "agent_name",
 }
 _PATH_KEYS = {"results_path", "evals_dir"}

@@ -187,3 +187,17 @@ def test_run_hit_turn_limit_false_when_within_budget():
 
     assert result.hit_turn_limit is False
     assert result.answer == "Paris."
+
+
+def test_a_local_server_gets_only_the_variables_it_is_given(monkeypatch):
+    import mcp
+
+    monkeypatch.setattr(mcp, "Client", lambda params: params)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
+    monkeypatch.setenv("MOTHERDUCK_TOKEN", "md-token")
+
+    params = build_mcp_client(command="uvx mcp-server-motherduck", env_names=["MOTHERDUCK_TOKEN"])
+
+    assert params.env["MOTHERDUCK_TOKEN"] == "md-token"
+    assert "ANTHROPIC_API_KEY" not in params.env
+    assert "PATH" in params.env
