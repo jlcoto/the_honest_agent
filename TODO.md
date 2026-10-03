@@ -291,3 +291,32 @@ so `provenance.sql_fields` belongs with the target in
 `honest_agent_config.yml` (next to `ignore_tools`), not in each eval file. Left
 in the evals for now: no current server needs it, since honest-agent finds
 `sql`/`query`/`statement` arguments by itself. Move it when a real server does.
+
+## `honest-agent init`: starter files for a new project
+
+Found during the first-time setup dry runs (2026-10-02): after `uv add`, a
+new user starts from an empty folder and has to write
+`honest_agent_config.yml` and a first eval from the docs. Copying the
+example project's config instead breaks straight away (its `demo` target
+needs a server that isn't there).
+
+Package installers can't create files after installing, so this needs a
+command, like `dbt init`:
+
+- Creates `honest_agent_config.yml` (one commented target for the chosen
+  server), `evals/example_eval.yml` (a commented example) and `.env` (the
+  variable names it needs, empty values).
+- Asks which MCP server (Snowflake, MotherDuck, local command, other URL),
+  its URL or command, and a target name, with defaults. `--no-input` writes
+  the template without asking.
+- Never overwrites an existing file (skips it and says so), and never edits
+  `.gitignore`: in a git repository where `.env` isn't ignored, it prints a
+  warning with the line to add.
+- The example eval has marked placeholders, since honest-agent can't know a
+  user's tables. Exception: every MotherDuck account has a `sample_data`
+  database, so the MotherDuck template could ship an eval that passes out of
+  the box (pick the question and verify its answer first).
+- "Getting started" in README.md then shrinks to install, `init`, fill in
+  `.env`, run.
+
+Open question for the user: prompts like `dbt init`, or flags only.
