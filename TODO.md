@@ -320,3 +320,39 @@ command, like `dbt init`:
   `.env`, run.
 
 Open question for the user: prompts like `dbt init`, or flags only.
+
+## Evaluate Snowflake's business chat (Snowflake Intelligence / Cortex Agents)
+
+Goal: test the same experience business users have when they ask data
+questions in Snowflake's chat, not just the MCP server's tools. Discussed
+2026-10-03, after comparing honest-agent with the Claude Desktop connector:
+the same server and tools gave different routes depending on the model and
+the client's own instructions, so testing the tools alone doesn't reproduce
+what users see.
+
+The chat runs on a Cortex Agent: a schema-level object bundling the model,
+instructions and tools (Cortex Analyst over semantic views, search, SQL),
+set up by an admin. The same object can be called through Snowflake's REST
+API, `/api/v2/databases/{db}/schemas/{schema}/agents/{agent}:run`, so an
+eval would get the same model, instructions and tools as the chat.
+
+That needs a new kind of target, not just configuration:
+
+- New: a runner that sends each prompt to `agent:run` (PAT auth, as for the
+  MCP server) and turns the streamed reply into the stored trace and answer.
+  The agent runs its own loop, so honest-agent's model loop and
+  `max_tool_turns` don't apply.
+- Reused: eval files, grading, provenance, storage, report, the config file
+  (one more target, e.g. `agent_run_url:`).
+- First check, before building: whether the streamed reply includes the SQL
+  Cortex Analyst generated and ran. If yes, provenance works as today; if
+  not, only accuracy can be graded.
+- Not reproducible: the user's conversation history (each eval starts
+  fresh) and their exact identity; use a test user with the same role.
+- Less faithful alternative: expose the agent as a `CORTEX_AGENT_RUN` tool on
+  the MCP server. That works with today's code, but honest-agent's own model
+  then sits in front of the agent.
+
+CoCo (Cortex Code, with a CLI) was considered and set aside: it's Snowflake's
+coding agent for developers, not what business stakeholders use. It could be
+a later, separate target (`cortex -p ... --output-format stream-json`).
