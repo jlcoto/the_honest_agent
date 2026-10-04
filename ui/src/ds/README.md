@@ -1,7 +1,8 @@
 # Design system (vendored)
 
 Copied from the Claude Design project **The Honest Agent Design System**
-(`94963a67-cb9a-4a54-9fcf-5068be36c5dc`) on 2026-10-01. The project's
+(`94963a67-cb9a-4a54-9fcf-5068be36c5dc`) on 2026-10-01; `tokens/colors.css` and
+`components/core/Badge.jsx` updated in both places on 2026-10-04. The project's
 `readme.md` holds the full guidelines (palette roles, accuracy buckets, type,
 voice); follow it when building views.
 
@@ -9,13 +10,29 @@ voice); follow it when building views.
 - `components/`: the components, copied **unchanged**, each `.jsx` with its
   `.d.ts`. Don't edit them here. Change the design in Claude Design and copy
   again, so updates stay a clean diff. Import them from `./ds` (`index.ts`).
-- Local change not yet in Claude Design: light-mode `--chart-empty` in
-  `tokens/colors.css` is `#E2DFD5` (was `#ECEAE2`, the same as `--bg-sunken`,
-  so empty bar tracks vanished on hovered table rows). The neutral `Badge`
-  (`components/core/Badge.jsx`) also got a 1px `--border-1` inset ring, since
-  its `--bg-sunken` fill vanished on hovered rows too. Push both in the next sync.
 - `globals.d.ts` and `allowUmdGlobalAccess` in `tsconfig.app.json` exist only
   so the copied `.d.ts` files type-check under React 19.
+
+## Syncing with Claude Design
+
+The Claude Design project holds files that exist only there, so never run the
+full `/design-sync` conversion (it rebuilds a project from a repo, replacing
+or deleting what's there). Use targeted `DesignSync` writes instead, once per
+finished redesign rather than per tweak:
+
+1. `get_file` every remote file you'll touch and compare it with the copy
+   here, so you start from what's really there.
+2. Edit copies in a scratch folder. For `ui_kits/dashboard` screens, test
+   locally first: build `src/ds/index.ts` with Vite in lib mode as an IIFE
+   named `TheHonestAgentDesignSystem_94963a` (React as the global `React`,
+   plus a small `ReactJSXRuntime` shim), and load the screen with fake
+   `HA_DATA`.
+3. `finalize_plan` with the exact paths and no deletes.
+4. Write `_ds_needs_recompile`, then the files, then `_ds_needs_recompile`
+   again. Claude Design rebuilds `_ds_bundle.js` from the component sources;
+   never edit the bundle directly.
+5. Update this README's copy date, and the screens (`ui_kits/dashboard`) when
+   a view's design changed.
 
 Not copied: the `ui_kits/dashboard` reference screens, guideline cards, and
 `assets/logo-mark.png` (`Logo` needs it; copy it into `public/` before using

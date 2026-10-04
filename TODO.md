@@ -265,17 +265,6 @@ users can pick what fits their setup.
   and a presigning backend defeats the no-server point. Revoking access
   takes effect immediately, since no copy of the data is left behind.
 
-## Sync the Claude Design dashboard screens with the report
-
-The design system's dashboard screens (`ui_kits/dashboard` in the Claude
-Design project, see `ui/src/ds/README.md`) have drifted from the app: they
-still say "quiz", and the Model comparison screen predates the latest-run
-redesign (branch `report-model-comparison`, 2026-10-04). Once that redesign
-is settled, update the screens in one pass, keeping their demo data. Sync per
-finished redesign, not per tweak.
-Also push the light-mode `--chart-empty` token and neutral `Badge` ring changes (see
-`ui/src/ds/README.md`).
-
 ## Move `sql_fields` into the config file's targets
 
 Which tool argument holds SQL is a fact about the MCP server, not about an eval,
