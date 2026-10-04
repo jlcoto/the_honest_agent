@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, runsOf, type Run } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
-import { AccuracyBar, Badge, Card, DataTable, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
+import { AccuracyBar, Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
 
 const METRICS = [
@@ -76,13 +76,17 @@ export function Compare({
 }) {
   const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
   const agents = useMemo(() => agentsOf(data.results), [data])
+  const agentRuns = useMemo(() => runsOf(data.results.filter((r) => agentOf(r) === agent)), [data, agent])
+  // Only runs in this range count, so the page can go back in time. Defaults to every run, as on the Overview.
+  const allDates = useMemo(() => [...new Set(runsOf(data.results).map((r) => r.date))].sort(), [data])
+  const [range, setRange] = useState(() => ({ from: allDates[0], to: allDates[allDates.length - 1] }))
   // Picked run_id per model, defaulting to each model's latest run. Kept per agent so switching agent resets it.
   const [picks, setPicks] = useState<{ agent: string; runs: Record<string, string> }>({ agent, runs: {} })
   const picked = picks.agent === agent ? picks.runs : {}
   const pick = (model: string, runId: string) => setPicks({ agent, runs: { ...picked, [model]: runId } })
   // One agent at a time: models are only comparable on the same agent. The agent comes from App.
   const { rows, evals, baseline } = useMemo(() => {
-    const runs = runsOf(data.results.filter((r) => agentOf(r) === agent))
+    const runs = agentRuns.filter((r) => r.date >= range.from && r.date <= range.to)
     // Each model's runs, newest first (runsOf sorts oldest first). A row shows one run, so its numbers share one date.
     const runsByModel = new Map<string, Run[]>()
     for (const run of [...runs].reverse()) runsByModel.set(run.model, [...(runsByModel.get(run.model) ?? []), run])
@@ -90,7 +94,7 @@ export function Compare({
       const modelRuns = runsByModel.get(model)!
       return modelRuns.find((r) => r.run_id === picked[model]) ?? modelRuns[0]
     }
-    // The baseline is the model of the agent's most recent run; differences are measured against its selected run.
+    // The baseline is the model of the agent's most recent run in the range; differences are measured against its selected run.
     const baseline = runs.length ? runs[runs.length - 1].model : null
     const resultsOf = (model: string) => new Map(selectedRun(model).results.map((r) => [r.eval_id, r]))
     const base = baseline ? resultsOf(baseline) : new Map<string, ResultRow>()
@@ -123,7 +127,7 @@ export function Compare({
     })
     const selectedResults = models.flatMap((model) => selectedRun(model).results)
     return { rows, evals: evalsOf(selectedResults, evalTitles(data.results)), baseline }
-  }, [data, agent, picked])
+  }, [data, agentRuns, range, picked])
 
   const heatRows = evals.map((q) =>
     evalHeatRow(
@@ -144,11 +148,20 @@ export function Compare({
         subtitle={`${agent} · ${rows.length} ${rows.length === 1 ? 'model' : 'models'} · latest run per model unless you pick another`}
       >
         <Select size="sm" icon="bot" options={agents} value={agent} onChange={setAgent} />
+        <DateRangePicker dates={[...new Set(agentRuns.map((r) => r.date))]} value={range} onChange={setRange} />
       </PageHeader>
       {rows.length === 0 ? (
         <Card>
           <p style={{ margin: 0, padding: '24px 0', textAlign: 'center', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
-            No results yet. Run <code>honest-agent run</code>, then <code>honest-agent report</code> again.
+            {agentRuns.length ? (
+              <>
+                No eval runs of {agent} between {range.from} and {range.to}. Try a wider range.
+              </>
+            ) : (
+              <>
+                No results yet. Run <code>honest-agent run</code>, then <code>honest-agent report</code> again.
+              </>
+            )}
           </p>
         </Card>
       ) : (
