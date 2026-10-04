@@ -16,7 +16,7 @@
 --fg-1:#1C2A22;--fg-2:#4E5C52;--fg-3:#7C877F;--fg-inverse:#F3F2EC;
 --border-1:#DAD7CD;--border-2:#C6C3B6;--border-focus:var(--green-500);
 --accent:var(--green-700);--accent-hover:var(--green-800);--accent-soft:#E3E8DA;--accent-fg:#F3F2EC;
---chart-grid:#E4E1D7;--chart-axis:#7C877F;--chart-neutral:var(--ink-data);--chart-empty:#ECEAE2;
+--chart-grid:#E4E1D7;--chart-axis:#7C877F;--chart-neutral:var(--ink-data);--chart-empty:#E2DFD5;
 }
 [data-theme="dark"]{
 --bg-page:var(--green-950);--bg-surface:var(--green-900);--bg-sunken:#121B16;--bg-inverse:var(--green-100);

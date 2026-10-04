@@ -9,6 +9,11 @@ voice); follow it when building views.
 - `components/`: the components, copied **unchanged**, each `.jsx` with its
   `.d.ts`. Don't edit them here. Change the design in Claude Design and copy
   again, so updates stay a clean diff. Import them from `./ds` (`index.ts`).
+- Local change not yet in Claude Design: light-mode `--chart-empty` in
+  `tokens/colors.css` is `#E2DFD5` (was `#ECEAE2`, the same as `--bg-sunken`,
+  so empty bar tracks vanished on hovered table rows). The neutral `Badge`
+  (`components/core/Badge.jsx`) also got a 1px `--border-1` inset ring, since
+  its `--bg-sunken` fill vanished on hovered rows too. Push both in the next sync.
 - `globals.d.ts` and `allowUmdGlobalAccess` in `tsconfig.app.json` exist only
   so the copied `.d.ts` files type-check under React 19.
 

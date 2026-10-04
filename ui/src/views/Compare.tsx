@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { agentOf, agentsOf, bucketCounts, mean, modelsOf, evalHeatRow, evalTitles, evalsOf, runsOf } from '../data/derive'
+import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, runsOf } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
-import { AccuracyBar, Card, DataTable, Heatmap, ScoreCell, Select, Tabs } from '../ds'
+import { AccuracyBar, Badge, Card, DataTable, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
 
 const METRICS = [
@@ -13,16 +13,38 @@ const METRICS = [
 
 interface ModelRow {
   model: string
-  isCurrent: boolean
-  runs: number
+  isBaseline: boolean
+  /** "YYYY-MM-DD HH:MM" of the model's latest run */
+  timestamp: string
   latest: Map<string, ResultRow>
   accuracy: number
   provenance: number
   dAccuracy: number | null
   dProvenance: number | null
+  /** Evals both this model's and the baseline's latest runs contain; the differences are computed on these. */
+  shared: number
+  /** Evals in the latest run that met both their accuracy and provenance thresholds, as on the Overview. */
+  passed: number
+  /** Not the baseline, and its latest run shares no evals with the baseline's, so there's no difference to show. */
+  noOverlap: boolean
+  /** Not the baseline, and its latest run tested a different set of evals than the baseline's. */
+  differs: boolean
 }
 
-function Delta({ value }: { value: number | null }) {
+/** Why a row's run isn't comparable with the baseline's, by how its evals overlap the baseline's. */
+function differsNote(shared: number, baselineEvals: number) {
+  const overlap =
+    shared === 0
+      ? `Shares none of the ${baselineEvals} baseline evals.`
+      : shared < baselineEvals
+        ? `Shares only ${shared} of ${baselineEvals} baseline evals.`
+        : "Also tested evals the baseline didn't."
+  return `${overlap} For fully comparable results, rerun on the same evals.`
+}
+
+
+function Delta({ value, shared, noOverlap }: { value: number | null; shared: number; noOverlap: boolean }) {
+  if (noOverlap) return <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>no evals in common</span>
   if (value == null) return null
   const flat = Math.abs(value) < 0.0005
   return (
@@ -34,6 +56,7 @@ function Delta({ value }: { value: number | null }) {
       }}
     >
       {flat ? '±0.0 pp' : `${value > 0 ? '+' : '−'}${Math.abs(value * 100).toFixed(1)} pp`}
+      <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}> · {shared} shared</span>
     </span>
   )
 }
@@ -50,40 +73,42 @@ export function Compare({
   const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
   const agents = useMemo(() => agentsOf(data.results), [data])
   // One agent at a time: models are only comparable on the same agent. The agent comes from App.
-  const { rows, evals, current } = useMemo(() => {
-    const results = data.results.filter((r) => agentOf(r) === agent)
-    const runs = runsOf(results)
-    const current = runs.length ? runs[runs.length - 1].model : null
-    // Each model's most recent result per eval (runs are sorted oldest first).
-    const latestByModel = new Map<string, Map<string, ResultRow>>()
-    for (const run of runs) {
-      const latest = latestByModel.get(run.model) ?? new Map<string, ResultRow>()
-      for (const r of run.results) latest.set(r.eval_id, r)
-      latestByModel.set(run.model, latest)
-    }
-    const base = current ? latestByModel.get(current)! : new Map<string, ResultRow>()
-    const rows: ModelRow[] = modelsOf(results).map((model) => {
-      const latest = latestByModel.get(model)!
+  const { rows, evals, baseline } = useMemo(() => {
+    const runs = runsOf(data.results.filter((r) => agentOf(r) === agent))
+    // Each model's latest run (runs are sorted oldest first), so every number in a row shares one date.
+    const latestRuns = new Map(runs.map((run) => [run.model, run]))
+    // The baseline is the model of the agent's most recent run; differences are measured against it.
+    const baseline = runs.length ? runs[runs.length - 1].model : null
+    const resultsOf = (model: string) => new Map(latestRuns.get(model)!.results.map((r) => [r.eval_id, r]))
+    const base = baseline ? resultsOf(baseline) : new Map<string, ResultRow>()
+    // Baseline first, then the rest by name.
+    const models = [...latestRuns.keys()].sort((x, y) => Number(y === baseline) - Number(x === baseline) || x.localeCompare(y))
+    const rows: ModelRow[] = models.map((model) => {
+      const latest = resultsOf(model)
       const results = [...latest.values()]
       const shared = [...latest.keys()].filter((q) => base.has(q))
       const sharedDelta = (key: 'accuracy_score' | 'provenance_score') =>
-        model === current || shared.length === 0
+        model === baseline || shared.length === 0
           ? null
           : mean(shared.map((q) => latest.get(q)![key])) - mean(shared.map((q) => base.get(q)![key]))
       return {
         model,
-        isCurrent: model === current,
-        runs: runs.filter((r) => r.model === model).length,
+        isBaseline: model === baseline,
+        timestamp: latestRuns.get(model)!.timestamp,
         latest,
         accuracy: mean(results.map((r) => r.accuracy_score)),
         provenance: mean(results.map((r) => r.provenance_score)),
         dAccuracy: sharedDelta('accuracy_score'),
         dProvenance: sharedDelta('provenance_score'),
+        shared: shared.length,
+        passed: latestRuns.get(model)!.passed,
+        noOverlap: model !== baseline && shared.length === 0,
+        differs: model !== baseline && !(shared.length === base.size && latest.size === base.size),
       }
     })
-    return { rows, evals: evalsOf(results, evalTitles(data.results)), current }
+    const latestResults = [...latestRuns.values()].flatMap((run) => run.results)
+    return { rows, evals: evalsOf(latestResults, evalTitles(data.results)), baseline }
   }, [data, agent])
-
 
   const heatRows = evals.map((q) =>
     evalHeatRow(
@@ -93,11 +118,13 @@ export function Compare({
     ),
   )
 
+  const baselineEvals = rows.find((m) => m.isBaseline)?.latest.size ?? 0
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="Model comparison"
-        subtitle={`${agent} · ${rows.length} models · each model's latest result per eval`}
+        subtitle={`${agent} · ${rows.length} ${rows.length === 1 ? 'model' : 'models'} · each model's latest run`}
       >
         <Select size="sm" icon="bot" options={agents} value={agent} onChange={setAgent} />
       </PageHeader>
@@ -111,7 +138,7 @@ export function Compare({
         <>
           <Card
             title="Results by model"
-            subtitle={`Differences in points vs the current model, ${current}, on the evals both ran`}
+            subtitle={`Differences in points vs the baseline, ${baseline}, on the evals both ran`}
           >
             <DataTable
               rowKey="model"
@@ -122,19 +149,46 @@ export function Compare({
                   label: 'Model',
                   render: (r: ModelRow) => (
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ font: '500 13px var(--font-mono)', whiteSpace: 'nowrap' }}>{r.model}</span>
-                      {r.isCurrent ? (
-                        <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>Current model (latest run)</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ font: '500 13px var(--font-mono)', whiteSpace: 'nowrap' }}>{r.model}</span>
+                        {r.differs ? (
+                          // Opens upward: the table clips below its last row, and the baseline row is always above this one.
+                          <Tooltip
+                            side="top"
+                            content={
+                              <span style={{ display: 'block', width: 240, whiteSpace: 'normal' }}>
+                                {differsNote(r.shared, baselineEvals)}
+                              </span>
+                            }
+                          >
+                            <span
+                              role="img"
+                              aria-label={differsNote(r.shared, baselineEvals)}
+                              tabIndex={0}
+                              style={{ display: 'inline-flex', color: 'var(--fg-3)', cursor: 'help' }}
+                            >
+                              <Icon name="info" size={14} />
+                            </span>
+                          </Tooltip>
+                        ) : null}
+                      </span>
+                      {r.isBaseline ? (
+                        <span>
+                          <Badge>Baseline</Badge>
+                        </span>
                       ) : null}
                     </span>
                   ),
                 },
                 {
-                  key: 'coverage',
-                  label: 'Evals',
+                  key: 'run',
+                  label: 'Latest run',
                   render: (r: ModelRow) => (
-                    <span style={{ font: '400 13px var(--font-mono)', color: 'var(--fg-2)', whiteSpace: 'nowrap' }}>
-                      {r.latest.size} of {evals.length} · {r.runs} {r.runs === 1 ? 'run' : 'runs'}
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, whiteSpace: 'nowrap' }}>
+                      <span style={{ font: '400 13px var(--font-mono)' }}>{formatRunTime(r.timestamp)}</span>
+                      <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>
+                        {r.latest.size} {r.latest.size === 1 ? 'eval' : 'evals'}
+                      </span>
                     </span>
                   ),
                 },
@@ -144,7 +198,7 @@ export function Compare({
                   render: (r: ModelRow) => (
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <ScoreCell score={r.accuracy} />
-                      <Delta value={r.dAccuracy} />
+                      <Delta value={r.dAccuracy} shared={r.shared} noOverlap={r.noOverlap} />
                     </span>
                   ),
                 },
@@ -154,16 +208,24 @@ export function Compare({
                   render: (r: ModelRow) => (
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <ScoreCell score={r.provenance} />
-                      <Delta value={r.dProvenance} />
+                      <Delta value={r.dProvenance} shared={r.shared} noOverlap={r.noOverlap} />
                     </span>
                   ),
                 },
                 {
-                  key: 'mix',
-                  label: 'Answer mix',
-                  width: 180,
+                  key: 'passed',
+                  label: 'Passed thresholds',
+                  width: 200,
                   render: (r: ModelRow) => (
-                    <AccuracyBar counts={bucketCounts([...r.latest.values()].map((x) => x.accuracy_score))} height={8} />
+                    <span
+                      style={{ display: 'block', padding: '6px 0' }}
+                      title={`${r.passed} of ${r.latest.size} passed · ${r.latest.size - r.passed} below min score`}
+                    >
+                      {/* pointerEvents off so the bar's own segment titles ("Correct"/"Wrong") don't replace this one. */}
+                      <span style={{ display: 'block', pointerEvents: 'none' }}>
+                        <AccuracyBar counts={{ correct: r.passed, wrong: r.latest.size - r.passed }} height={8} />
+                      </span>
+                    </span>
                   ),
                 },
               ]}
@@ -171,7 +233,7 @@ export function Compare({
           </Card>
           <Card
             title="Scores by model"
-            subtitle="Grey cells: that model never ran the eval · click a cell to see the answer"
+            subtitle="Each model's latest run · grey cells: not in that run · click a cell to see the answer"
             actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
           >
             <Heatmap
