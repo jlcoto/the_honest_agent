@@ -38,12 +38,18 @@ function Delta({ value }: { value: number | null }) {
   )
 }
 
-export function Compare({ data }: { data: ReportData }) {
+export function Compare({
+  data,
+  agent,
+  setAgent,
+}: {
+  data: ReportData
+  agent: string
+  setAgent: (agent: string) => void
+}) {
   const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
   const agents = useMemo(() => agentsOf(data.results), [data])
-  // One agent at a time: models are only comparable on the same agent. Defaults to the latest run's.
-  const [agent, setAgent] = useState(() => runsOf(data.results).at(-1)?.agent ?? '')
-
+  // One agent at a time: models are only comparable on the same agent. The agent comes from App.
   const { rows, evals, current } = useMemo(() => {
     const results = data.results.filter((r) => agentOf(r) === agent)
     const runs = runsOf(results)

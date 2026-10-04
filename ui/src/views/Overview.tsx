@@ -62,18 +62,25 @@ function Empty({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function Overview({ data }: { data: ReportData }) {
+export function Overview({
+  data,
+  agent,
+  setAgent,
+}: {
+  data: ReportData
+  agent: string
+  setAgent: (agent: string) => void
+}) {
   const allRuns = useMemo(() => runsOf(data.results), [data])
   const agents = useMemo(() => agentsOf(data.results), [data])
   const titles = useMemo(() => evalTitles(data.results), [data])
   const allDates = useMemo(() => [...new Set(allRuns.map((r) => r.date))], [allRuns])
 
   // Scores are only meaningful for one agent and one model at a time, so both
-  // are always a single pick, defaulting to the latest run's.
-  const [agent, setAgent] = useState(() => allRuns.at(-1)?.agent ?? '')
+  // are always a single pick, defaulting to the latest run's. The agent comes from App.
   const agentRuns = allRuns.filter((r) => r.agent === agent)
   const models = modelsOf(agentRuns.flatMap((r) => r.results))
-  const [modelPick, setModel] = useState(() => allRuns.at(-1)?.model ?? '')
+  const [modelPick, setModel] = useState(() => agentRuns.at(-1)?.model ?? '')
   const model = models.includes(modelPick) ? modelPick : (agentRuns.at(-1)?.model ?? '')
   const pairRuns = agentRuns.filter((r) => r.model === model)
   const [range, setRange] = useState(() => ({ from: allDates[0], to: allDates[allDates.length - 1] }))

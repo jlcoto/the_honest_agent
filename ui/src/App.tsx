@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
+import { runsOf } from './data/derive'
 import { loadReportData } from './data/load'
 import type { ReportData } from './data/types'
 import { useRoute } from './router'
@@ -26,11 +27,16 @@ function initialTheme(): Theme {
 function App() {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [theme, setTheme] = useState<Theme>(initialTheme)
+  // Shared by Overview and Compare, so switching pages keeps the agent. Defaults to the latest run's.
+  const [agent, setAgent] = useState('')
   const route = useRoute()
 
   useEffect(() => {
     loadReportData()
-      .then((data) => setState({ status: 'ready', data }))
+      .then((data) => {
+        setAgent(runsOf(data.results).at(-1)?.agent ?? '')
+        setState({ status: 'ready', data })
+      })
       .catch((err: unknown) =>
         setState({ status: 'error', message: err instanceof Error ? err.message : String(err) }),
       )
@@ -61,8 +67,8 @@ function App() {
               {state.message} If you opened this file directly, run <code>honest-agent serve</code> instead.
             </p>
           )}
-          {state.status === 'ready' && route.name === 'overview' && <Overview data={state.data} />}
-          {state.status === 'ready' && route.name === 'compare' && <Compare data={state.data} />}
+          {state.status === 'ready' && route.name === 'overview' && <Overview data={state.data} agent={agent} setAgent={setAgent} />}
+          {state.status === 'ready' && route.name === 'compare' && <Compare data={state.data} agent={agent} setAgent={setAgent} />}
           {state.status === 'ready' && route.name === 'result' && (
             <ResultDetail data={state.data} resultId={route.resultId} />
           )}
