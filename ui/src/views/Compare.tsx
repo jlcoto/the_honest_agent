@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, runsOf } from '../data/derive'
+import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, runsOf, type Run } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { AccuracyBar, Badge, Card, DataTable, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
@@ -14,20 +14,24 @@ const METRICS = [
 interface ModelRow {
   model: string
   isBaseline: boolean
-  /** "YYYY-MM-DD HH:MM" of the model's latest run */
-  timestamp: string
+  /** The model's runs, newest first; the dropdown lists them. */
+  runs: Run[]
+  /** The run this row shows: the latest unless another was picked. */
+  run: Run
+  isLatest: boolean
+  /** The selected run's results by eval_id. */
   latest: Map<string, ResultRow>
   accuracy: number
   provenance: number
   dAccuracy: number | null
   dProvenance: number | null
-  /** Evals both this model's and the baseline's latest runs contain; the differences are computed on these. */
+  /** Evals both this model's and the baseline's selected runs contain; the differences are computed on these. */
   shared: number
-  /** Evals in the latest run that met both their accuracy and provenance thresholds, as on the Overview. */
+  /** Evals in the selected run that met both their accuracy and provenance thresholds, as on the Overview. */
   passed: number
-  /** Not the baseline, and its latest run shares no evals with the baseline's, so there's no difference to show. */
+  /** Not the baseline, and its selected run shares no evals with the baseline's, so there's no difference to show. */
   noOverlap: boolean
-  /** Not the baseline, and its latest run tested a different set of evals than the baseline's. */
+  /** Not the baseline, and its selected run tested a different set of evals than the baseline's. */
   differs: boolean
 }
 
@@ -72,17 +76,26 @@ export function Compare({
 }) {
   const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
   const agents = useMemo(() => agentsOf(data.results), [data])
+  // Picked run_id per model, defaulting to each model's latest run. Kept per agent so switching agent resets it.
+  const [picks, setPicks] = useState<{ agent: string; runs: Record<string, string> }>({ agent, runs: {} })
+  const picked = picks.agent === agent ? picks.runs : {}
+  const pick = (model: string, runId: string) => setPicks({ agent, runs: { ...picked, [model]: runId } })
   // One agent at a time: models are only comparable on the same agent. The agent comes from App.
   const { rows, evals, baseline } = useMemo(() => {
     const runs = runsOf(data.results.filter((r) => agentOf(r) === agent))
-    // Each model's latest run (runs are sorted oldest first), so every number in a row shares one date.
-    const latestRuns = new Map(runs.map((run) => [run.model, run]))
-    // The baseline is the model of the agent's most recent run; differences are measured against it.
+    // Each model's runs, newest first (runsOf sorts oldest first). A row shows one run, so its numbers share one date.
+    const runsByModel = new Map<string, Run[]>()
+    for (const run of [...runs].reverse()) runsByModel.set(run.model, [...(runsByModel.get(run.model) ?? []), run])
+    const selectedRun = (model: string) => {
+      const modelRuns = runsByModel.get(model)!
+      return modelRuns.find((r) => r.run_id === picked[model]) ?? modelRuns[0]
+    }
+    // The baseline is the model of the agent's most recent run; differences are measured against its selected run.
     const baseline = runs.length ? runs[runs.length - 1].model : null
-    const resultsOf = (model: string) => new Map(latestRuns.get(model)!.results.map((r) => [r.eval_id, r]))
+    const resultsOf = (model: string) => new Map(selectedRun(model).results.map((r) => [r.eval_id, r]))
     const base = baseline ? resultsOf(baseline) : new Map<string, ResultRow>()
     // Baseline first, then the rest by name.
-    const models = [...latestRuns.keys()].sort((x, y) => Number(y === baseline) - Number(x === baseline) || x.localeCompare(y))
+    const models = [...runsByModel.keys()].sort((x, y) => Number(y === baseline) - Number(x === baseline) || x.localeCompare(y))
     const rows: ModelRow[] = models.map((model) => {
       const latest = resultsOf(model)
       const results = [...latest.values()]
@@ -94,21 +107,23 @@ export function Compare({
       return {
         model,
         isBaseline: model === baseline,
-        timestamp: latestRuns.get(model)!.timestamp,
+        runs: runsByModel.get(model)!,
+        run: selectedRun(model),
+        isLatest: selectedRun(model) === runsByModel.get(model)![0],
         latest,
         accuracy: mean(results.map((r) => r.accuracy_score)),
         provenance: mean(results.map((r) => r.provenance_score)),
         dAccuracy: sharedDelta('accuracy_score'),
         dProvenance: sharedDelta('provenance_score'),
         shared: shared.length,
-        passed: latestRuns.get(model)!.passed,
+        passed: selectedRun(model).passed,
         noOverlap: model !== baseline && shared.length === 0,
         differs: model !== baseline && !(shared.length === base.size && latest.size === base.size),
       }
     })
-    const latestResults = [...latestRuns.values()].flatMap((run) => run.results)
-    return { rows, evals: evalsOf(latestResults, evalTitles(data.results)), baseline }
-  }, [data, agent])
+    const selectedResults = models.flatMap((model) => selectedRun(model).results)
+    return { rows, evals: evalsOf(selectedResults, evalTitles(data.results)), baseline }
+  }, [data, agent, picked])
 
   const heatRows = evals.map((q) =>
     evalHeatRow(
@@ -119,12 +134,14 @@ export function Compare({
   )
 
   const baselineEvals = rows.find((m) => m.isBaseline)?.latest.size ?? 0
+  // Heatmap column per model; a picked older run gets its date so the column says which run it shows.
+  const columns = rows.map((m) => (m.isLatest ? m.model : `${m.model} · ${formatRunTime(m.run.timestamp, { year: false })}`))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="Model comparison"
-        subtitle={`${agent} · ${rows.length} ${rows.length === 1 ? 'model' : 'models'} · each model's latest run`}
+        subtitle={`${agent} · ${rows.length} ${rows.length === 1 ? 'model' : 'models'} · latest run per model unless you pick another`}
       >
         <Select size="sm" icon="bot" options={agents} value={agent} onChange={setAgent} />
       </PageHeader>
@@ -182,12 +199,28 @@ export function Compare({
                 },
                 {
                   key: 'run',
-                  label: 'Latest run',
+                  label: 'Run',
                   render: (r: ModelRow) => (
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 2, whiteSpace: 'nowrap' }}>
-                      <span style={{ font: '400 13px var(--font-mono)' }}>{formatRunTime(r.timestamp)}</span>
+                      {r.runs.length > 1 ? (
+                        // Wrapped so the column's flex layout doesn't stretch the Select away from its arrow.
+                        <span style={{ alignSelf: 'flex-start' }}>
+                          <Select
+                            size="sm"
+                            value={r.run.run_id}
+                            onChange={(runId) => pick(r.model, runId)}
+                            options={r.runs.map((run, i) => ({
+                              value: run.run_id,
+                              label: `${formatRunTime(run.timestamp)}${i === 0 ? ' (latest)' : ''}`,
+                            }))}
+                          />
+                        </span>
+                      ) : (
+                        <span style={{ font: '400 13px var(--font-mono)' }}>{formatRunTime(r.run.timestamp)}</span>
+                      )}
                       <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>
                         {r.latest.size} {r.latest.size === 1 ? 'eval' : 'evals'}
+                        {r.isLatest ? '' : ' · older run'}
                       </span>
                     </span>
                   ),
@@ -233,7 +266,7 @@ export function Compare({
           </Card>
           <Card
             title="Scores by model"
-            subtitle="Each model's latest run · grey cells: not in that run · click a cell to see the answer"
+            subtitle="Each model's selected run · grey cells: not in that run · click a cell to see the answer"
             actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
           >
             <Heatmap
@@ -245,11 +278,11 @@ export function Compare({
               groupBy="category"
               defaultExpanded={[...new Set(evals.map((q) => q.category))]}
               rows={heatRows}
-              columns={rows.map((m) => m.model)}
+              columns={columns}
               cellWidth={56}
               onCellClick={(row, column) => {
                 const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id
-                const result = rows.find((m) => m.model === column)?.latest.get(evalId)
+                const result = rows[columns.indexOf(column)]?.latest.get(evalId)
                 if (result) navigate({ name: 'result', resultId: result.result_id })
               }}
             />
