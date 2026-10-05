@@ -142,6 +142,19 @@ def test_target_without_a_config_file_is_an_error(tmp_path, monkeypatch, fake_ru
 
     assert result.exit_code != 0
     assert "--target demo needs a honest_agent_config.yml" in result.output
+    assert "Copy" not in result.output
+
+
+def test_a_missing_config_file_points_to_the_example_to_copy(tmp_path, monkeypatch, fake_run):
+    (tmp_path / "honest_agent_config.example.yml").write_text(PROJECT_YML)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("HONEST_AGENT_CONFIG_FILE", raising=False)
+
+    result, _ = _run(fake_run, "--target", "demo", env={"ANTHROPIC_API_KEY": "test"})
+
+    assert result.exit_code != 0
+    example, config = tmp_path / "honest_agent_config.example.yml", tmp_path / "honest_agent_config.yml"
+    assert f"Copy {example} to {config}" in result.output
 
 
 def test_the_file_is_found_from_a_subfolder_and_its_paths_stay_relative_to_it(project, monkeypatch, fake_run):

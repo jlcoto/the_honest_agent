@@ -293,6 +293,9 @@ command, like `dbt init`:
 - Never overwrites an existing file (skips it and says so), and never edits
   `.gitignore`: in a git repository where `.env` isn't ignored, it prints a
   warning with the line to add.
+- Since 2026-10-05 the bundled example commits `honest_agent_config.example.yml`
+  and ignores the real file (like `.env.example`). `init` could offer the same
+  split when the config names private account URLs.
 - The example eval has marked placeholders, since honest-agent can't know a
   user's tables. Exception: every MotherDuck account has a `sample_data`
   database, so the MotherDuck template could ship an eval that passes out of

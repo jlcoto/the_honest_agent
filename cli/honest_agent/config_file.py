@@ -29,6 +29,7 @@ from typing import Any
 import yaml
 
 CONFIG_FILE_NAME = "honest_agent_config.yml"
+EXAMPLE_CONFIG_FILE_NAME = "honest_agent_config.example.yml"
 
 # Settings any target can set, or the top level can set for every target.
 _SHARED_KEYS = {"model", "judge_model", "max_tool_turns"}
@@ -89,6 +90,15 @@ def find_config_file(start: Path) -> Path | None:
         if candidate.is_file():
             return candidate
     return None
+
+
+def missing_config_hint(start: Path) -> str:
+    """When no config file is found, points to the example one (in `start` or a parent folder) to copy."""
+    for folder in (start, *start.parents):
+        example = folder / EXAMPLE_CONFIG_FILE_NAME
+        if example.is_file():
+            return f" Copy {example} to {folder / CONFIG_FILE_NAME} and fill in your own values."
+    return ""
 
 
 def load_config(path: Path) -> Config:
