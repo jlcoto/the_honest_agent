@@ -80,7 +80,10 @@ async def grade_llm_judge(
         f"Given answer:\n{_as_data(answer)}\n\n"
         "Score the given answer from 0.0 (completely wrong) to 1.0 (fully correct "
         "and equivalent to the expected answer). Minor wording/formatting "
-        "differences that don't change the meaning should still score 1.0.\n\n"
+        "differences that don't change the meaning should still score 1.0. An answer "
+        "that contradicts itself, offers several candidate values, or doesn't commit "
+        "to one final value scores 0.0, even if one of those values matches the "
+        "expected answer.\n\n"
         'Respond with ONLY a JSON object: {"score": <float 0-1>, "rationale": "<one sentence>"}'
     )
     text, input_tokens, output_tokens = await judge.complete(judge_prompt, model=model, max_tokens=200)

@@ -175,10 +175,13 @@ blending or fallback between them (see `honest_agent/grading.py`):
   correctly identifying which value is the "final" one if the agent's
   answer mentions more than one candidate — usually reliable when the
   answer clearly signals its conclusion, not guaranteed otherwise.
-- **`llm_judge`** — Claude reads the question, expected answer, and given
-  answer, and scores correctness holistically from 0.0 to 1.0 with a
+- **`llm_judge`** — the judge model reads the question, expected answer, and
+  given answer, and scores correctness holistically from 0.0 to 1.0 with a
   rationale. The only method that can give real partial credit, not just
-  pass/fail. Best for open-ended or multi-part answers where there's no
+  pass/fail, and the only one that checks how the answer is given: an
+  answer that contradicts itself or wavers between values scores 0.0, even
+  if one of them is right (`extract_match` would pass it if the value it
+  extracts matches). Best for open-ended or multi-part answers where there's no
   single literal value to extract and compare — an explanation, a summary,
   a judgment call on quality. Also the least deterministic and most
   expensive of the three (a full reasoning call, not just extraction), so
