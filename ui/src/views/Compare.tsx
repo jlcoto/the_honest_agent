@@ -138,8 +138,8 @@ export function Compare({
   )
 
   const baselineEvals = rows.find((m) => m.isBaseline)?.latest.size ?? 0
-  // Heatmap column per model; a picked older run gets its date so the column says which run it shows.
-  const columns = rows.map((m) => (m.isLatest ? m.model : `${m.model} · ${formatRunTime(m.run.timestamp, { year: false })}`))
+  // Heatmap column per model; which run each shows is in the Results table above (rotated headers can't fit a date).
+  const columns = rows.map((m) => m.model)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
