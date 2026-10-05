@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { SCORES_OVER_TIME_NOTE, ScoresOverTime, seriesColors } from '../components/ScoresOverTime'
 import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, runsOf, type Run } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { AccuracyBar, Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
@@ -75,8 +76,11 @@ export function Compare({
   setAgent: (agent: string) => void
 }) {
   const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
+  const [trendMetric, setTrendMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
   const agents = useMemo(() => agentsOf(data.results), [data])
   const agentRuns = useMemo(() => runsOf(data.results.filter((r) => agentOf(r) === agent)), [data, agent])
+  // One color per model for the whole report, independent of agent, date range or baseline.
+  const modelColors = useMemo(() => seriesColors(runsOf(data.results)), [data])
   // Only runs in this range count, so the page can go back in time. Defaults to every run, as on the Overview.
   const allDates = useMemo(() => [...new Set(runsOf(data.results).map((r) => r.date))].sort(), [data])
   const [range, setRange] = useState(() => ({ from: allDates[0], to: allDates[allDates.length - 1] }))
@@ -298,6 +302,36 @@ export function Compare({
                 const result = rows[columns.indexOf(column)]?.latest.get(evalId)
                 if (result) navigate({ name: 'result', resultId: result.result_id })
               }}
+            />
+          </Card>
+          <Card
+            title="Scores over time"
+            subtitle="One row per model · each point is the model's last run that day"
+            actions={
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                <Tabs items={METRICS} value={trendMetric} onChange={(id) => setTrendMetric(id as typeof trendMetric)} />
+                <Tooltip
+                  side="bottom"
+                  content={<span style={{ display: 'block', width: 260, whiteSpace: 'normal' }}>{SCORES_OVER_TIME_NOTE}</span>}
+                >
+                  <span
+                    role="img"
+                    aria-label={SCORES_OVER_TIME_NOTE}
+                    tabIndex={0}
+                    style={{ display: 'inline-flex', color: 'var(--fg-3)', cursor: 'help' }}
+                  >
+                    <Icon name="info" size={16} />
+                  </span>
+                </Tooltip>
+              </span>
+            }
+          >
+            {/* All runs in the date range, regardless of the Run dropdowns: this card is the history. */}
+            <ScoresOverTime
+              runs={agentRuns.filter((r) => r.date >= range.from && r.date <= range.to)}
+              models={rows.map((m) => m.model)}
+              metric={trendMetric}
+              colors={modelColors}
             />
           </Card>
         </>
