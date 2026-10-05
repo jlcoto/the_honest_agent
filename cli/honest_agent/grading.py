@@ -70,7 +70,7 @@ def _as_data(answer: str) -> str:
 
 
 async def grade_llm_judge(
-    judge: Judge, answer: str, expected_answer: str, prompt: str, model: str = "claude-haiku-4-5-20251001"
+    judge: Judge, answer: str, expected_answer: str, prompt: str, model: str = "claude-haiku-4-5"
 ) -> tuple[float, str, int, int]:
     judge_prompt = (
         "You are grading whether an AI-generated answer is correct.\n\n"
@@ -96,7 +96,7 @@ async def grade_extract_match(
     answer: str,
     expected_answer: str,
     prompt: str,
-    model: str = "claude-haiku-4-5-20251001",
+    model: str = "claude-haiku-4-5",
     tolerance: float | None = None,
     tolerance_percent: float | None = None,
 ) -> tuple[float, str, int, int]:
@@ -150,7 +150,7 @@ async def grade_accuracy(
     expected_answer: str,
     prompt: str,
     judge: Judge | None = None,
-    model: str = "claude-haiku-4-5-20251001",
+    model: str = "claude-haiku-4-5",
     tolerance: float | None = None,
     tolerance_percent: float | None = None,
 ) -> tuple[float, str | None, int, int]:

@@ -81,7 +81,7 @@ def _mcp_tool_to_anthropic_schema(tool: Any) -> dict:
 class MCPAgentClient(AgentClient):
     """Sources its tools from a live, already-connected `mcp.Client`."""
 
-    def __init__(self, mcp_client, model: str = "claude-haiku-4-5-20251001", max_tool_turns: int = 5):
+    def __init__(self, mcp_client, model: str = "claude-haiku-4-5", max_tool_turns: int = 5):
         import anthropic
 
         self._anthropic = anthropic.AsyncAnthropic()

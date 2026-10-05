@@ -3,7 +3,7 @@ agent being evaluated (like the targets in a dbt profile). It's optional -- with
 from flags, environment variables or built-in defaults, as before.
 
     results_path: ./honest_agent_results/results.duckdb   # shared by every target
-    model: claude-haiku-4-5-20251001                      # can be overridden per target
+    model: claude-haiku-4-5                               # can be overridden per target
     default_target: demo
     targets:
       demo:

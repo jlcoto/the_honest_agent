@@ -72,7 +72,7 @@ def openai_client() -> Any:
 
 
 # Used when --model isn't given: a small, cheap model from whichever provider has a key.
-DEFAULT_MODELS = {ANTHROPIC: "claude-haiku-4-5-20251001", OPENAI: "gpt-5.4-mini"}
+DEFAULT_MODELS = {ANTHROPIC: "claude-haiku-4-5", OPENAI: "gpt-5.4-mini"}
 
 
 def default_model(environ: Mapping[str, str]) -> str | None:
