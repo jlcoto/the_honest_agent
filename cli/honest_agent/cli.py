@@ -22,6 +22,7 @@ from .config_file import (
     Target,
     find_config_file,
     load_config,
+    missing_config_hint,
 )
 from .eval_loader import EvalDefinition, filter_by_tags, load_evals
 from .grading import grade_accuracy
@@ -230,8 +231,10 @@ def _resolve_server(
         return layer_command, layer_url, bearer_token
 
     if not (file_command or file_url):
+        hint = missing_config_hint(Path.cwd()) if _config(ctx) is None else ""
         raise click.ClickException(
             f"--mcp-command or --mcp-url is required (or a target with mcp_command/mcp_url in {CONFIG_FILE_NAME})."
+            + hint
         )
     if ctx.get_parameter_source("mcp_bearer_token") is ParameterSource.COMMANDLINE:
         return file_command, file_url, bearer_token
@@ -450,7 +453,9 @@ def run(
     """Run every eval, grade the answers, and write results to storage."""
     config = _config(ctx)
     if config is None and target is not None:
-        raise click.ClickException(f"--target {target} needs a {CONFIG_FILE_NAME}, and none was found.")
+        raise click.ClickException(
+            f"--target {target} needs a {CONFIG_FILE_NAME}, and none was found." + missing_config_hint(Path.cwd())
+        )
     try:
         chosen = config.target(target) if config and config.targets else None
     except ConfigError as exc:

@@ -93,6 +93,11 @@ A server you run locally takes `mcp_command:` instead of `mcp_url:`, plus
 `mcp_env:` listing the variables it needs (e.g. `[MOTHERDUCK_TOKEN]`): it gets
 only those, never the rest of `.env`. Every setting is described in [`example_project/README.md`](example_project/README.md#the-config-file).
 
+The config holds no secrets, so you can commit it to share targets with your
+team. If it names account URLs you'd rather not publish, commit a
+`honest_agent_config.example.yml` with placeholders instead and add the real
+file to `.gitignore`, like `.env.example` (the bundled example does this).
+
 ### 4. Write an eval in `evals/`
 
 `evals/orders.yml`:
@@ -148,7 +153,7 @@ same version, instead of the one pinned in its `uv.lock`.
 
 | You see | What to do |
 |---|---|
-| `--mcp-command or --mcp-url is required` | honest-agent found no `honest_agent_config.yml`: run it from your project folder. |
+| `--mcp-command or --mcp-url is required` | honest-agent found no `honest_agent_config.yml`: run it from your project folder. In the bundled example, copy `honest_agent_config.example.yml` to `honest_agent_config.yml` first. |
 | `Note: MCP_URL from the environment overrides target ...` | An environment variable beats the config file. Remove `MCP_URL`/`MCP_COMMAND` from `.env` and your shell. |
 | `Unknown setting(s) in target ...` | A typo in `honest_agent_config.yml`; the message lists the allowed settings. |
 | A local server fails to log in to its database | It only gets the variables listed in its target's `mcp_env`; add the one it needs. |
@@ -163,6 +168,7 @@ cd example_project
 uv python install 3.11                                       # one-time; honest-agent needs Python >=3.10
 uv sync --python 3.11                                         # installs honest-agent, editable, from ../cli
 uv run python warehouse/seed.py                               # seeds warehouse.duckdb from DuckDB's TPC-H generator
+cp honest_agent_config.example.yml honest_agent_config.yml    # local config, ignored by git; add your own URLs
 export ANTHROPIC_API_KEY=...                                 # or put it in a .env here or in a parent folder -- auto-loaded
 uv run honest-agent run                                        # evaluates the default target in honest_agent_config.yml
 uv run honest-agent report                                     # writes the web report to honest_agent_report/

@@ -28,6 +28,7 @@ cd example_project
 uv python install 3.11                          # one-time; uv manages this interpreter itself
 uv sync --python 3.11                            # installs honest-agent, editable
 uv run python warehouse/seed.py                  # seeds warehouse.duckdb from DuckDB's TPC-H generator
+cp honest_agent_config.example.yml honest_agent_config.yml   # your local config (ignored by git)
 export ANTHROPIC_API_KEY=...                     # needed for the agent + the extract_match grader
 # or put it (and MOTHERDUCK_TOKEN / SLACK_WEBHOOK_URL / AWS_* as needed) in a
 # .env at the repo root -- auto-loaded on every `honest-agent` command, since
@@ -239,8 +240,14 @@ the model menus and Model comparison.
 ## The config file
 
 `honest_agent_config.yml` holds the project's settings, with one **target**
-per agent being evaluated, like the targets in a dbt profile. It's committed and shared with
-the team; secrets stay in `.env`, which the file never contains.
+per agent being evaluated, like the targets in a dbt profile. Secrets stay in
+`.env`, which the file never contains. In this repo the file itself isn't
+committed, because the MotherDuck and Snowflake targets point at your own
+accounts: copy `honest_agent_config.example.yml` (committed, with
+placeholders) to `honest_agent_config.yml` and fill in your values, the same
+way `.env.example` works for secrets. In your own project you can commit the
+config to share targets with your team, or follow the same example pattern if
+it names accounts you'd rather keep private.
 
 ```yaml
 results_path: ./honest_agent_results/results.duckdb
