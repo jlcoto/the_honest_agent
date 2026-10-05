@@ -17,6 +17,12 @@
 --border-1:#DAD7CD;--border-2:#C6C3B6;--border-focus:var(--green-500);
 --accent:var(--green-700);--accent-hover:var(--green-800);--accent-soft:#E3E8DA;--accent-fg:#F3F2EC;
 --chart-grid:#E4E1D7;--chart-axis:#7C877F;--chart-neutral:var(--ink-data);--chart-empty:#E2DFD5;
+/* Categorical — model series (data only) */
+--series-1:#264653; /* Ink */
+--series-2:#8E81D0; /* Iris */
+--series-3:#8D6587; /* Mauve */
+--series-4:#588157; /* Fern */
+--series-5:#5D3A21; /* Walnut */
 }
 [data-theme="dark"]{
 --bg-page:var(--green-950);--bg-surface:var(--green-900);--bg-sunken:#121B16;--bg-inverse:var(--green-100);
@@ -26,4 +32,9 @@
 --acc-correct-tint:#173A36;--acc-mostly-tint:#3A3320;--acc-partly-tint:#3D2C1E;--acc-wrong-tint:#3E231C;
 --acc-correct-ink:#6FCFC2;--acc-mostly-ink:#EDD18A;--acc-partly-ink:#F6BA86;--acc-wrong-ink:#F09A82;
 --chart-grid:#26352C;--chart-axis:#86927F;--chart-neutral:#8FB3BF;--chart-empty:#1B2921;
+--series-1:#E4F1F2; /* Mist */
+--series-2:#8579C7; /* Iris */
+--series-3:#BEA0B2; /* Mauve */
+--series-4:#8DB88C; /* Fern */
+--series-5:#A57D34; /* Ochre */
 }
