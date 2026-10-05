@@ -153,7 +153,8 @@ def test_a_missing_config_file_points_to_the_example_to_copy(tmp_path, monkeypat
     result, _ = _run(fake_run, "--target", "demo", env={"ANTHROPIC_API_KEY": "test"})
 
     assert result.exit_code != 0
-    assert f"Copy {tmp_path / 'honest_agent_config.example.yml'} to {tmp_path / 'honest_agent_config.yml'}" in result.output
+    example, config = tmp_path / "honest_agent_config.example.yml", tmp_path / "honest_agent_config.yml"
+    assert f"Copy {example} to {config}" in result.output
 
 
 def test_the_file_is_found_from_a_subfolder_and_its_paths_stay_relative_to_it(project, monkeypatch, fake_run):
