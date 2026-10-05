@@ -154,7 +154,7 @@ def test_without_model_claude_is_the_default_when_both_keys_are_set(fake_run, in
     result = _invoke_run([], {"OPENAI_API_KEY": "test", "ANTHROPIC_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
-    assert fake_run["model"] == "claude-haiku-4-5-20251001"
+    assert fake_run["model"] == "claude-haiku-4-5"
 
 
 def test_honest_agent_model_sets_the_default_model(fake_run, in_tmp_dir):

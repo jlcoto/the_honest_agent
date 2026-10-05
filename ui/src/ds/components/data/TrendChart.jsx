@@ -1,6 +1,6 @@
 import React from 'react';
 import {bucketOf,BUCKET_COLOR} from './scale.js';
-const SERIES=['var(--chart-neutral)','var(--green-500)','var(--green-300)','var(--fg-3)'];
+const SERIES=['var(--series-1)','var(--series-2)','var(--series-3)','var(--series-4)','var(--series-5)'];
 export function TrendChart({series,labels,threshold,height=220,min=0,max=1,colorDots=true}){
   const ref=React.useRef(null);const [w,setW]=React.useState(600);const [hi,setHi]=React.useState(null);
   React.useEffect(()=>{if(!ref.current)return;const ro=new ResizeObserver(e=>setW(Math.max(200,e[0].contentRect.width)));ro.observe(ref.current);return()=>ro.disconnect();},[]);
@@ -15,7 +15,7 @@ export function TrendChart({series,labels,threshold,height=220,min=0,max=1,color
       {labels.map((l,i)=>i%every===0?<text key={i} x={x(i)} y={height-6} textAnchor="middle" style={{font:'400 11px var(--font-mono)',fill:'var(--chart-axis)'}}>{l}</text>:null)}
       {threshold!=null?<g><line x1={L} x2={L+W} y1={y(threshold)} y2={y(threshold)} stroke="var(--acc-wrong)" strokeDasharray="4 4" strokeWidth="1.25"/><text x={L+W} y={y(threshold)-6} textAnchor="end" style={{font:'500 11px var(--font-sans)',fill:'var(--acc-wrong-ink)'}}>{'min score '+Math.round(threshold*100)+'%'}</text></g>:null}
       {hi!=null?<line x1={x(hi)} x2={x(hi)} y1={T} y2={T+H} stroke="var(--border-2)"/>:null}
-      {series.map((s,si)=>{const c=s.color||SERIES[si%SERIES.length];const d=s.values.map((v,i)=>v==null?'':((i&&s.values[i-1]!=null?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1))).join(' ');
+      {series.map((s,si)=>{const c=s.color||SERIES[si]||'var(--border-2)';const d=s.values.map((v,i)=>v==null?'':((i&&s.values[i-1]!=null?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1))).join(' ');
         return <g key={s.id||si}><path d={d} fill="none" stroke={c} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
           {s.values.map((v,i)=>v==null?null:<circle key={i} cx={x(i)} cy={y(v)} r={hi===i?4.5:3} fill={colorDots&&series.length===1?BUCKET_COLOR[bucketOf(v)]:c} stroke="var(--bg-surface)" strokeWidth="1.5"/>)}</g>;})}
     </svg>

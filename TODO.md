@@ -48,7 +48,7 @@ Left on purpose, low value for now (small, rarely-changing code):
 - **Dead code:** `agent_backend` (always `"mcp"`, read by nothing; drop from
   `cli.py`, `storage.py`, `ui/src/data/types.ts`, tests, and the column in
   existing results files by hand). Grader and agent functions still default
-  `model="claude-haiku-4-5-20251001"` and treat the judge as optional
+  `model="claude-haiku-4-5"` and treat the judge as optional
   although `cli.py` always passes both. `storage.read_tool_calls(result_id=)`
   is used only by tests.
 - **Stale comments:** Claude-only wording in provider-neutral code
