@@ -177,6 +177,10 @@ or semantic view it read, with the database and schema each one lives in.
   queries the tool reported as errors. A tool that returns a failure inside
   a normal response (e.g. `{"success": false, ...}`) instead of flagging it
   as an error isn't caught, so its failed queries still count.
+- **SQL a tool generated doesn't count until it runs.** Some tools answer
+  with SQL instead of data: Snowflake's Cortex Analyst returns the query it
+  wrote for the semantic view. That SQL is recorded, but it only counts once
+  the agent runs it itself (e.g. through `query_warehouse`).
 - **Locations follow the session.** A table written without its database or
   schema takes them from earlier `use database` / `use schema` statements,
   across tool calls. With neither, its location is unknown and doesn't match

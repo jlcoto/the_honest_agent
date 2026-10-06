@@ -11,8 +11,10 @@ statements, which is also what the report shows as "what the agent queried".
 Only statements that read data (`select`, including `with ... select` and
 `union`) count. `describe`, `show` and the like are exploration: an agent
 that describes the right table but queries another one hasn't used it.
-Calls that returned an error are left out by the caller (see cli.py), since
-a query that failed read nothing.
+The caller (see cli.py) leaves out calls that returned an error, since a
+query that failed read nothing, and SQL a tool generated in its response
+(e.g. Cortex Analyst's `statement`), since generating SQL isn't running it:
+the agent has to run it itself for it to count.
 """
 
 from __future__ import annotations

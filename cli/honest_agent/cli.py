@@ -133,9 +133,10 @@ async def _eval_loop(
             tolerance_percent=definition.tolerance_percent,
         )
         sql_calls = extract_sql_calls(result.raw_trace, definition.sql_fields, ignore_tools)
-        # A query that errored read nothing, so it can't count toward provenance.
+        # Only SQL the agent sent and that ran counts toward provenance: a query that
+        # errored read nothing, and SQL a tool generated (e.g. Cortex Analyst) may never have run.
         provenance = check_provenance(
-            [call["sql"] for call in sql_calls if not call["is_error"]],
+            [call["sql"] for call in sql_calls if not call["is_error"] and not call["generated"]],
             definition.expected_sources,
             definition.expected_database,
             definition.expected_schema,

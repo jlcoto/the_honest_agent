@@ -52,8 +52,8 @@ ROW_2 = _row(
     tools_used=["calculator"],
     agent_backend="mcp",
     sql_calls=[
-        {"tool_name": "query_warehouse", "sql": "select 1", "is_error": False},
-        {"tool_name": "query_warehouse", "sql": "select 2", "is_error": True},
+        {"tool_name": "query_warehouse", "sql": "select 1", "is_error": False, "generated": False},
+        {"tool_name": "query_semantic_view", "sql": "select 2", "is_error": True, "generated": True},
     ],
 )
 ROW_3_LATER_RUN = _row(
@@ -113,9 +113,11 @@ def test_write_then_read_tool_calls_roundtrips_and_expands_per_call(tmp_path: Pa
         "type": "sql",
         "payload": json.dumps({"sql": "select 1"}),
         "is_error": False,
+        "generated": False,
     }
     assert json.loads(by_index[1]["payload"]) == {"sql": "select 2"}
     assert by_index[1]["is_error"] is True
+    assert by_index[1]["generated"] is True
 
 
 def test_read_tool_calls_filters_by_result_id(tmp_path: Path):
