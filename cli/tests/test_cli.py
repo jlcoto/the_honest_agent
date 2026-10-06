@@ -147,7 +147,10 @@ def test_both_mcp_targets_only_in_env_is_an_error(fake_run, in_tmp_dir):
 
 def test_duplicate_eval_id_is_a_clean_cli_error(in_tmp_dir):
     Path("evals").mkdir()
-    Path("evals/a.yml").write_text("evals:\n  - id: q_dup\n    prompt: one\n  - id: q_dup\n    prompt: two\n")
+    Path("evals/a.yml").write_text(
+        "evals:\n  - id: q_dup\n    prompt: one\n    expected_answer: '1'\n"
+        "  - id: q_dup\n    prompt: two\n    expected_answer: '2'\n"
+    )
     result = CliRunner().invoke(
         main,
         ["run", "--evals-dir", "evals", "--mcp-command", "python server.py"],
@@ -155,7 +158,7 @@ def test_duplicate_eval_id_is_a_clean_cli_error(in_tmp_dir):
     )
 
     assert result.exit_code == 1
-    assert "Error: Duplicate eval id 'q_dup' in a.yml (lines 2 and 4)" in result.output
+    assert "Error: Duplicate eval id 'q_dup' in a.yml (lines 2 and 5)" in result.output
     assert "Traceback" not in result.output
 
 

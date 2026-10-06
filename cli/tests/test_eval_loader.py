@@ -111,22 +111,28 @@ def test_load_evals_defaults_tolerance_to_none(tmp_path: Path):
 
 
 def test_duplicate_eval_id_across_files_names_both(tmp_path: Path):
-    (tmp_path / "a.yml").write_text("evals:\n  - id: q_dup\n    prompt: one\n")
-    (tmp_path / "b.yml").write_text("evals:\n  - id: q_other\n    prompt: two\n  - id: q_dup\n    prompt: three\n")
+    (tmp_path / "a.yml").write_text("evals:\n  - id: q_dup\n    prompt: one\n    expected_answer: '1'\n")
+    (tmp_path / "b.yml").write_text(
+        "evals:\n  - id: q_other\n    prompt: two\n    expected_answer: '2'\n"
+        "  - id: q_dup\n    prompt: three\n    expected_answer: '3'\n"
+    )
 
     with pytest.raises(ValueError) as exc:
         load_evals(tmp_path)
 
-    assert "Duplicate eval id 'q_dup' in a.yml (line 2) and b.yml (line 4)" in str(exc.value)
+    assert "Duplicate eval id 'q_dup' in a.yml (line 2) and b.yml (line 5)" in str(exc.value)
 
 
 def test_duplicate_eval_id_in_one_file_names_both_lines(tmp_path: Path):
-    (tmp_path / "a.yml").write_text("evals:\n  - id: q_dup\n    prompt: one\n  - id: 'q_dup'\n    prompt: two\n")
+    (tmp_path / "a.yml").write_text(
+        "evals:\n  - id: q_dup\n    prompt: one\n    expected_answer: '1'\n"
+        "  - id: 'q_dup'\n    prompt: two\n    expected_answer: '2'\n"
+    )
 
     with pytest.raises(ValueError) as exc:
         load_evals(tmp_path)
 
-    assert "Duplicate eval id 'q_dup' in a.yml (lines 2 and 4)" in str(exc.value)
+    assert "Duplicate eval id 'q_dup' in a.yml (lines 2 and 5)" in str(exc.value)
 
 
 def _eval(eval_id: str, tags: list[str]) -> EvalDefinition:
@@ -190,8 +196,10 @@ def test_load_evals_reads_optional_title(tmp_path: Path):
         "  - id: q_titled\n"
         "    title: Total revenue in 1996\n"
         "    prompt: What was revenue in 1996?\n"
+        "    expected_answer: '311928357.78'\n"
         "  - id: q_untitled\n"
         "    prompt: How many orders?\n"
+        "    expected_answer: '2297'\n"
     )
 
     titles = {d.eval_id: d.title for d in load_evals(tmp_path)}
@@ -208,14 +216,17 @@ evals:
     tests:
       - title: Total revenue in 1996
         prompt: What was revenue in 1996?
+        expected_answer: "311928357.78"
         provenance: {expected_sources: [fct_revenue_by_year]}
         tags: [smoke]
       - title: Orders placed in 1996
         id: q_order_count_1996
         prompt: How many orders in 1996?
+        expected_answer: "2297"
         grading: {min_score: 0.9}
   - title: Loose eval
     prompt: Not in a group
+    expected_answer: "42"
 """
 
 
@@ -251,12 +262,37 @@ def test_eval_without_title_or_id_is_an_error(tmp_path: Path):
 
 def test_titles_that_slug_to_the_same_id_are_a_duplicate(tmp_path: Path):
     (tmp_path / "a.yml").write_text(
-        "evals:\n  - title: Revenue 1996\n    prompt: one\n  - title: 'Revenue: 1996'\n    prompt: two\n"
+        "evals:\n  - title: Revenue 1996\n    prompt: one\n    expected_answer: '1'\n"
+        "  - title: 'Revenue: 1996'\n    prompt: two\n    expected_answer: '2'\n"
     )
 
     with pytest.raises(ValueError) as exc:
         load_evals(tmp_path)
 
     message = str(exc.value)
-    assert "Duplicate eval id 'revenue_1996' in a.yml (lines 2 and 4)" in message
+    assert "Duplicate eval id 'revenue_1996' in a.yml (lines 2 and 5)" in message
     assert "change one title or give it an id:" in message
+
+
+@pytest.mark.parametrize("answer_line", ["", "    expected_answer: ''\n", "    expected_answer:\n"])
+def test_an_eval_without_an_expected_answer_is_an_error(tmp_path: Path, answer_line: str):
+    """Accuracy is always checked; without an answer, `contains` would test for
+    the empty string and pass every time. Provenance stays optional."""
+    (tmp_path / "a.yml").write_text(
+        "evals:\n  - id: q_sources_only\n    prompt: Which table holds revenue?\n"
+        + answer_line
+        + "    provenance: {expected_sources: [fct_revenue_by_year]}\n"
+    )
+
+    with pytest.raises(ValueError, match="Eval 'q_sources_only' in a.yml has no expected_answer"):
+        load_evals(tmp_path)
+
+
+def test_a_numeric_expected_answer_is_read_as_text(tmp_path: Path):
+    (tmp_path / "a.yml").write_text(
+        "evals:\n  - id: q_orders\n    prompt: How many orders?\n    expected_answer: 2297\n"
+    )
+
+    (definition,) = load_evals(tmp_path)
+
+    assert definition.expected_answer == "2297"

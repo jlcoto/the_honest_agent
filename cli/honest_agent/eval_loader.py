@@ -75,6 +75,16 @@ def load_evals(evals_dir: Path) -> list[EvalDefinition]:
                 raise ValueError(_duplicate_id_message(eval_id, seen_in[eval_id], (yml_path, *source)))
             seen_in[eval_id] = (yml_path, *source)
 
+            # Accuracy is always checked, so an eval must say what the right answer is.
+            # (Without one, `contains` would test for the empty string and always pass.)
+            # Provenance stays optional: no expected_sources means it isn't checked.
+            expected_answer = item.get("expected_answer")
+            if expected_answer is None or not str(expected_answer).strip():
+                raise ValueError(
+                    f"Eval {eval_id!r} in {yml_path.name} has no expected_answer. Every eval needs one; "
+                    "provenance checks (expected_sources) are optional."
+                )
+
             grading = item.get("grading", {})
             provenance = item.get("provenance", {})
 
@@ -84,7 +94,8 @@ def load_evals(evals_dir: Path) -> list[EvalDefinition]:
                     title=title,
                     prompt=item["prompt"],
                     category=item.get("category", ""),
-                    expected_answer=item.get("expected_answer", ""),
+                    # YAML reads `expected_answer: 2297` as a number; grading compares text.
+                    expected_answer=str(expected_answer),
                     grading_method=grading.get("method", "contains"),
                     expected_sources=provenance.get("expected_sources", []),
                     tags=item.get("tags", []),

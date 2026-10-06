@@ -146,6 +146,8 @@ evals:
   `evals_motherduck/` and `evals_snowflake/`). Within one directory,
   ids must be unique, and `honest-agent run` stops with an error naming both
   places if two collide.
+- **Every eval needs an `expected_answer`;** accuracy is always checked.
+  Provenance is optional: leave out `expected_sources` and it isn't checked.
 - A plain list of evals without groups also works, each eval carrying all
   of its own settings.
 
