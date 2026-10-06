@@ -260,6 +260,23 @@ def test_grading_model_roundtrips(tmp_path: Path):
     assert by_id["r2"]["grading_model"] is None
 
 
+def test_extract_match_details_roundtrip(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    row = _row(
+        accuracy_method="extract_match",
+        extracted_answer="311928357.7805",
+        accuracy_tolerance=0.01,
+        accuracy_tolerance_percent=None,
+    )
+    write_run_results(db_path, "run_1", [row])
+
+    (result,) = read_all_results(db_path)
+
+    assert result["extracted_answer"] == "311928357.7805"
+    assert result["accuracy_tolerance"] == 0.01
+    assert result["accuracy_tolerance_percent"] is None
+
+
 def test_a_results_folder_honest_agent_creates_ignores_itself_in_git(tmp_path: Path):
     import subprocess
 

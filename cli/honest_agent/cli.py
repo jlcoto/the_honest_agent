@@ -122,7 +122,7 @@ async def _eval_loop(
         if result.hit_turn_limit:
             click.echo(f"    WARNING: {definition.eval_id} hit the tool-turn limit without a final answer.")
 
-        accuracy_score, rationale, grading_input_tokens, grading_output_tokens = await grade_accuracy(
+        grade = await grade_accuracy(
             definition.grading_method,
             result.answer,
             definition.expected_answer,
@@ -159,10 +159,13 @@ async def _eval_loop(
                 "expected_answer": definition.expected_answer,
                 "agent_answer": result.answer,
                 "tools_used": result.tools_used,
-                "accuracy_score": accuracy_score,
+                "accuracy_score": grade.score,
                 "accuracy_method": definition.grading_method,
                 "grading_model": _grading_model(definition.grading_method, judge_model),
-                "accuracy_rationale": rationale,
+                "accuracy_rationale": grade.rationale,
+                "extracted_answer": grade.extracted_answer,
+                "accuracy_tolerance": definition.tolerance,
+                "accuracy_tolerance_percent": definition.tolerance_percent,
                 "accuracy_min_score": definition.accuracy_min_score,
                 "provenance_score": provenance.score,
                 "queried_sources": [source._asdict() for source in provenance.queried_sources],
@@ -177,8 +180,8 @@ async def _eval_loop(
                 "latency_ms": result.latency_ms,
                 "agent_input_tokens": result.input_tokens,
                 "agent_output_tokens": result.output_tokens,
-                "grading_input_tokens": grading_input_tokens,
-                "grading_output_tokens": grading_output_tokens,
+                "grading_input_tokens": grade.input_tokens,
+                "grading_output_tokens": grade.output_tokens,
                 # -- agent_logs --
                 "agent_trace": json.dumps(result.raw_trace),
                 # -- tool_calls (expanded into one row per call by storage.py) --

@@ -14,13 +14,12 @@ def test_grade_contains():
 
 
 def test_grade_accuracy_dispatches_by_method():
-    score, rationale, input_tokens, output_tokens = asyncio.run(
-        grade_accuracy("contains", "The answer is 4.", "4", "What is 2+2?")
-    )
-    assert score == 1.0
-    assert rationale is None
-    assert input_tokens == 0
-    assert output_tokens == 0
+    grade = asyncio.run(grade_accuracy("contains", "The answer is 4.", "4", "What is 2+2?"))
+    assert grade.score == 1.0
+    assert grade.rationale is None
+    assert grade.extracted_answer is None
+    assert grade.input_tokens == 0
+    assert grade.output_tokens == 0
 
 
 def test_grade_accuracy_rejects_unknown_method():
@@ -79,28 +78,28 @@ class _FakeJudgeClient(AnthropicJudge):
 def test_grade_extract_match_scores_match_after_normalization():
     client = _FakeClient(extracted_answer="Paris")
 
-    score, rationale, _, _ = asyncio.run(
+    grade = asyncio.run(
         grade_extract_match(client, "The capital of France is Paris.", "Paris", "What is the capital of France?")
     )
 
-    assert score == 1.0
-    assert "Paris" in rationale
+    assert grade.score == 1.0
+    assert grade.extracted_answer == "Paris"
+    assert grade.rationale is None
 
 
 def test_grade_extract_match_scores_mismatch():
     client = _FakeClient(extracted_answer="London")
 
-    score, rationale, _, _ = asyncio.run(
-        grade_extract_match(client, "It's London.", "Paris", "What is the capital of France?")
-    )
+    grade = asyncio.run(grade_extract_match(client, "It's London.", "Paris", "What is the capital of France?"))
 
-    assert score == 0.0
+    assert grade.score == 0.0
+    assert grade.extracted_answer == "London"
 
 
 def test_grade_extract_match_comparison_is_case_and_whitespace_insensitive():
     client = _FakeClient(extracted_answer="  paris ")
 
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(client, "paris, obviously", "Paris", "What is the capital of France?")
     )
 
@@ -110,33 +109,33 @@ def test_grade_extract_match_comparison_is_case_and_whitespace_insensitive():
 def test_grade_extract_match_returns_token_usage():
     client = _FakeClient(extracted_answer="Paris", usage=_FakeUsage(input_tokens=123, output_tokens=45))
 
-    _, _, input_tokens, output_tokens = asyncio.run(
+    grade = asyncio.run(
         grade_extract_match(client, "The capital of France is Paris.", "Paris", "What is the capital of France?")
     )
 
-    assert input_tokens == 123
-    assert output_tokens == 45
+    assert grade.input_tokens == 123
+    assert grade.output_tokens == 45
 
 
 def test_grade_llm_judge_returns_token_usage():
     client = _FakeJudgeClient(score=1.0, rationale="Correct.", usage=_FakeUsage(input_tokens=200, output_tokens=15))
 
-    score, rationale, input_tokens, output_tokens = asyncio.run(
-        grade_llm_judge(client, "Paris.", "Paris", "What is the capital of France?")
-    )
+    grade = asyncio.run(grade_llm_judge(client, "Paris.", "Paris", "What is the capital of France?"))
 
-    assert score == 1.0
-    assert rationale == "Correct."
-    assert input_tokens == 200
-    assert output_tokens == 15
+    assert grade.score == 1.0
+    assert grade.rationale == "Correct."
+    assert grade.extracted_answer is None
+    assert grade.input_tokens == 200
+    assert grade.output_tokens == 15
 
 
 def test_grade_accuracy_dispatches_extract_match_and_forwards_client():
     client = _FakeClient(extracted_answer="4")
 
-    score, rationale, _, _ = asyncio.run(grade_accuracy("extract_match", "It's 4.", "4", "What is 2+2?", judge=client))
+    grade = asyncio.run(grade_accuracy("extract_match", "It's 4.", "4", "What is 2+2?", judge=client))
 
-    assert score == 1.0
+    assert grade.score == 1.0
+    assert grade.extracted_answer == "4"
 
 
 def test_grade_accuracy_extract_match_requires_client():
@@ -155,18 +154,17 @@ def test_grade_extract_match_within_tolerance_still_scores_full():
     """
     client = _FakeClient(extracted_answer="311928357.7805")
 
-    score, rationale, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(client, "It's 311928357.7805", "311928357.78", "What was 1996 revenue?", tolerance=0.01)
     )
 
     assert score == 1.0
-    assert "tolerance=0.01" in rationale
 
 
 def test_grade_extract_match_outside_tolerance_still_fails():
     client = _FakeClient(extracted_answer="500")
 
-    score, _, _, _ = asyncio.run(grade_extract_match(client, "It's 500", "4", "What is 2+2?", tolerance=0.01))
+    score, _, _, _, _ = asyncio.run(grade_extract_match(client, "It's 500", "4", "What is 2+2?", tolerance=0.01))
 
     assert score == 0.0
 
@@ -178,7 +176,7 @@ def test_grade_extract_match_tolerance_ignored_for_non_numeric_values():
     """
     client = _FakeClient(extracted_answer="London")
 
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(client, "It's London.", "Paris", "What is the capital of France?", tolerance=0.01)
     )
 
@@ -191,7 +189,7 @@ def test_grade_extract_match_without_tolerance_requires_exact_match():
     """
     client = _FakeClient(extracted_answer="311928357.7805")
 
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(client, "It's 311928357.7805", "311928357.78", "What was 1996 revenue?")
     )
 
@@ -201,7 +199,7 @@ def test_grade_extract_match_without_tolerance_requires_exact_match():
 def test_grade_accuracy_forwards_tolerance():
     client = _FakeClient(extracted_answer="4.001")
 
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_accuracy("extract_match", "It's 4.001", "4", "What is 2+2?", judge=client, tolerance=0.01)
     )
 
@@ -212,18 +210,17 @@ def test_grade_extract_match_within_tolerance_percent_still_scores_full():
     """1% of 1,000,000 is 10,000 -- 1,005,000 is within that."""
     client = _FakeClient(extracted_answer="1005000")
 
-    score, rationale, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(client, "It's 1005000", "1000000", "What was revenue?", tolerance_percent=0.01)
     )
 
     assert score == 1.0
-    assert "tolerance_percent=0.01" in rationale
 
 
 def test_grade_extract_match_outside_tolerance_percent_fails():
     client = _FakeClient(extracted_answer="1200000")
 
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(client, "It's 1200000", "1000000", "What was revenue?", tolerance_percent=0.01)
     )
 
@@ -237,13 +234,13 @@ def test_grade_extract_match_tolerance_percent_scales_with_magnitude():
     delta.
     """
     small_client = _FakeClient(extracted_answer="10.5")  # 5% off of 10 -- outside 1%
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(small_client, "10.5", "10", "Small question?", tolerance_percent=0.01)
     )
     assert score == 0.0
 
     big_client = _FakeClient(extracted_answer="1009999")  # <1% off of 1,000,000
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(big_client, "1009999", "1000000", "Big question?", tolerance_percent=0.01)
     )
     assert score == 1.0
@@ -253,7 +250,7 @@ def test_grade_extract_match_tolerance_and_tolerance_percent_are_ored():
     """Either tolerance being satisfied is enough -- not both required."""
     # Fails the (tight) absolute tolerance but passes the percent one.
     client = _FakeClient(extracted_answer="1005000")
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_extract_match(client, "1005000", "1000000", "What was revenue?", tolerance=1.0, tolerance_percent=0.01)
     )
     assert score == 1.0
@@ -262,7 +259,7 @@ def test_grade_extract_match_tolerance_and_tolerance_percent_are_ored():
 def test_grade_accuracy_forwards_tolerance_percent():
     client = _FakeClient(extracted_answer="1005000")
 
-    score, _, _, _ = asyncio.run(
+    score, _, _, _, _ = asyncio.run(
         grade_accuracy("extract_match", "1005000", "1000000", "What was revenue?", judge=client, tolerance_percent=0.01)
     )
 

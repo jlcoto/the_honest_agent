@@ -2,8 +2,19 @@ from __future__ import annotations
 
 import json
 import re
+from typing import NamedTuple
 
 from .llm import Judge
+
+
+class Grade(NamedTuple):
+    score: float
+    # The judge's one-sentence reason (llm_judge only).
+    rationale: str | None
+    # The value extract_match pulled from the answer and compared (extract_match only).
+    extracted_answer: str | None
+    input_tokens: int
+    output_tokens: int
 
 
 def grade_contains(answer: str, expected_answer: str) -> float:
@@ -71,7 +82,7 @@ def _as_data(answer: str) -> str:
 
 async def grade_llm_judge(
     judge: Judge, answer: str, expected_answer: str, prompt: str, model: str = "claude-haiku-4-5"
-) -> tuple[float, str, int, int]:
+) -> Grade:
     judge_prompt = (
         "You are grading whether an AI-generated answer is correct.\n\n"
         f"{_DATA_NOTE}"
@@ -91,7 +102,7 @@ async def grade_llm_judge(
     if not match:
         raise ValueError(f"LLM judge did not return parseable JSON: {text!r}")
     payload = json.loads(match.group(0))
-    return float(payload["score"]), str(payload.get("rationale", "")), input_tokens, output_tokens
+    return Grade(float(payload["score"]), str(payload.get("rationale", "")), None, input_tokens, output_tokens)
 
 
 async def grade_extract_match(
@@ -102,7 +113,7 @@ async def grade_extract_match(
     model: str = "claude-haiku-4-5",
     tolerance: float | None = None,
     tolerance_percent: float | None = None,
-) -> tuple[float, str, int, int]:
+) -> Grade:
     """Extracts a normalized literal value from the agent's (likely
     conversational) answer, then compares it against `expected_answer` with
     deterministic equality -- unlike `grade_llm_judge`, the model here only
@@ -139,12 +150,7 @@ async def grade_extract_match(
     extracted = str(payload["extracted_answer"])
 
     score = 1.0 if _values_match(extracted, expected_answer, tolerance, tolerance_percent) else 0.0
-    rationale = f"extracted {extracted!r} from answer, compared against {expected_answer!r}"
-    if tolerance is not None:
-        rationale += f" (tolerance={tolerance})"
-    if tolerance_percent is not None:
-        rationale += f" (tolerance_percent={tolerance_percent})"
-    return score, rationale, input_tokens, output_tokens
+    return Grade(score, None, extracted, input_tokens, output_tokens)
 
 
 async def grade_accuracy(
@@ -156,9 +162,9 @@ async def grade_accuracy(
     model: str = "claude-haiku-4-5",
     tolerance: float | None = None,
     tolerance_percent: float | None = None,
-) -> tuple[float, str | None, int, int]:
+) -> Grade:
     if method == "contains":
-        return grade_contains(answer, expected_answer), None, 0, 0
+        return Grade(grade_contains(answer, expected_answer), None, None, 0, 0)
     if method == "extract_match":
         if judge is None:
             raise ValueError("extract_match grading requires a judge model")
