@@ -52,8 +52,8 @@ ROW_2 = _row(
     tools_used=["calculator"],
     agent_backend="mcp",
     sql_calls=[
-        {"tool_name": "query_warehouse", "sql": "select 1"},
-        {"tool_name": "query_warehouse", "sql": "select 2"},
+        {"tool_name": "query_warehouse", "sql": "select 1", "is_error": False},
+        {"tool_name": "query_warehouse", "sql": "select 2", "is_error": True},
     ],
 )
 ROW_3_LATER_RUN = _row(
@@ -112,8 +112,10 @@ def test_write_then_read_tool_calls_roundtrips_and_expands_per_call(tmp_path: Pa
         "tool_name": "query_warehouse",
         "type": "sql",
         "payload": json.dumps({"sql": "select 1"}),
+        "is_error": False,
     }
     assert json.loads(by_index[1]["payload"]) == {"sql": "select 2"}
+    assert by_index[1]["is_error"] is True
 
 
 def test_read_tool_calls_filters_by_result_id(tmp_path: Path):
@@ -271,3 +273,17 @@ def test_an_existing_folder_never_gets_the_ignore_marker(tmp_path: Path):
     write_run_results(str(tmp_path / "results.duckdb"), "run_1", [_row()])
 
     assert not (tmp_path / ".gitignore").exists()
+
+
+def test_queried_sources_roundtrip(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    sources = [
+        {"database": "snowflake_sample_data", "schema": "tpch_sf1", "name": "orders"},
+        {"database": None, "schema": None, "name": "lineitem"},
+    ]
+    write_run_results(db_path, "run_1", [_row(queried_sources=sources), _row(result_id="r2", queried_sources=[])])
+
+    by_id = {r["result_id"]: r for r in read_all_results(db_path)}
+
+    assert by_id["r1"]["queried_sources"] == sources
+    assert by_id["r2"]["queried_sources"] == []

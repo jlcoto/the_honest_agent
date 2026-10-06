@@ -97,7 +97,9 @@ def test_openai_agent_runs_tools_and_records_the_shared_trace_format():
         {"role": "assistant", "content": [{"type": "text", "text": "**2297**"}]},
     ]
     # Provenance scoring reads SQL from this trace, exactly as it does for Claude.
-    assert extract_sql_calls(result.raw_trace, {"execute_query": "sql"}) == [{"tool_name": "execute_query", "sql": sql}]
+    assert extract_sql_calls(result.raw_trace, {"execute_query": "sql"}) == [
+        {"tool_name": "execute_query", "sql": sql, "is_error": False}
+    ]
     # The second request carried the tool result back to OpenAI in its own format.
     second = openai.chat.completions.calls[1]["messages"]
     assert second[-1] == {"role": "tool", "tool_call_id": "call_1", "content": "order_count\n2297"}

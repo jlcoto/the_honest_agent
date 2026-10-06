@@ -16,6 +16,7 @@ dependencies = [
     # Model SDKs: both installed, each imported only when one of its models is used.
     "anthropic>=0.40.0",
     "openai>=1.40",
+    "sqlglot>=30.21.0",
 ]
 
 [project.optional-dependencies]

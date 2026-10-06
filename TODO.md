@@ -55,8 +55,8 @@ Left on purpose, low value for now (small, rarely-changing code):
   (`agent_runner.py` docstrings, `--max-tool-turns` help, `storage.py` token
   comment, `mcp_agent_runner.py` "MCP backend selected"); references to
   removed things (the eval YAML `tools:` key in `sql_capture.py`, the dbt
-  `schema.yml` in `eval_loader.py`, the old `exact` method in `grading.py`, a
-  memory file in `provenance.py`); `read_agent_logs` claims to return
+  `schema.yml` in `eval_loader.py`, the old `exact` method in `grading.py`);
+  `read_agent_logs` claims to return
   extracted SQL. The semantic-layer explanation is repeated four times.
 - **Duplication:** failure-line formatting in `cli.py` and `notify.py`; the
   turn-limit message and tool-result text join in the two agent runners;
@@ -96,7 +96,7 @@ they describe someone else's tool contract, not ours:
    field that doesn't exist. Likely shape: a `provenance.semantic_tools` list
    in the eval YAML, alongside the existing `sql_fields`.
 2. **Which field inside that structured input names the model/metric being
-   hit** -- so `score_provenance`'s source-checking has something to compare
+   hit** -- so `check_provenance`'s source-checking has something to compare
    `expected_sources` against. This varies by vendor (MetricFlow's
    `metrics`/`group_by` vs. Cube's `measures`/`dimensions`), so it can't be
    hardcoded.
@@ -136,6 +136,31 @@ future work, not a confirmed schema to design against.
 - **dbt Semantic Layer / MetricFlow**: expected to be the fully-structured
   case this section was written for (`metrics`/`group_by` args, no SQL
   string) -- not yet verified against a real MCP tool schema.
+
+## Provenance: open scoring questions
+
+Provenance moved to parsed SQL on 2026-10-06 (`provenance.py`, sqlglot): only
+`select` statements count, errored calls don't, and `expected_sources`
+entries can carry their own database/schema. Three questions came up and were
+left open on purpose:
+
+1. **Acceptable alternatives.** `expected_sources` means *all* of them
+   (recall). An eval can't say "the mart *or* the semantic view". In the
+   Snowflake results, four answers that came from
+   `agent_quiz_demo.public.tpch_semantic_view` scored 0 because the evals
+   expect `fct_revenue_by_year` / `orders`. Decide whether the semantic view
+   is an acceptable source there (then list it, or add an any-of form to the
+   YAML) or a real miss.
+2. **Extra sources.** Recall ignores tables the agent read beyond the
+   expected ones, so joining the right mart with
+   `snowflake_sample_data.tpch_sf1.customer` still scores 1.0. The report can
+   show the extra ones; whether they should lower the score is undecided.
+3. **Default database.** A bare table name with no `use` statement has an
+   unknown location and never matches an expected database/schema. Right for
+   Snowflake's MCP server, which has no default database (bare names fail to
+   compile there). A warehouse whose connection does have one would score
+   correct queries as misses; if that comes up, let a target declare its
+   default database/schema.
 
 ## Migrate S3 export from plain Parquet to DuckLake
 

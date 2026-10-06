@@ -1,156 +1,151 @@
+"""Scores provenance: did the SQL the agent ran read the sources an eval
+expects (e.g. an aggregated mart or a semantic view, not raw tables the
+agent stitched together by hand)?
+
+The SQL is parsed with sqlglot rather than searched as text, so only real
+table references count: not a name in a comment, a string, a column or a
+CTE the query defines itself. Each reference comes with its database and
+schema, as written or as set by earlier `use database`/`use schema`
+statements, which is also what the report shows as "what the agent queried".
+
+Only statements that read data (`select`, including `with ... select` and
+`union`) count. `describe`, `show` and the like are exploration: an agent
+that describes the right table but queries another one hasn't used it.
+Calls that returned an error are left out by the caller (see cli.py), since
+a query that failed read nothing.
+"""
+
 from __future__ import annotations
 
-import re
+import logging
+from typing import NamedTuple
 
-_USE_DATABASE_RE = re.compile(r"\buse\s+database\s+\"?([\w$]+)\"?", re.IGNORECASE)
-_USE_SCHEMA_RE = re.compile(r"\buse\s+schema\s+\"?([\w$]+)\"?", re.IGNORECASE)
+import sqlglot
+from sqlglot import exp
+
+# sqlglot logs a warning for each statement it can only keep as raw text (e.g.
+# Snowflake's `show semantic views`); those are never reads, so the noise isn't useful.
+logging.getLogger("sqlglot").setLevel(logging.ERROR)
+
+# Tried in order. Snowflake's dialect also reads the DuckDB/MotherDuck SQL seen so far.
+_DIALECTS = ("snowflake", "duckdb")
 
 
-def _track_session_context(sql_statements: list[str]) -> list[tuple[str, str | None, str | None]]:
-    """Walks captured SQL in trace order (across every tool call, not just
-    one), tracking `use database <x>` / `use schema <x>` as running session
-    state -- a warehouse like Snowflake lets an agent fix its database/schema
-    with a separate statement and then reference tables unqualified from
-    then on, so a bare table name in one call can only be resolved correctly
-    by knowing what a *previous* call's `use` statement set.
+class Source(NamedTuple):
+    """A table, view or semantic view. `database`/`schema` are None when
+    neither the SQL nor an earlier `use` statement said which."""
 
-    Returns one `(sql, database, schema)` tuple per input statement: the
-    database/schema tracked *as of* that statement (after applying any `use`
-    found within it), for resolving that statement's own unqualified table
-    references.
-    """
-    current_db: str | None = None
-    current_schema: str | None = None
-    resolved: list[tuple[str, str | None, str | None]] = []
+    database: str | None
+    schema: str | None
+    name: str
+
+
+class Provenance(NamedTuple):
+    score: float
+    # Every source the counted statements read, in first-seen order, without repeats.
+    queried_sources: list[Source]
+    # SQL that couldn't be parsed, so it contributed no sources.
+    unparsed: list[str]
+
+
+def _parse(sql: str) -> list[exp.Expression] | None:
+    for dialect in _DIALECTS:
+        try:
+            return [tree for tree in sqlglot.parse(sql, read=dialect) if tree is not None]
+        except sqlglot.errors.SqlglotError:
+            continue
+    return None
+
+
+def _apply_use(statement: exp.Use, database: str | None, schema: str | None) -> tuple[str | None, str | None]:
+    """`use database x`, `use schema [x.]y`, or Snowflake's bare `use x[.y]`."""
+    target = statement.this
+    if not isinstance(target, exp.Table) or not target.name:
+        return database, schema
+    kind = statement.args.get("kind")
+    kind = kind.sql().lower() if kind is not None else None
+    if kind == "database":
+        return target.name, None
+    if kind == "schema":
+        return target.db or database, target.name
+    if kind is None:
+        return (target.db, target.name) if target.db else (target.name, None)
+    return database, schema  # use warehouse / use role
+
+
+def _sources_read(statement: exp.Query, database: str | None, schema: str | None) -> list[Source]:
+    cte_names = {cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE)}
+    sources = []
+    for table in statement.find_all(exp.Table):
+        if not table.name:
+            continue  # a table function, e.g. semantic_view(...) itself
+        if not table.catalog and not table.db and table.name.lower() in cte_names:
+            continue
+        # A single qualifier (`x.table`) is the schema, as warehouses read it.
+        sources.append(Source(table.catalog or database, table.db or schema, table.name))
+    return sources
+
+
+def queried_sources(sql_statements: list[str]) -> tuple[list[Source], list[str]]:
+    """Walks the SQL in the order it ran, tracking `use` statements as session
+    state (they carry across tool calls), and returns the sources every read
+    statement referenced, plus the SQL that couldn't be parsed."""
+    database: str | None = None
+    schema: str | None = None
+    seen: dict[tuple, Source] = {}
+    unparsed: list[str] = []
     for sql in sql_statements:
-        db_match = _USE_DATABASE_RE.search(sql)
-        if db_match:
-            current_db = db_match.group(1)
-        schema_match = _USE_SCHEMA_RE.search(sql)
-        if schema_match:
-            current_schema = schema_match.group(1)
-        resolved.append((sql, current_db, current_schema))
-    return resolved
+        statements = _parse(sql)
+        if statements is None:
+            unparsed.append(sql)
+            continue
+        for statement in statements:
+            if isinstance(statement, exp.Use):
+                database, schema = _apply_use(statement, database, schema)
+            elif isinstance(statement, exp.Query):
+                for source in _sources_read(statement, database, schema):
+                    key = tuple((part or "").lower() for part in source)
+                    seen.setdefault(key, source)
+    return list(seen.values()), unparsed
 
 
-_TABLE_REF_PATTERN_CACHE: dict[str, re.Pattern] = {}
+def _matches(queried: Source, expected: Source) -> bool:
+    """Name always; database/schema only where the expectation names one."""
+    return all(want is None or (got or "").lower() == want.lower() for got, want in zip(queried, expected, strict=True))
 
 
-def _table_ref_pattern(table: str) -> re.Pattern:
-    """Matches `table`, optionally preceded by one or two dotted
-    identifiers (`schema.table` or `database.schema.table`) -- so a single
-    scan can tell whether a given occurrence was qualified, and with what.
-    """
-    if table not in _TABLE_REF_PATTERN_CACHE:
-        _TABLE_REF_PATTERN_CACHE[table] = re.compile(
-            r"(?:\b([A-Za-z_][\w$]*)\.)?(?:\b([A-Za-z_][\w$]*)\.)?\b" + re.escape(table) + r"\b",
-            re.IGNORECASE,
-        )
-    return _TABLE_REF_PATTERN_CACHE[table]
+def _expected(entry: str, expected_database: str | None, expected_schema: str | None) -> Source:
+    """An `expected_sources` entry, read like a table name in SQL: `table`,
+    `schema.table` or `database.schema.table`. Parts it leaves out fall back
+    to the eval's `expected_database`/`expected_schema`."""
+    table = exp.to_table(entry, dialect="snowflake")
+    return Source(table.catalog or expected_database, table.db or expected_schema, table.name)
 
 
-def _has_qualifying_occurrence(
-    resolved_statements: list[tuple[str, str | None, str | None]],
-    source: str,
-    expected_database: str | None,
-    expected_schema: str | None,
-) -> bool:
-    """True if some occurrence of `source` resolves -- via inline
-    qualification, or via `use database`/`use schema` tracked up to that
-    point -- to `expected_database`/`expected_schema` (whichever is given).
-    """
-    pattern = _table_ref_pattern(source)
-    for sql, session_db, session_schema in resolved_statements:
-        for match in pattern.finditer(sql):
-            part1, part2 = match.group(1), match.group(2)
-            if part1 and part2:
-                database, schema = part1, part2
-            elif part1:
-                # a single qualifier before a table is conventionally its
-                # schema (`schema.table`), not its database.
-                database, schema = session_db, part1
-            else:
-                database, schema = session_db, session_schema
-
-            if expected_database and (database or "").lower() != expected_database.lower():
-                continue
-            if expected_schema and (schema or "").lower() != expected_schema.lower():
-                continue
-            return True
-    return False
-
-
-def _source_recall(
-    sql_statements: list[str],
-    expected_sources: list[str],
-    expected_database: str | None = None,
-    expected_schema: str | None = None,
-) -> float:
-    combined_sql = "\n".join(sql_statements).lower()
-    # Only pay for session-context tracking when an eval actually asks for
-    # location checking -- otherwise this is the same bare word-boundary
-    # check it's always been, so existing evals' scores can't shift.
-    resolved = _track_session_context(sql_statements) if (expected_database or expected_schema) else None
-
-    def is_hit(source: str) -> bool:
-        if not re.search(r"\b" + re.escape(source.lower()) + r"\b", combined_sql):
-            return False
-        if resolved is None:
-            return True
-        return _has_qualifying_occurrence(resolved, source, expected_database, expected_schema)
-
-    hits = sum(1 for source in expected_sources if is_hit(source))
-    return hits / len(expected_sources)
-
-
-def score_provenance(
+def check_provenance(
     sql_statements: list[str] | None = None,
     expected_sources: list[str] | None = None,
     expected_database: str | None = None,
     expected_schema: str | None = None,
-) -> float:
-    """Recall over one provenance claim an eval can make: does the SQL the
-    agent actually ran reference the tables/models we expected -- e.g. an
-    aggregated mart or semantic-layer model, not the agent reconstructing
-    the number by hand from raw tables. Checked against `sql_statements`
-    (see sql_capture.py).
+) -> Provenance:
+    """Recall over `expected_sources`: the share of them some read statement
+    referenced, in the expected database/schema where one is given. An eval
+    with no `expected_sources` is trivially satisfied (1.0).
 
-    `expected_database`/`expected_schema` optionally tighten this: a source
-    only counts as found if some occurrence of it resolves (via inline
-    qualification, or a preceding `use database`/`use schema` in the trace)
-    to the given database/schema -- otherwise a query against a same-named
-    table in the wrong database (e.g. Snowflake's built-in
-    `snowflake_sample_data` instead of the real target) would still count as
-    a hit. Neither is required; an eval that only cares *which table*, not
-    *which database it lives in*, can leave both unset and get the old,
-    looser behavior.
+    An entry can carry its own location (`snowflake_sample_data.tpch_sf1.customer`,
+    `staging.customer_flags`); `expected_database`/`expected_schema` apply to
+    the parts an entry leaves out. Without either, any database/schema counts.
+    A reference whose database or schema is unknown (a bare name with no
+    earlier `use`) doesn't match an expected one.
 
-    An eval with no `expected_sources` declared at all is trivially satisfied
-    (1.0).
-
-    There used to be a second dimension here, `expected_tools` (did the
-    agent call the tools we expected) -- deliberately removed. It was
-    redundant with this one by construction whenever both were declared for
-    the same SQL-producing tool: `expected_sources` can only score >0 if
-    some real tool call actually happened and returned matching content, so
-    it already implies tool use, more precisely than a bare tool-name check
-    ever could. The only place `expected_tools` wasn't redundant was for
-    tools that produce no checkable SQL/source content at all (e.g. a
-    calculator) -- no eval in this project currently needs that, so it's
-    not worth carrying the dead weight until one does. See
-    memory/expected_tools_removed_from_provenance.md (or its successor) for
-    the full reasoning if this needs revisiting once semantic-layer tool
-    checks are better understood.
-
-    Caveat: source checking only sees SQL text captured by sql_capture.py.
-    An agent that reaches the right model through a non-SQL interface (e.g.
-    a semantic-layer tool call with structured args like {"metric":
-    "revenue"}, no SQL string anywhere) won't be detected here -- this
-    checks *queries*, not arbitrary structured tool arguments.
+    Caveat: this only sees SQL captured by sql_capture.py. An agent that
+    reaches a semantic layer through structured, non-SQL tool arguments
+    (e.g. {"metric": "revenue"}) isn't detected -- see TODO.md's
+    "Semantic-layer provenance checking".
     """
-    sql_statements = sql_statements or []
-    expected_sources = expected_sources or []
-
-    if not expected_sources:
-        return 1.0
-    return _source_recall(sql_statements, expected_sources, expected_database, expected_schema)
+    queried, unparsed = queried_sources(sql_statements or [])
+    expected = [_expected(entry, expected_database, expected_schema) for entry in expected_sources or []]
+    if not expected:
+        return Provenance(1.0, queried, unparsed)
+    hits = sum(1 for want in expected if any(_matches(got, want) for got in queried))
+    return Provenance(hits / len(expected), queried, unparsed)

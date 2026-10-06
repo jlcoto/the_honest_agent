@@ -149,6 +149,41 @@ evals:
 - A plain list of evals without groups also works, each eval carrying all
   of its own settings.
 
+### How provenance is checked
+
+honest-agent parses the SQL the agent ran (with
+[sqlglot](https://github.com/tobymao/sqlglot)) and lists every table, view
+or semantic view it read, with the database and schema each one lives in.
+`provenance_score` is the share of `expected_sources` found in that list.
+
+- **An entry is written like a table name in SQL:** `orders`,
+  `public.orders` or `agent_quiz_demo.public.orders`. `expected_database` and
+  `expected_schema` fill in the parts an entry leaves out, so sources in
+  different places can sit in one list:
+
+  ```yaml
+  provenance:
+    expected_database: agent_quiz_demo
+    expected_schema: public
+    expected_sources:
+      - fct_revenue_by_year                      # agent_quiz_demo.public
+      - snowflake_sample_data.tpch_sf1.customer  # its own database and schema
+      - staging.customer_flags                   # agent_quiz_demo.staging
+  ```
+
+  With no database or schema anywhere, any location counts.
+- **Only reads count.** `select` statements (including `with` and `union`)
+  count; `describe`, `show` and other exploration don't, and neither do
+  queries the tool reported as errors. A tool that returns a failure inside
+  a normal response (e.g. `{"success": false, ...}`) instead of flagging it
+  as an error isn't caught, so its failed queries still count.
+- **Locations follow the session.** A table written without its database or
+  schema takes them from earlier `use database` / `use schema` statements,
+  across tool calls. With neither, its location is unknown and doesn't match
+  an expected database or schema.
+- **Names in comments, strings, columns or CTEs don't count**, only real
+  table references.
+
 ## Choosing a grading method
 
 Each eval picks exactly one `grading.method` in its YAML entry — there's no

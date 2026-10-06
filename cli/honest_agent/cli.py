@@ -27,7 +27,7 @@ from .config_file import (
 from .eval_loader import EvalDefinition, filter_by_tags, load_evals
 from .grading import grade_accuracy
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
-from .provenance import score_provenance
+from .provenance import check_provenance
 from .sql_capture import extract_sql_calls
 from .storage import export_to_s3_parquet, read_agent_logs, read_all_results, read_tool_calls, write_run_results
 from .thresholds import failing_rows
@@ -133,12 +133,15 @@ async def _eval_loop(
             tolerance_percent=definition.tolerance_percent,
         )
         sql_calls = extract_sql_calls(result.raw_trace, definition.sql_fields, ignore_tools)
-        provenance_score = score_provenance(
-            [call["sql"] for call in sql_calls],
+        # A query that errored read nothing, so it can't count toward provenance.
+        provenance = check_provenance(
+            [call["sql"] for call in sql_calls if not call["is_error"]],
             definition.expected_sources,
             definition.expected_database,
             definition.expected_schema,
         )
+        for sql in provenance.unparsed:
+            click.echo(f"    WARNING: couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
         result_id = str(uuid.uuid4())
 
         rows.append(
@@ -160,7 +163,8 @@ async def _eval_loop(
                 "grading_model": _grading_model(definition.grading_method, judge_model),
                 "accuracy_rationale": rationale,
                 "accuracy_min_score": definition.accuracy_min_score,
-                "provenance_score": provenance_score,
+                "provenance_score": provenance.score,
+                "queried_sources": [source._asdict() for source in provenance.queried_sources],
                 "expected_sources": definition.expected_sources,
                 "expected_database": definition.expected_database,
                 "expected_schema": definition.expected_schema,

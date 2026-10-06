@@ -28,7 +28,7 @@ class EvalDefinition:
     # Optional -- tightens expected_sources to require the matched table
     # resolve to this database/schema (inline-qualified, or via a preceding
     # `use database`/`use schema` in the trace), not just any table with a
-    # matching name. See provenance.py's score_provenance docstring.
+    # matching name. See provenance.py's check_provenance docstring.
     expected_database: str | None = None
     expected_schema: str | None = None
     accuracy_min_score: float = DEFAULT_ACCURACY_MIN_SCORE

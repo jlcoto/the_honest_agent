@@ -15,7 +15,7 @@ def test_extract_uses_declared_field_for_named_tool():
 
     calls = extract_sql_calls(trace, sql_fields={"query_warehouse": "sql_text"})
 
-    assert calls == [{"tool_name": "query_warehouse", "sql": "select 1"}]
+    assert calls == [{"tool_name": "query_warehouse", "sql": "select 1", "is_error": False}]
 
 
 def test_extract_falls_back_to_heuristic_when_tool_not_declared():
@@ -23,7 +23,7 @@ def test_extract_falls_back_to_heuristic_when_tool_not_declared():
 
     calls = extract_sql_calls(trace, sql_fields={})
 
-    assert calls == [{"tool_name": "query_warehouse", "sql": "select 2"}]
+    assert calls == [{"tool_name": "query_warehouse", "sql": "select 2", "is_error": False}]
 
 
 def test_extract_skips_tools_with_no_matching_field():
@@ -71,7 +71,7 @@ def test_extract_falls_back_to_result_content_when_input_has_no_sql():
         json.dumps([{"text": "interpretation..."}, {"statement": "select 1", "confidence": {}}]),
     )
 
-    assert extract_sql_calls(trace) == [{"tool_name": "query_semantic_view", "sql": "select 1"}]
+    assert extract_sql_calls(trace) == [{"tool_name": "query_semantic_view", "sql": "select 1", "is_error": False}]
 
 
 def test_extract_prefers_input_over_result_when_both_present():
@@ -81,7 +81,7 @@ def test_extract_prefers_input_over_result_when_both_present():
         json.dumps({"sql": "select 2"}),
     )
 
-    assert extract_sql_calls(trace) == [{"tool_name": "query_warehouse", "sql": "select 1"}]
+    assert extract_sql_calls(trace) == [{"tool_name": "query_warehouse", "sql": "select 1", "is_error": False}]
 
 
 def test_extract_declared_field_checked_on_result_side_too():
@@ -93,7 +93,7 @@ def test_extract_declared_field_checked_on_result_side_too():
 
     calls = extract_sql_calls(trace, sql_fields={"query_semantic_view": "generated_sql"})
 
-    assert calls == [{"tool_name": "query_semantic_view", "sql": "select 1"}]
+    assert calls == [{"tool_name": "query_semantic_view", "sql": "select 1", "is_error": False}]
 
 
 def test_extract_ignores_non_json_result_content():
@@ -124,8 +124,8 @@ def test_extract_collects_multiple_calls_in_order_with_tool_names():
     ]
 
     assert extract_sql_calls(trace) == [
-        {"tool_name": "query_warehouse", "sql": "select 1"},
-        {"tool_name": "run_metric_query", "sql": "select 2"},
+        {"tool_name": "query_warehouse", "sql": "select 1", "is_error": False},
+        {"tool_name": "run_metric_query", "sql": "select 2", "is_error": False},
     ]
 
 
@@ -147,4 +147,31 @@ def test_declaring_a_tool_in_sql_fields_beats_ignoring_it():
 
     calls = extract_sql_calls(trace, sql_fields={"search_catalog": "query"}, ignore_tools=["search_catalog"])
 
-    assert calls == [{"tool_name": "search_catalog", "sql": "select 1"}]
+    assert calls == [{"tool_name": "search_catalog", "sql": "select 1", "is_error": False}]
+
+
+def test_extract_marks_calls_whose_result_was_an_error():
+    trace = [
+        {"role": "user", "content": "prompt"},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "1", "name": "query_warehouse", "input": {"sql": "select * from orders"}}
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "1",
+                    "content": "SQL compilation error: Object 'ORDERS' does not exist or not authorized.",
+                    "is_error": True,
+                }
+            ],
+        },
+    ]
+
+    assert extract_sql_calls(trace) == [
+        {"tool_name": "query_warehouse", "sql": "select * from orders", "is_error": True}
+    ]
