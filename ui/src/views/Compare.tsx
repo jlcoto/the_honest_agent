@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { SCORES_OVER_TIME_NOTE, ScoresOverTime, seriesColors } from '../components/ScoresOverTime'
-import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, runsOf, type Run } from '../data/derive'
+import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, meanOf, runsOf, type Run } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { AccuracyBar, Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
@@ -23,7 +23,7 @@ interface ModelRow {
   /** The selected run's results by eval_id. */
   latest: Map<string, ResultRow>
   accuracy: number
-  provenance: number
+  provenance: number | null
   dAccuracy: number | null
   dProvenance: number | null
   /** Evals both this model's and the baseline's selected runs contain; the differences are computed on these. */
@@ -108,10 +108,12 @@ export function Compare({
       const latest = resultsOf(model)
       const results = [...latest.values()]
       const shared = [...latest.keys()].filter((q) => base.has(q))
-      const sharedDelta = (key: 'accuracy_score' | 'provenance_score') =>
-        model === baseline || shared.length === 0
-          ? null
-          : mean(shared.map((q) => latest.get(q)![key])) - mean(shared.map((q) => base.get(q)![key]))
+      // Over evals both runs scored; provenance that either side didn't check is left out.
+      const sharedDelta = (key: 'accuracy_score' | 'provenance_score') => {
+        const scored = shared.filter((q) => latest.get(q)![key] != null && base.get(q)![key] != null)
+        if (model === baseline || scored.length === 0) return null
+        return mean(scored.map((q) => latest.get(q)![key]!)) - mean(scored.map((q) => base.get(q)![key]!))
+      }
       return {
         model,
         isBaseline: model === baseline,
@@ -120,7 +122,7 @@ export function Compare({
         isLatest: selectedRun(model) === runsByModel.get(model)![0],
         latest,
         accuracy: mean(results.map((r) => r.accuracy_score)),
-        provenance: mean(results.map((r) => r.provenance_score)),
+        provenance: meanOf(results.map((r) => r.provenance_score)),
         dAccuracy: sharedDelta('accuracy_score'),
         dProvenance: sharedDelta('provenance_score'),
         shared: shared.length,

@@ -23,7 +23,9 @@ field names, same `sql_fields` override, on either side -- deliberately not
 a second config surface, since the one real example of this seen so far
 (Cortex Analyst's `statement`) is already covered by the existing heuristic
 list, and there's no second real example yet to generalize a dedicated
-"which field, on which side" config from.
+"which field, on which side" config from. SQL found on the response side is
+marked `generated`: the tool wrote it but may not have run it (Cortex Analyst
+doesn't), so it's recorded but doesn't count toward provenance.
 
 This only ever produces `type="sql"` rows. A tool that reaches a semantic
 layer through fully structured args on *both* sides -- no SQL string
@@ -43,7 +45,7 @@ contract, not ours -- there's no way to auto-detect either:
      `provenance.semantic_tools` list in the eval YAML, alongside
      `sql_fields`.
   2. Which field inside that structured input/output actually names the
-     model/metric being hit, so `score_provenance`'s source-checking has
+     model/metric being hit, so `check_provenance`'s source-checking has
      something to compare `expected_sources` against -- this varies by
      vendor (MetricFlow's `metrics`/`group_by` vs. Cube's
      `measures`/`dimensions`), so it can't be hardcoded either.
@@ -93,10 +95,15 @@ def extract_sql_calls(
     trace: list[dict[str, Any]],
     sql_fields: dict[str, str] | None = None,
     ignore_tools: list[str] | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Scans a message trace (as produced by agent_runner.plain_content) for
     tool_use blocks and pulls out SQL calls, in the order they happened.
-    Each returned item is `{"tool_name": ..., "sql": ...}`.
+    Each returned item is `{"tool_name": ..., "sql": ..., "is_error": ...,
+    "generated": ...}`. `is_error` is True when the tool's result was an error
+    (e.g. a SQL compilation error). `generated` is True when the SQL came from
+    the tool's response rather than its input: the tool wrote it (e.g. Cortex
+    Analyst) but didn't necessarily run it. Provenance counts neither, since
+    neither shows the agent read anything.
 
     For a tool named in `sql_fields`, reads exactly that field -- checked
     first against the call's input, then (if not found there) against its
@@ -113,6 +120,7 @@ def extract_sql_calls(
 
     tool_uses: list[tuple[Any, str, dict]] = []
     results_by_id: dict[Any, Any] = {}
+    errored_ids: set[Any] = set()
 
     for message in trace:
         content = message.get("content")
@@ -132,14 +140,24 @@ def extract_sql_calls(
                     except ValueError:
                         pass  # not JSON -- leave as the raw string; _find_field finds nothing in it
                 results_by_id[block.get("tool_use_id")] = result_content
+                if block.get("is_error"):
+                    errored_ids.add(block.get("tool_use_id"))
 
-    calls: list[dict[str, str]] = []
+    calls: list[dict[str, Any]] = []
     for tool_use_id, tool_name, tool_input in tool_uses:
         if tool_name in skipped and tool_name not in sql_fields:
             continue
         field = sql_fields.get(tool_name)
-        value = _find_field(tool_input, field) or _find_field(results_by_id.get(tool_use_id), field)
+        sent = _find_field(tool_input, field)
+        value = sent or _find_field(results_by_id.get(tool_use_id), field)
         if value:
-            calls.append({"tool_name": tool_name, "sql": value})
+            calls.append(
+                {
+                    "tool_name": tool_name,
+                    "sql": value,
+                    "is_error": tool_use_id in errored_ids,
+                    "generated": sent is None,
+                }
+            )
 
     return calls

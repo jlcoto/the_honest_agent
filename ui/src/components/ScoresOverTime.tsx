@@ -71,6 +71,8 @@ export function ScoresOverTime({
         const run = dayRuns.reduce((a, b) => (b.timestamp > a.timestamp ? b : a))
         return { day: days.indexOf(date), run, runsThatDay: dayRuns.length, value: run[metric] }
       })
+      // A run with no provenance checked has no provenance point.
+      .filter((p): p is Point => p.value != null)
       .sort((a, b) => a.day - b.day)
   }
 

@@ -221,9 +221,13 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         <Badge tone={accOk ? 'correct' : 'wrong'} dot>
           {accOk ? 'Accuracy passed' : 'Accuracy below min'}
         </Badge>
-        <Badge tone={provOk ? 'correct' : 'wrong'} dot>
-          {provOk ? 'Provenance passed' : 'Provenance below min'}
-        </Badge>
+        {r.provenance_score == null ? (
+          <Badge dot>Provenance not checked</Badge>
+        ) : (
+          <Badge tone={provOk ? 'correct' : 'wrong'} dot>
+            {provOk ? 'Provenance passed' : 'Provenance below min'}
+          </Badge>
+        )}
         {back}
       </PageHeader>
 
@@ -232,7 +236,11 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           <ScoreStat label="Accuracy" value={r.accuracy_score} caption={`min score ${pct(r.accuracy_min_score)}`} />
         </Card>
         <Card>
-          <ScoreStat label="Provenance" value={r.provenance_score} caption={`min score ${pct(r.provenance_min_score)}`} />
+          {r.provenance_score == null ? (
+            <ScoreStat label="Provenance" format="raw" value="Not checked" caption="This eval expects no sources" />
+          ) : (
+            <ScoreStat label="Provenance" value={r.provenance_score} caption={`min score ${pct(r.provenance_min_score)}`} />
+          )}
         </Card>
         <Card>
           <ScoreStat

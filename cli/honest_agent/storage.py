@@ -80,6 +80,10 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("expected_database", "varchar"),
     ("expected_schema", "varchar"),
     ("provenance_min_score", "double"),
+    # Every table/view the agent's read statements referenced, with the
+    # database/schema each resolved to (NULL where neither the SQL nor a `use`
+    # statement said) -- see provenance.queried_sources.
+    ("queried_sources", "struct(database varchar, schema varchar, name varchar)[]"),
     ("model_name", "varchar"),
     ("agent_backend", "varchar"),  # always "mcp" today; kept for a possible future backend
     # Which agent was evaluated: `run --agent-name`, else the name the MCP server
@@ -129,6 +133,10 @@ _TOOL_CALLS_COLUMNS: list[tuple[str, str]] = [
     ("tool_name", "varchar"),
     ("type", "varchar"),  # "sql" today; "semantic" once that capture exists
     ("payload", "varchar"),  # JSON, shape depends on `type`
+    ("is_error", "boolean"),  # the tool returned an error, e.g. a SQL compilation error
+    # The SQL came from the tool's response (written by the tool, e.g. Cortex
+    # Analyst, not necessarily run), not from what the agent sent.
+    ("generated", "boolean"),
 ]
 _TOOL_CALLS_COLUMN_NAMES = [name for name, _ in _TOOL_CALLS_COLUMNS]
 
@@ -165,6 +173,8 @@ def _ensure_schema(con) -> None:
     con.execute(f"create table if not exists agent_logs ({logs_cols_sql})")
     tool_calls_cols_sql = ", ".join(f"{name} {type_}" for name, type_ in _TOOL_CALLS_COLUMNS)
     con.execute(f"create table if not exists tool_calls ({tool_calls_cols_sql})")
+    for name, type_ in _TOOL_CALLS_COLUMNS:
+        con.execute(f"alter table tool_calls add column if not exists {name} {type_}")
 
 
 def _table_exists(con, table_name: str) -> bool:
@@ -177,7 +187,7 @@ def write_run_results(results_path: str, run_id: str, rows: list[dict[str, Any]]
 
     Each row in `rows` is expected to carry the union of `results` and
     `agent_logs` fields (result_id, scores, ..., agent_trace), plus an
-    optional `sql_calls` key -- a list of `{"tool_name", "sql"}` dicts (see
+    optional `sql_calls` key -- a list of `{"tool_name", "sql", "is_error", "generated"}` dicts (see
     sql_capture.extract_sql_calls) that gets expanded into zero or more
     `tool_calls` rows (each written as `type="sql"`, `payload={"sql": ...}`
     JSON-encoded). The CLI builds one flat dict per eval; this function is
@@ -209,6 +219,8 @@ def write_run_results(results_path: str, run_id: str, rows: list[dict[str, Any]]
                     call.get("tool_name"),
                     "sql",
                     json.dumps({"sql": call.get("sql")}),
+                    bool(call.get("is_error")),
+                    bool(call.get("generated")),
                 ]
                 for row in rows
                 for call_index, call in enumerate(row.get("sql_calls") or [])

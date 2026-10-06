@@ -5,11 +5,15 @@ no LLM or MCP dependency, so it's cheap to drive end to end through the real
 
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 
 from click.testing import CliRunner
 
-from honest_agent.cli import main
+from honest_agent.agent_runner import AgentRunResult
+from honest_agent.cli import _eval_loop, main
+from honest_agent.eval_loader import EvalDefinition
 from honest_agent.storage import write_run_results
 
 
@@ -143,7 +147,10 @@ def test_both_mcp_targets_only_in_env_is_an_error(fake_run, in_tmp_dir):
 
 def test_duplicate_eval_id_is_a_clean_cli_error(in_tmp_dir):
     Path("evals").mkdir()
-    Path("evals/a.yml").write_text("evals:\n  - id: q_dup\n    prompt: one\n  - id: q_dup\n    prompt: two\n")
+    Path("evals/a.yml").write_text(
+        "evals:\n  - id: q_dup\n    prompt: one\n    expected_answer: '1'\n"
+        "  - id: q_dup\n    prompt: two\n    expected_answer: '2'\n"
+    )
     result = CliRunner().invoke(
         main,
         ["run", "--evals-dir", "evals", "--mcp-command", "python server.py"],
@@ -151,7 +158,7 @@ def test_duplicate_eval_id_is_a_clean_cli_error(in_tmp_dir):
     )
 
     assert result.exit_code == 1
-    assert "Error: Duplicate eval id 'q_dup' in a.yml (lines 2 and 4)" in result.output
+    assert "Error: Duplicate eval id 'q_dup' in a.yml (lines 2 and 5)" in result.output
     assert "Traceback" not in result.output
 
 
@@ -185,3 +192,109 @@ def test_judge_model_can_differ_from_the_agent_model(fake_run, in_tmp_dir):
     models = _run_capturing_models(fake_run, ["--model", "claude-sonnet-5", "--judge-model", "claude-haiku-4-5"])
 
     assert models == {"model": "claude-sonnet-5", "judge_model": "claude-haiku-4-5"}
+
+
+class _ScriptedAgent:
+    """Returns a fixed run, like an agent that made exactly these tool calls."""
+
+    def __init__(self, raw_trace: list[dict]):
+        self._trace = raw_trace
+
+    async def run(self, prompt: str) -> AgentRunResult:
+        return AgentRunResult(
+            answer="The total revenue in 1996 was 127887488053.85",
+            tools_used=["query_semantic_view"],
+            raw_trace=self._trace,
+            model_name="claude-test",
+            latency_ms=10,
+            input_tokens=0,
+            output_tokens=0,
+        )
+
+
+def _cortex_trace(then_run_it: bool) -> list[dict]:
+    """Cortex Analyst answers with SQL it generated, not data. Mirrors a real Snowflake trace."""
+    sql = "select * from semantic_view(agent_quiz_demo.public.tpch_semantic_view metrics total_revenue)"
+    trace = [
+        {"role": "user", "content": "What was our total revenue in 1996?"},
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "1", "name": "query_semantic_view", "input": {"message": "..."}}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "1", "content": json.dumps([{"statement": sql}])}],
+        },
+    ]
+    if then_run_it:
+        trace += [
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "2", "name": "query_warehouse", "input": {"sql": sql}}],
+            },
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "2", "content": "311928357.78"}]},
+        ]
+    return trace
+
+
+def _provenance_of(trace: list[dict]) -> tuple[float, list[dict], list[dict]]:
+    definition = EvalDefinition(
+        eval_id="q_revenue_1996_semantic_view_tool",
+        prompt="What was our total revenue in 1996?",
+        category="finance",
+        expected_answer="311928357.78",
+        grading_method="contains",
+        expected_sources=["agent_quiz_demo.public.tpch_semantic_view"],
+        tags=[],
+    )
+    (row,) = asyncio.run(
+        _eval_loop(_ScriptedAgent(trace), [definition], None, "unused", "run_1", "snowflake", ignore_tools=[])
+    )
+    return row["provenance_score"], row["queried_sources"], row["sql_calls"]
+
+
+def test_sql_a_tool_generated_but_nobody_ran_does_not_count():
+    """The agent asked Cortex Analyst, got SQL back instead of data, and answered
+    without running it: nothing was read, so provenance fails. The SQL is still
+    recorded, marked as generated."""
+    score, queried, calls = _provenance_of(_cortex_trace(then_run_it=False))
+
+    assert score == 0.0
+    assert queried == []
+    assert [(c["tool_name"], c["generated"]) for c in calls] == [("query_semantic_view", True)]
+
+
+def test_generated_sql_counts_once_the_agent_runs_it():
+    score, queried, _ = _provenance_of(_cortex_trace(then_run_it=True))
+
+    assert score == 1.0
+    assert queried == [{"database": "agent_quiz_demo", "schema": "public", "name": "tpch_semantic_view"}]
+
+
+def test_logs_says_when_provenance_was_not_checked(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [_row(provenance_score=None, provenance_min_score=None)])
+
+    result = CliRunner().invoke(main, ["logs", "--results-path", db_path])
+
+    assert result.exit_code == 0, result.output
+    assert "Provenance: not checked" in result.output
+
+
+def test_an_eval_without_expected_sources_stores_no_provenance_score():
+    definition = EvalDefinition(
+        eval_id="q_accuracy_only",
+        prompt="What was our total revenue in 1996?",
+        category="finance",
+        expected_answer="311928357.78",
+        grading_method="contains",
+        expected_sources=[],
+        tags=[],
+    )
+    (row,) = asyncio.run(
+        _eval_loop(_ScriptedAgent(_cortex_trace(then_run_it=True)), [definition], None, "unused", "run_1", None, [])
+    )
+
+    assert row["provenance_score"] is None
+    assert row["provenance_min_score"] is None
+    assert row["queried_sources"] == [{"database": "agent_quiz_demo", "schema": "public", "name": "tpch_semantic_view"}]

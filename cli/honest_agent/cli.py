@@ -27,7 +27,7 @@ from .config_file import (
 from .eval_loader import EvalDefinition, filter_by_tags, load_evals
 from .grading import grade_accuracy
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
-from .provenance import score_provenance
+from .provenance import check_provenance
 from .sql_capture import extract_sql_calls
 from .storage import export_to_s3_parquet, read_agent_logs, read_all_results, read_tool_calls, write_run_results
 from .thresholds import failing_rows
@@ -133,12 +133,16 @@ async def _eval_loop(
             tolerance_percent=definition.tolerance_percent,
         )
         sql_calls = extract_sql_calls(result.raw_trace, definition.sql_fields, ignore_tools)
-        provenance_score = score_provenance(
-            [call["sql"] for call in sql_calls],
+        # Only SQL the agent sent and that ran counts toward provenance: a query that
+        # errored read nothing, and SQL a tool generated (e.g. Cortex Analyst) may never have run.
+        provenance = check_provenance(
+            [call["sql"] for call in sql_calls if not call["is_error"] and not call["generated"]],
             definition.expected_sources,
             definition.expected_database,
             definition.expected_schema,
         )
+        for sql in provenance.unparsed:
+            click.echo(f"    WARNING: couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
         result_id = str(uuid.uuid4())
 
         rows.append(
@@ -160,11 +164,13 @@ async def _eval_loop(
                 "grading_model": _grading_model(definition.grading_method, judge_model),
                 "accuracy_rationale": rationale,
                 "accuracy_min_score": definition.accuracy_min_score,
-                "provenance_score": provenance_score,
+                "provenance_score": provenance.score,
+                "queried_sources": [source._asdict() for source in provenance.queried_sources],
                 "expected_sources": definition.expected_sources,
                 "expected_database": definition.expected_database,
                 "expected_schema": definition.expected_schema,
-                "provenance_min_score": definition.provenance_min_score,
+                # No threshold for a check that didn't happen (see check_provenance).
+                "provenance_min_score": definition.provenance_min_score if provenance.score is not None else None,
                 "model_name": result.model_name,
                 "agent_backend": "mcp",
                 "agent_name": agent_name,
@@ -607,9 +613,13 @@ def logs(ctx: click.Context, results_path: str | None, run_id: str | None, eval_
         result_row = results_by_id.get(row["result_id"])
         if result_row:
             click.echo(f"Answer: {result_row['agent_answer']}")
+            if result_row["provenance_score"] is None:
+                provenance_text = "not checked"
+            else:
+                provenance_text = f"{result_row['provenance_score']:.2f} (min {result_row['provenance_min_score']:.2f})"
             click.echo(
                 f"Accuracy: {result_row['accuracy_score']:.2f} (min {result_row['accuracy_min_score']:.2f})  |  "
-                f"Provenance: {result_row['provenance_score']:.2f} (min {result_row['provenance_min_score']:.2f})"
+                f"Provenance: {provenance_text}"
             )
         call_rows = calls_by_result.get(row["result_id"], [])
         if call_rows:
