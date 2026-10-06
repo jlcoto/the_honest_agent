@@ -7,9 +7,9 @@ const T={
   partly:{bg:'var(--acc-partly-tint)',fg:'var(--acc-partly-ink)',dot:'var(--acc-partly)'},
   wrong:{bg:'var(--acc-wrong-tint)',fg:'var(--acc-wrong-ink)',dot:'var(--acc-wrong)'},
 };
-export function Badge({tone='neutral',dot,children,mono}){
-  const t=T[tone]||T.neutral;
-  return <span style={{display:'inline-flex',alignItems:'center',gap:6,height:22,padding:'0 8px',borderRadius:'var(--radius-pill)',background:t.bg,boxShadow:t.ring?'inset 0 0 0 1px '+t.ring:undefined,color:t.fg,font:'500 12px/1 '+(mono?'var(--font-mono)':'var(--font-sans)'),whiteSpace:'nowrap'}}>
-    {dot?<span style={{width:6,height:6,borderRadius:3,background:t.dot}}/>:null}{children}
+export function Badge({tone='neutral',dot,children,mono,size='md'}){
+  const t=T[tone]||T.neutral;const sm=size==='sm';
+  return <span style={{display:'inline-flex',alignItems:'center',gap:sm?4:6,height:sm?18:22,padding:sm?'0 6px':'0 8px',borderRadius:'var(--radius-pill)',background:t.bg,boxShadow:t.ring?'inset 0 0 0 1px '+t.ring:undefined,color:t.fg,font:'500 '+(sm?11:12)+'px/1 '+(mono?'var(--font-mono)':'var(--font-sans)'),whiteSpace:'nowrap'}}>
+    {dot?<span style={{width:sm?5:6,height:sm?5:6,borderRadius:3,background:t.dot}}/>:null}{children}
   </span>;
 }

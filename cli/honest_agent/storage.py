@@ -73,7 +73,12 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("accuracy_method", "varchar"),
     # Model that graded the answer (extract_match/llm_judge); NULL for contains, which uses none.
     ("grading_model", "varchar"),
-    ("accuracy_rationale", "varchar"),
+    ("accuracy_rationale", "varchar"),  # the judge's reason (llm_judge only)
+    # The value extract_match pulled from the answer and compared with expected_answer.
+    ("extracted_answer", "varchar"),
+    # The eval's extract_match tolerances, so a report can show the allowed difference.
+    ("accuracy_tolerance", "double"),
+    ("accuracy_tolerance_percent", "double"),
     ("accuracy_min_score", "double"),
     ("provenance_score", "double"),
     ("expected_sources", "varchar[]"),

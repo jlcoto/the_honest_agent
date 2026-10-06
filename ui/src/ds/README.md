@@ -4,7 +4,9 @@ Copied from the Claude Design project **The Honest Agent Design System**
 (`94963a67-cb9a-4a54-9fcf-5068be36c5dc`) on 2026-10-01; `tokens/colors.css` and
 `components/core/Badge.jsx` updated in both places on 2026-10-04, and the
 series palette (`--series-1…5`), `TrendChart` and the quiz → eval rename in
-`Heatmap` on 2026-10-05. The project's `readme.md` holds the full guidelines
+`Heatmap` on 2026-10-05. **Not yet in Claude Design:** `Badge`'s `size="sm"`
+(added here on 2026-10-06 for the result page's Provenance card); copy it over
+with the result page's design sync. The project's `readme.md` holds the full guidelines
 (palette roles, accuracy buckets, type, voice); follow it when building views.
 
 - `styles.css` + `tokens/`: tokens as CSS variables, imported once in `main.tsx`.

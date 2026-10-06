@@ -162,6 +162,32 @@ left open on purpose:
    correct queries as misses; if that comes up, let a target declare its
    default database/schema.
 
+## Store the full agent trace (own branch, after the result page)
+
+Agreed on 2026-10-06. `agent_logs.agent_trace` keeps the conversation, not the
+full exchange, so these can't be recovered for any run made so far:
+
+- why each model turn ended (`stop_reason` / `finish_reason`): Claude runs
+  with `max_tokens=1024`, and a cut-off answer looks like a finished one;
+- per-turn token usage (only totals are kept) and per-tool-call timings;
+- the tools offered to the agent (names, descriptions, input schemas);
+- non-text MCP tool output (structured content, images, resources): only
+  text blocks are kept;
+- the grader's raw exchange (the prompt can be rebuilt from code, the reply
+  can't).
+
+Plan: store everything sent to and received from the model and the tools, as
+raw as possible: each model call's settings and full response, each MCP
+result in full, the tools offered, and the grading prompt and reply. It goes in
+`agent_logs` (no new tables). `report.json` copies only what the result
+page's Trace card shows, so the report doesn't grow; the full trace stays in
+`results.duckdb` for `honest-agent logs` and DuckDB queries. Old runs stay as
+they are. Sensitive data is the user's responsibility (README, "Run and look
+at the results").
+
+Separately, the Trace card shows Claude's (redacted) thinking blocks as raw
+JSON with a long signature; that's a frontend fix, independent of this.
+
 ## Migrate S3 export from plain Parquet to DuckLake
 
 `honest-agent export` (`storage.py`'s `export_to_s3_parquet`) currently writes a
