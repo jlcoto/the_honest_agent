@@ -1,5 +1,5 @@
 // Follows the design system's ui_kits/dashboard/Detail.jsx.
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useState, type CSSProperties, type ReactNode } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import {
   accuracyPasses,
@@ -11,7 +11,7 @@ import {
   stripMarkdown,
   toolCallsFor,
 } from '../data/derive'
-import type { ReportData } from '../data/types'
+import type { ReportData, ResultRow } from '../data/types'
 import { Badge, Button, Card, ScoreStat } from '../ds'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -123,6 +123,160 @@ function Ids({ ids }: { ids: string[] | null }) {
   )
 }
 
+// A plain decimal like "311928357.78" -- what extract_match normalizes numeric answers to.
+const isPlainNumber = (s: string) => /^-?\d+(\.\d+)?$/.test(s.trim())
+const decimalsOf = (s: string) => s.trim().split('.')[1]?.length ?? 0
+
+/** Thousands separators for plain numbers, keeping every decimal as written; anything else unchanged. */
+function formatValue(s: string): string {
+  if (!isPlainNumber(s)) return s
+  const [int, dec] = s.trim().split('.')
+  return BigInt(int).toLocaleString('en-US') + (dec ? `.${dec}` : '')
+}
+
+/** |a - b| at the precision of the more precise side, or null if either isn't a plain number. */
+function difference(a: string, b: string): string | null {
+  if (!isPlainNumber(a) || !isPlainNumber(b)) return null
+  const decimals = Math.max(decimalsOf(a), decimalsOf(b))
+  return formatValue(Math.abs(Number(a) - Number(b)).toFixed(decimals))
+}
+
+function toleranceLabels(r: ResultRow): string[] {
+  const labels: string[] = []
+  if (r.accuracy_tolerance != null) labels.push(`± ${r.accuracy_tolerance}`)
+  if (r.accuracy_tolerance_percent != null) labels.push(`± ${+(r.accuracy_tolerance_percent * 100).toFixed(4)}%`)
+  return labels
+}
+
+const ledgerKey: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  gap: 2,
+  padding: '12px 14px',
+  background: 'var(--bg-sunken)',
+  font: 'var(--type-label)',
+  color: 'var(--fg-2)',
+}
+const ledgerValue: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  padding: '12px 14px',
+  minWidth: 0,
+  font: '400 17px/1.35 var(--font-mono)',
+  fontVariantNumeric: 'tabular-nums',
+  textAlign: 'right',
+  wordBreak: 'break-all',
+}
+const ledgerText: CSSProperties = { ...stack(10), padding: '12px 14px', minWidth: 0, justifyContent: 'center' }
+
+interface LedgerRow {
+  label: string
+  hint?: string
+  value: ReactNode
+  /** Numbers are right-aligned in mono so digits line up; text reads left to right. */
+  text?: boolean
+  color?: string
+}
+
+/** Label/value rows in one bordered table: the label column on a sunken ground. */
+function Ledger({ rows }: { rows: LedgerRow[] }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(120px, max-content) 1fr',
+        border: '1px solid var(--border-1)',
+        borderRadius: 'var(--radius-sm)',
+        overflow: 'hidden',
+      }}
+    >
+      {rows.map((row, i) => {
+        const divider = i ? '1px solid var(--border-1)' : 'none'
+        return (
+          <Fragment key={row.label}>
+            <div style={{ ...ledgerKey, borderTop: divider }}>
+              {row.label}
+              {row.hint ? <span style={{ font: '400 12px/1.3 var(--font-sans)', color: 'var(--fg-3)' }}>{row.hint}</span> : null}
+            </div>
+            <div style={{ ...(row.text ? ledgerText : ledgerValue), borderTop: divider, color: row.color ?? 'var(--fg-1)' }}>
+              {row.value}
+            </div>
+          </Fragment>
+        )
+      })}
+    </div>
+  )
+}
+
+const answerText = (text: string) => (text ? <Paragraphs text={text} /> : <p style={para}>(empty answer)</p>)
+
+/** Expected vs. the agent's answer, laid out for the grading method that scored it. */
+function AccuracyCard({ r }: { r: ResultRow }) {
+  const ok = accuracyPasses(r)
+  const tolerances = toleranceLabels(r)
+  const extracted = r.accuracy_method === 'extract_match' ? r.extracted_answer : null
+  const numeric = extracted != null && isPlainNumber(extracted) && isPlainNumber(r.expected_answer)
+  const expected: LedgerRow = { label: 'Expected', hint: 'written in the eval', value: formatValue(r.expected_answer), text: !numeric }
+
+  let rows: LedgerRow[]
+  if (extracted != null) {
+    rows = [expected, { label: 'Agent answer', hint: 'extracted by the grader', value: formatValue(extracted), text: !numeric }]
+    const diff = numeric ? difference(extracted, r.expected_answer) : null
+    if (diff != null) {
+      rows.push({
+        label: 'Difference',
+        hint: tolerances.length ? `allowed ${tolerances.join(' or ')}` : 'must match exactly',
+        value: diff,
+        color: ok ? 'var(--acc-correct-ink)' : 'var(--acc-wrong-ink)',
+      })
+    }
+  } else {
+    rows = [{ ...expected, text: true }, { label: 'Agent answer', value: answerText(r.agent_answer), text: true }]
+    if (r.accuracy_method === 'llm_judge') {
+      rows.push({
+        label: 'Judge',
+        hint: r.grading_model ?? undefined,
+        value: <p style={{ ...para, color: 'var(--fg-2)' }}>{r.accuracy_rationale ?? 'No rationale recorded.'}</p>,
+        text: true,
+      })
+    }
+  }
+
+  return (
+    <Card
+      title="Accuracy"
+      actions={
+        <Badge tone={ok ? 'correct' : 'wrong'} dot>
+          {ok ? 'Passed' : 'Failed'}
+        </Badge>
+      }
+    >
+      <Ledger rows={rows} />
+      {extracted != null ? (
+        <details>
+          <summary style={{ cursor: 'pointer', listStyle: 'none', font: '500 13px/1.4 var(--font-sans)', color: 'var(--accent)' }}>
+            Show the agent's full reply
+          </summary>
+          <div style={{ ...stack(10), marginTop: 10 }}>{answerText(r.agent_answer)}</div>
+        </details>
+      ) : null}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <Badge mono>{r.accuracy_method}</Badge>
+        {extracted != null
+          ? tolerances.map((t) => (
+              <Badge key={t} mono>
+                tolerance {t}
+              </Badge>
+            ))
+          : null}
+        {r.accuracy_method === 'llm_judge' && r.grading_model ? <Badge mono>judge {r.grading_model}</Badge> : null}
+      </div>
+    </Card>
+  )
+}
+
 const parseJson = (s: string): unknown => {
   try {
     return JSON.parse(s)
@@ -219,17 +373,33 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         }
       >
         <Badge tone={accOk ? 'correct' : 'wrong'} dot>
-          {accOk ? 'Accuracy passed' : 'Accuracy below min'}
+          Accuracy
         </Badge>
         {r.provenance_score == null ? (
           <Badge dot>Provenance not checked</Badge>
         ) : (
           <Badge tone={provOk ? 'correct' : 'wrong'} dot>
-            {provOk ? 'Provenance passed' : 'Provenance below min'}
+            Provenance
           </Badge>
         )}
         {back}
       </PageHeader>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'auto 1fr',
+          gap: '4px 14px',
+          alignItems: 'baseline',
+          padding: '6px 0 6px 16px',
+          borderLeft: '3px solid var(--accent)',
+        }}
+      >
+        <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)', letterSpacing: 'var(--ls-caps)' }}>Q</span>
+        <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty', maxWidth: '68ch' }}>
+          {r.prompt}
+        </p>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
         <Card>
@@ -264,29 +434,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         </Card>
       </div>
 
-      <Card title="Answer">
-        <div style={stack(20)}>
-          <Field label="Prompt">
-            <p style={para}>{r.prompt}</p>
-          </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
-            <Field label="Expected">
-              <pre style={codeBlock}>{r.expected_answer}</pre>
-            </Field>
-            <Field label="Agent said">
-              {r.agent_answer ? <Paragraphs text={r.agent_answer} /> : <p style={para}>(empty answer)</p>}
-            </Field>
-          </div>
-          <Field label="Grading">
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-              <Badge mono>{r.accuracy_method}</Badge>
-              <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>
-                {r.accuracy_rationale ?? 'No rationale recorded.'}
-              </span>
-            </div>
-          </Field>
-        </div>
-      </Card>
+      <AccuracyCard r={r} />
 
       <Card title="Provenance">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>

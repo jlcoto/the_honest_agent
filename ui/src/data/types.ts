@@ -16,7 +16,10 @@ export interface ResultRow {
   accuracy_score: number
   accuracy_method: string
   grading_model: string | null // judge model for extract_match/llm_judge; null for contains
-  accuracy_rationale: string | null
+  accuracy_rationale: string | null // the judge's reason (llm_judge only)
+  extracted_answer: string | null // the value extract_match compared (extract_match only)
+  accuracy_tolerance: number | null // extract_match's allowed absolute difference
+  accuracy_tolerance_percent: number | null // extract_match's allowed relative difference (0.01 = 1%)
   accuracy_min_score: number | null
   provenance_score: number | null // null when the eval expects no sources: not checked
   expected_sources: string[] | null
