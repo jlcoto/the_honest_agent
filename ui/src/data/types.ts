@@ -18,7 +18,7 @@ export interface ResultRow {
   grading_model: string | null // judge model for extract_match/llm_judge; null for contains
   accuracy_rationale: string | null
   accuracy_min_score: number | null
-  provenance_score: number
+  provenance_score: number | null // null when the eval expects no sources: not checked
   expected_sources: string[] | null
   expected_database: string | null
   expected_schema: string | null

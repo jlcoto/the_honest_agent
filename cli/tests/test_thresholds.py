@@ -47,3 +47,9 @@ def test_failing_rows_filters_and_augments():
     assert {f["eval_id"] for f in failures} == {"q2", "q3"}
     q2 = next(f for f in failures if f["eval_id"] == "q2")
     assert q2["accuracy_pass"] is False
+
+
+def test_unchecked_provenance_never_fails():
+    row = {**FAILING_ACCURACY_ROW, "provenance_score": None, "provenance_min_score": None}
+    assert check_row(row) == {"accuracy_pass": False, "provenance_pass": True}
+    assert failing_rows([{**PASSING_ROW, "provenance_score": None, "provenance_min_score": None}]) == []

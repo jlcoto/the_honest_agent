@@ -169,7 +169,8 @@ async def _eval_loop(
                 "expected_sources": definition.expected_sources,
                 "expected_database": definition.expected_database,
                 "expected_schema": definition.expected_schema,
-                "provenance_min_score": definition.provenance_min_score,
+                # No threshold for a check that didn't happen (see check_provenance).
+                "provenance_min_score": definition.provenance_min_score if provenance.score is not None else None,
                 "model_name": result.model_name,
                 "agent_backend": "mcp",
                 "agent_name": agent_name,
@@ -612,9 +613,13 @@ def logs(ctx: click.Context, results_path: str | None, run_id: str | None, eval_
         result_row = results_by_id.get(row["result_id"])
         if result_row:
             click.echo(f"Answer: {result_row['agent_answer']}")
+            if result_row["provenance_score"] is None:
+                provenance_text = "not checked"
+            else:
+                provenance_text = f"{result_row['provenance_score']:.2f} (min {result_row['provenance_min_score']:.2f})"
             click.echo(
                 f"Accuracy: {result_row['accuracy_score']:.2f} (min {result_row['accuracy_min_score']:.2f})  |  "
-                f"Provenance: {result_row['provenance_score']:.2f} (min {result_row['provenance_min_score']:.2f})"
+                f"Provenance: {provenance_text}"
             )
         call_rows = calls_by_result.get(row["result_id"], [])
         if call_rows:

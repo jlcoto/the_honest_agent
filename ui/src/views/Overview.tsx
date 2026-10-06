@@ -6,7 +6,7 @@ import {
   agentsOf,
   formatRunDate,
   formatRunTime,
-  mean,
+  meanOf,
   modelsOf,
   passes,
   provenancePasses,
@@ -111,7 +111,7 @@ export function Overview({
   const evals = evalsOf(runs.flatMap((r) => r.results), titles)
   const scoreIn = (runIndex: number, evalId: string, key: 'accuracy_score' | 'provenance_score') => {
     const rows = runs[runIndex].results.filter((r) => r.eval_id === evalId)
-    return rows.length ? mean(rows.map((r) => r[key])) : null
+    return meanOf(rows.map((r) => r[key]))
   }
   const heatRows = evals.map((q) =>
     evalHeatRow(
@@ -156,13 +156,17 @@ export function Overview({
               />
             </Card>
             <Card>
-              <ScoreStat
-                label="Provenance"
-                value={latest.provenance}
-                delta={previous ? latest.provenance - previous.provenance : undefined}
-                caption={previous ? undefined : 'First run in this range'}
-                spark={runs.map((r) => r.provenance)}
-              />
+              {latest.provenance == null ? (
+                <ScoreStat label="Provenance" format="raw" value="Not checked" caption="No eval in this run expects sources" />
+              ) : (
+                <ScoreStat
+                  label="Provenance"
+                  value={latest.provenance}
+                  delta={previous?.provenance != null ? latest.provenance - previous.provenance : undefined}
+                  caption={previous ? undefined : 'First run in this range'}
+                  spark={runs.map((r) => r.provenance).filter((v): v is number => v != null)}
+                />
+              )}
             </Card>
             <Card>
               <ScoreStat
@@ -270,7 +274,7 @@ export function Overview({
                           </Badge>
                         )}
                         {provenancePasses(r) ? null : (
-                          <Badge tone={toneOf(r.provenance_score)} dot>
+                          <Badge tone={toneOf(r.provenance_score ?? 0)} dot>
                             Provenance
                           </Badge>
                         )}

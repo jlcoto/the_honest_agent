@@ -11,10 +11,12 @@ from typing import Any
 
 
 def check_row(row: dict[str, Any]) -> dict[str, bool]:
-    """Which of a result row's two score dimensions passed their configured threshold."""
+    """Which of a result row's two score dimensions passed their configured threshold.
+    Provenance that wasn't checked (no expected sources, score None) can't fail."""
+    provenance = row["provenance_score"]
     return {
         "accuracy_pass": row["accuracy_score"] >= row["accuracy_min_score"],
-        "provenance_pass": row["provenance_score"] >= row["provenance_min_score"],
+        "provenance_pass": provenance is None or provenance >= row["provenance_min_score"],
     }
 
 

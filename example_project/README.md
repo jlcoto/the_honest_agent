@@ -172,6 +172,9 @@ or semantic view it read, with the database and schema each one lives in.
   ```
 
   With no database or schema anywhere, any location counts.
+- **No `expected_sources`, no check.** Such an eval's provenance isn't
+  scored: the score is left empty (shown as "Not checked"), not 100%, and it
+  can't fail. What the agent read is still recorded.
 - **Only reads count.** `select` statements (including `with` and `union`)
   count; `describe`, `show` and other exploration don't, and neither do
   queries the tool reported as errors. A tool that returns a failure inside

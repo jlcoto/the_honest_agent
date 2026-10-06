@@ -266,3 +266,32 @@ def test_generated_sql_counts_once_the_agent_runs_it():
 
     assert score == 1.0
     assert queried == [{"database": "agent_quiz_demo", "schema": "public", "name": "tpch_semantic_view"}]
+
+
+def test_logs_says_when_provenance_was_not_checked(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [_row(provenance_score=None, provenance_min_score=None)])
+
+    result = CliRunner().invoke(main, ["logs", "--results-path", db_path])
+
+    assert result.exit_code == 0, result.output
+    assert "Provenance: not checked" in result.output
+
+
+def test_an_eval_without_expected_sources_stores_no_provenance_score():
+    definition = EvalDefinition(
+        eval_id="q_accuracy_only",
+        prompt="What was our total revenue in 1996?",
+        category="finance",
+        expected_answer="311928357.78",
+        grading_method="contains",
+        expected_sources=[],
+        tags=[],
+    )
+    (row,) = asyncio.run(
+        _eval_loop(_ScriptedAgent(_cortex_trace(then_run_it=True)), [definition], None, "unused", "run_1", None, [])
+    )
+
+    assert row["provenance_score"] is None
+    assert row["provenance_min_score"] is None
+    assert row["queried_sources"] == [{"database": "agent_quiz_demo", "schema": "public", "name": "tpch_semantic_view"}]

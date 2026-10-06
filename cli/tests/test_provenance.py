@@ -1,9 +1,13 @@
 from honest_agent.provenance import Source, check_provenance
 
 
-def test_no_expected_sources_is_trivially_satisfied():
-    assert check_provenance().score == 1.0
-    assert check_provenance(sql_statements=["select * from anything"]).score == 1.0
+def test_no_expected_sources_is_not_checked():
+    """No score rather than 1.0, so "not checked" never looks like "passed";
+    what the agent read is still recorded."""
+    assert check_provenance().score is None
+    provenance = check_provenance(sql_statements=["select * from anything"])
+    assert provenance.score is None
+    assert provenance.queried_sources == [Source(None, None, "anything")]
 
 
 def test_source_found_in_sql_scores_full():

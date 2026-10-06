@@ -9,20 +9,31 @@ export interface Run {
   model: string
   results: ResultRow[]
   accuracy: number
-  provenance: number
+  /** null when no result in the run had provenance checked. */
+  provenance: number | null
   overall: number
   passed: number
 }
 
 export const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0)
 
+/** Mean of the scores that exist; null if none do (e.g. provenance nobody checked). */
+export function meanOf(xs: (number | null)[]): number | null {
+  const present = xs.filter((x): x is number => x != null)
+  return present.length ? mean(present) : null
+}
+
+/** Accuracy and provenance averaged, or accuracy alone when provenance wasn't checked. */
+const combined = (accuracy: number, provenance: number | null) =>
+  provenance == null ? accuracy : (accuracy + provenance) / 2
+
 // Same rule as cli/honest_agent/thresholds.py, so the report agrees with `honest-agent notify`.
 export const accuracyPasses = (r: ResultRow) => r.accuracy_min_score == null || r.accuracy_score >= r.accuracy_min_score
 export const provenancePasses = (r: ResultRow) =>
-  r.provenance_min_score == null || r.provenance_score >= r.provenance_min_score
+  r.provenance_score == null || r.provenance_min_score == null || r.provenance_score >= r.provenance_min_score
 export const passes = (r: ResultRow) => accuracyPasses(r) && provenancePasses(r)
 
-export const overallOf = (r: ResultRow) => (r.accuracy_score + r.provenance_score) / 2
+export const overallOf = (r: ResultRow) => combined(r.accuracy_score, r.provenance_score)
 
 export function runsOf(results: ResultRow[]): Run[] {
   const byRun = new Map<string, ResultRow[]>()
@@ -30,7 +41,7 @@ export function runsOf(results: ResultRow[]): Run[] {
   const runs = [...byRun.entries()].map(([run_id, rows]) => {
     const timestamp = rows.map((r) => r.run_timestamp).sort()[0].slice(0, 16)
     const accuracy = mean(rows.map((r) => r.accuracy_score))
-    const provenance = mean(rows.map((r) => r.provenance_score))
+    const provenance = meanOf(rows.map((r) => r.provenance_score))
     return {
       run_id,
       timestamp,
@@ -40,7 +51,7 @@ export function runsOf(results: ResultRow[]): Run[] {
       results: rows,
       accuracy,
       provenance,
-      overall: (accuracy + provenance) / 2,
+      overall: combined(accuracy, provenance),
       passed: rows.filter(passes).length,
     }
   })

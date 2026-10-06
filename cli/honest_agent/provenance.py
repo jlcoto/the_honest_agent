@@ -43,7 +43,8 @@ class Source(NamedTuple):
 
 
 class Provenance(NamedTuple):
-    score: float
+    # None when the eval expects no sources: nothing was checked, which isn't a pass.
+    score: float | None
     # Every source the counted statements read, in first-seen order, without repeats.
     queried_sources: list[Source]
     # SQL that couldn't be parsed, so it contributed no sources.
@@ -132,7 +133,9 @@ def check_provenance(
 ) -> Provenance:
     """Recall over `expected_sources`: the share of them some read statement
     referenced, in the expected database/schema where one is given. An eval
-    with no `expected_sources` is trivially satisfied (1.0).
+    with no `expected_sources` isn't checked: its score is None, not 1.0, so
+    "not checked" never looks like "passed". The sources read are still
+    returned, as a record of what the agent queried.
 
     An entry can carry its own location (`snowflake_sample_data.tpch_sf1.customer`,
     `staging.customer_flags`); `expected_database`/`expected_schema` apply to
@@ -148,6 +151,6 @@ def check_provenance(
     queried, unparsed = queried_sources(sql_statements or [])
     expected = [_expected(entry, expected_database, expected_schema) for entry in expected_sources or []]
     if not expected:
-        return Provenance(1.0, queried, unparsed)
+        return Provenance(None, queried, unparsed)
     hits = sum(1 for want in expected if any(_matches(got, want) for got in queried))
     return Provenance(hits / len(expected), queried, unparsed)
