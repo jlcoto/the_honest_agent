@@ -1,7 +1,6 @@
-"""Covers `honest-agent logs`'s formatting -- pure storage read/print logic,
-no LLM or MCP dependency, so it's cheap to drive end to end through the real
-`run` command's storage layer instead of mocking anything.
-"""
+"""Covers the CLI commands that need no model or MCP server: `logs` and `rebuild` read
+and re-derive raw records built through the real recorder (tests/recorded.py), and
+the run loop is driven by a scripted agent and judge."""
 
 from __future__ import annotations
 
@@ -10,80 +9,53 @@ import json
 from pathlib import Path
 
 from click.testing import CliRunner
+from recorded import claude_reply, definition, model_call, record, text, tool_call, tool_use
 
-from honest_agent.agent_runner import AgentRunResult
 from honest_agent.cli import _eval_loop, main
-from honest_agent.eval_loader import EvalDefinition
-from honest_agent.storage import write_run_results
+from honest_agent.raw import RawRecorder, read_records
+from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
+
+SQL = "select count(*) from agent_quiz_demo.public.orders"
 
 
-def _row(**overrides) -> dict:
-    row = {
-        "result_id": "r1",
-        "run_id": "run_1",
-        "run_timestamp": "2026-01-01 00:00:00",
-        "eval_id": "q1",
-        "prompt": "What is 2+2?",
-        "category": "math",
-        "tags": ["smoke"],
-        "expected_answer": "4",
-        "agent_answer": "4",
-        "tools_used": [],
-        "accuracy_score": 1.0,
-        "accuracy_method": "contains",
-        "accuracy_rationale": None,
-        "accuracy_min_score": 0.8,
-        "provenance_score": 1.0,
-        "expected_sources": [],
-        "provenance_min_score": 0.7,
-        "model_name": "claude-test",
-        "agent_backend": "mcp",
-        "latency_ms": 100,
-        "agent_trace": '[{"role": "user", "content": "What is 2+2?"}]',
-        "sql_calls": [],
-    }
-    row.update(overrides)
-    return row
-
-
-def test_logs_prints_answer_and_scores(tmp_path: Path):
-    db_path = str(tmp_path / "results.duckdb")
-    write_run_results(db_path, "run_1", [_row()])
-
-    result = CliRunner().invoke(main, ["logs", "--results-path", db_path])
-
-    assert result.exit_code == 0, result.output
-    assert "Answer: 4" in result.output
-    assert "Accuracy: 1.00 (min 0.80)" in result.output
-    assert "Provenance: 1.00 (min 0.70)" in result.output
-
-
-def test_logs_surfaces_turn_limit_error_message(in_tmp_dir):
-    """Regression test for the gap found in review: `logs` used to print only
-    the trace and tool calls, so an eval that hit MCPAgentClient's
-    max_tool_turns limit (see mcp_agent_runner.py) had its diagnostic
-    `agent_answer` -- already stored in `results` -- invisible here, even
-    though this command's whole job is explaining *why* an eval came out the
-    way it did.
-    """
-    db_path = "results.duckdb"
-    write_run_results(
-        db_path,
-        "run_1",
+def test_logs_prints_each_recorded_call_as_stored(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    record(
+        path,
         [
-            _row(
-                agent_answer="[honest-agent error] Exceeded max_tool_turns=5 without a final answer -- "
-                "the agent was still requesting tools on the last turn. See agent_trace for detail.",
-                accuracy_score=0.0,
-            )
+            model_call(claude_reply(tool_use("t1", "query_warehouse", {"sql": SQL}))),
+            tool_call("t1", "query_warehouse", {"sql": SQL}, {"content": [text("2297")], "isError": False}),
+            model_call(claude_reply(text("2297"))),
         ],
     )
 
-    result = CliRunner().invoke(main, ["logs", "--results-path", db_path])
+    result = CliRunner().invoke(main, ["logs", "--results-path", path])
 
     assert result.exit_code == 0, result.output
-    assert "Answer: [honest-agent error] Exceeded max_tool_turns=5" in result.output
-    assert "Accuracy: 0.00 (min 0.80)" in result.output
+    assert "=== eval q1 (run run_1, result r1) ===" in result.output
+    assert "--- #0 model_call (anthropic)" in result.output
+    assert "--- #1 tool_call (mcp)" in result.output
+    assert '"stop_reason": "tool_use"' in result.output
+    assert "Accuracy" not in result.output  # scores live in the report
+
+
+def test_logs_json_prints_the_records_as_stored(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    record(path, [model_call(claude_reply(text("4")))])
+
+    result = CliRunner().invoke(main, ["logs", "--results-path", path, "--json"])
+
+    (rec,) = json.loads(result.output)
+    assert json.loads(rec["events"][0]["response"])["content"] == [text("4")]
+
+
+def test_logs_for_results_recorded_before_the_raw_layer_points_to_the_report(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    write_run_results(path, "run_1", [{"result_id": "r1", "run_id": "run_1", "eval_id": "q1", "sql_calls": []}])
+
+    result = CliRunner().invoke(main, ["logs", "--results-path", path])
+
+    assert "before honest-agent kept raw records" in result.output
 
 
 def test_logs_reports_no_matching_logs(in_tmp_dir):
@@ -91,6 +63,34 @@ def test_logs_reports_no_matching_logs(in_tmp_dir):
 
     assert result.exit_code == 0, result.output
     assert "No matching logs found." in result.output
+
+
+def test_rebuild_re_derives_past_results_from_their_raw_record(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    record(path, [model_call(claude_reply(text("4")))])
+    # A stale derived row, as if scored by older rules.
+    write_run_results(path, "run_1", [{"result_id": "r1", "run_id": "run_1", "eval_id": "q1", "accuracy_score": 0.0}])
+
+    result = CliRunner().invoke(main, ["rebuild", "--results-path", path])
+
+    assert result.exit_code == 0, result.output
+    assert "Rebuilt 1 result(s) from 1 run(s)" in result.output
+    (row,) = read_all_results(path)
+    assert (row["accuracy_score"], row["agent_answer"]) == (1.0, "4")
+    assert json.loads(read_traces(path)[0]["agent_trace"])[-1] == {"role": "assistant", "content": [text("4")]}
+
+
+def test_rebuild_leaves_results_without_a_raw_record_alone(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    record(path, [model_call(claude_reply(text("4")))])
+    write_run_results(
+        path, "old_run", [{"result_id": "old", "run_id": "old_run", "eval_id": "q1", "accuracy_score": 0.5}]
+    )
+
+    CliRunner().invoke(main, ["rebuild", "--results-path", path])
+
+    by_id = {r["result_id"]: r for r in read_all_results(path)}
+    assert by_id["old"]["accuracy_score"] == 0.5
 
 
 def test_agent_name_defaults_to_the_mcp_server_name():
@@ -162,14 +162,6 @@ def test_duplicate_eval_id_is_a_clean_cli_error(in_tmp_dir):
     assert "Traceback" not in result.output
 
 
-def test_grading_model_is_recorded_only_for_llm_graded_methods():
-    from honest_agent.cli import _grading_model
-
-    assert _grading_model("extract_match", "claude-haiku-4-5") == "claude-haiku-4-5"
-    assert _grading_model("llm_judge", "claude-haiku-4-5") == "claude-haiku-4-5"
-    assert _grading_model("contains", "claude-haiku-4-5") is None
-
-
 def _run_capturing_models(fake_run, args: list[str]):
     Path("evals").mkdir()
     result = CliRunner().invoke(
@@ -195,106 +187,77 @@ def test_judge_model_can_differ_from_the_agent_model(fake_run, in_tmp_dir):
 
 
 class _ScriptedAgent:
-    """Returns a fixed run, like an agent that made exactly these tool calls."""
+    """An agent that makes exactly these calls through the recorder, as a real runner does."""
 
-    def __init__(self, raw_trace: list[dict]):
-        self._trace = raw_trace
+    def __init__(self, calls: list[tuple]):
+        self._calls = calls
 
-    async def run(self, prompt: str) -> AgentRunResult:
-        return AgentRunResult(
-            answer="The total revenue in 1996 was 127887488053.85",
-            tools_used=["query_semantic_view"],
-            raw_trace=self._trace,
-            model_name="claude-test",
-            latency_ms=10,
-            input_tokens=0,
-            output_tokens=0,
+    async def run(self, prompt, record):
+        for kind, provider, request, response in self._calls:
+            await record.call(kind, provider, request, _returns(response))
+
+
+class _ScriptedJudge:
+    def __init__(self, reply: str):
+        self._reply = reply
+
+    async def complete(self, prompt, model, max_tokens):
+        return claude_reply(text(self._reply))
+
+
+async def _returns(value):
+    return value
+
+
+def _run_loop(path: str, agent, judge, definitions) -> list[dict]:
+    con = connect(path)
+    try:
+        recorder = RawRecorder(con)
+        recorder.start_run(
+            "run_1",
+            agent_name="demo",
+            target="demo",
+            model="claude-test",
+            judge_model="claude-judge",
+            settings={"max_tool_turns": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": []},
+            tools_offered=[],
         )
+        return asyncio.run(_eval_loop(agent, definitions, judge, "claude-judge", "run_1", recorder, con))
+    finally:
+        con.close()
 
 
-def _cortex_trace(then_run_it: bool) -> list[dict]:
-    """Cortex Analyst answers with SQL it generated, not data. Mirrors a real Snowflake trace."""
-    sql = "select * from semantic_view(agent_quiz_demo.public.tpch_semantic_view metrics total_revenue)"
-    trace = [
-        {"role": "user", "content": "What was our total revenue in 1996?"},
-        {
-            "role": "assistant",
-            "content": [{"type": "tool_use", "id": "1", "name": "query_semantic_view", "input": {"message": "..."}}],
-        },
-        {
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": "1", "content": json.dumps([{"statement": sql}])}],
-        },
-    ]
-    if then_run_it:
-        trace += [
-            {
-                "role": "assistant",
-                "content": [{"type": "tool_use", "id": "2", "name": "query_warehouse", "input": {"sql": sql}}],
-            },
-            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "2", "content": "311928357.78"}]},
+def test_a_run_records_every_call_and_derives_its_results(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    agent = _ScriptedAgent(
+        [
+            model_call(claude_reply(tool_use("t1", "query_warehouse", {"sql": SQL}))),
+            tool_call("t1", "query_warehouse", {"sql": SQL}, {"content": [text("2297")], "isError": False}),
+            model_call(claude_reply(text("There were 2,297 orders."))),
         ]
-    return trace
-
-
-def _provenance_of(trace: list[dict]) -> tuple[float, list[dict], list[dict]]:
-    definition = EvalDefinition(
-        eval_id="q_revenue_1996_semantic_view_tool",
-        prompt="What was our total revenue in 1996?",
-        category="finance",
-        expected_answer="311928357.78",
-        grading_method="contains",
-        expected_sources=["agent_quiz_demo.public.tpch_semantic_view"],
-        tags=[],
     )
-    (row,) = asyncio.run(
-        _eval_loop(_ScriptedAgent(trace), [definition], None, "unused", "run_1", "snowflake", ignore_tools=[])
-    )
-    return row["provenance_score"], row["queried_sources"], row["sql_calls"]
+    evals = [definition(grading_method="extract_match", expected_answer="2297", expected_sources=["orders"])]
+
+    (row,) = _run_loop(path, agent, _ScriptedJudge('{"extracted_answer": "2297"}'), evals)
+
+    assert (row["accuracy_score"], row["provenance_score"], row["extracted_answer"]) == (1.0, 1.0, "2297")
+    assert [r["accuracy_score"] for r in read_all_results(path)] == [1.0]  # written as the eval ended
+    (rec,) = read_records(path)
+    assert [e["kind"] for e in rec["events"]] == ["model_call", "tool_call", "model_call", "grading_call"]
+    assert "There were 2,297 orders." in json.loads(rec["events"][3]["request"])["prompt"]
 
 
-def test_sql_a_tool_generated_but_nobody_ran_does_not_count():
-    """The agent asked Cortex Analyst, got SQL back instead of data, and answered
-    without running it: nothing was read, so provenance fails. The SQL is still
-    recorded, marked as generated."""
-    score, queried, calls = _provenance_of(_cortex_trace(then_run_it=False))
+def test_an_eval_that_fails_is_recorded_before_the_run_stops(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])
+    evals = [definition(grading_method="llm_judge", expected_answer="2297")]
 
-    assert score == 0.0
-    assert queried == []
-    assert [(c["tool_name"], c["generated"]) for c in calls] == [("query_semantic_view", True)]
+    try:
+        _run_loop(path, agent, _ScriptedJudge("not json"), evals)
+        raise AssertionError("expected the unparseable grading reply to stop the run")
+    except ValueError:
+        pass
 
-
-def test_generated_sql_counts_once_the_agent_runs_it():
-    score, queried, _ = _provenance_of(_cortex_trace(then_run_it=True))
-
-    assert score == 1.0
-    assert queried == [{"database": "agent_quiz_demo", "schema": "public", "name": "tpch_semantic_view"}]
-
-
-def test_logs_says_when_provenance_was_not_checked(tmp_path: Path):
-    db_path = str(tmp_path / "results.duckdb")
-    write_run_results(db_path, "run_1", [_row(provenance_score=None, provenance_min_score=None)])
-
-    result = CliRunner().invoke(main, ["logs", "--results-path", db_path])
-
-    assert result.exit_code == 0, result.output
-    assert "Provenance: not checked" in result.output
-
-
-def test_an_eval_without_expected_sources_stores_no_provenance_score():
-    definition = EvalDefinition(
-        eval_id="q_accuracy_only",
-        prompt="What was our total revenue in 1996?",
-        category="finance",
-        expected_answer="311928357.78",
-        grading_method="contains",
-        expected_sources=[],
-        tags=[],
-    )
-    (row,) = asyncio.run(
-        _eval_loop(_ScriptedAgent(_cortex_trace(then_run_it=True)), [definition], None, "unused", "run_1", None, [])
-    )
-
-    assert row["provenance_score"] is None
-    assert row["provenance_min_score"] is None
-    assert row["queried_sources"] == [{"database": "agent_quiz_demo", "schema": "public", "name": "tpch_semantic_view"}]
+    (rec,) = read_records(path)
+    assert [e["kind"] for e in rec["events"]] == ["model_call", "grading_call", "eval_error"]
+    assert read_all_results(path) == []

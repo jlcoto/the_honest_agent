@@ -15,10 +15,16 @@ from __future__ import annotations
 
 import os
 import shlex
-import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .agent_runner import AgentClient, AgentRunResult, plain_content
+from .agent_runner import AgentClient, plain_content
+
+if TYPE_CHECKING:
+    from .raw import EvalRecorder
+
+# Output cap per model turn. A turn cut off by it shows stop_reason "max_tokens" in its
+# recorded response.
+MAX_TOKENS = 1024
 
 
 def build_mcp_client(
@@ -79,88 +85,53 @@ def _mcp_tool_to_anthropic_schema(tool: Any) -> dict:
 
 
 class MCPAgentClient(AgentClient):
-    """Sources its tools from a live, already-connected `mcp.Client`."""
+    """Claude as the agent, with the tools of a live, already-connected `mcp.Client`."""
 
-    def __init__(self, mcp_client, model: str = "claude-haiku-4-5", max_tool_turns: int = 5):
+    def __init__(self, mcp_client, model: str, tools: list, max_tool_turns: int = 5):
         import anthropic
 
         self._anthropic = anthropic.AsyncAnthropic()
         self._mcp = mcp_client
         self._model = model
+        self._tools = [_mcp_tool_to_anthropic_schema(t) for t in tools]
         self._max_tool_turns = max_tool_turns
-        self._tools_cache: list[dict] | None = None
 
-    async def _list_tools(self) -> list[dict]:
-        if self._tools_cache is None:
-            result = await self._mcp.list_tools()
-            self._tools_cache = [_mcp_tool_to_anthropic_schema(t) for t in result.tools]
-        return self._tools_cache
-
-    async def run(self, prompt: str) -> AgentRunResult:
-        start = time.monotonic()
-        available_tools = await self._list_tools()
+    async def run(self, prompt: str, record: EvalRecorder) -> None:
         messages: list[dict] = [{"role": "user", "content": prompt}]
-        tools_used: list[str] = []
-        response = None
-        input_tokens = 0
-        output_tokens = 0
-        hit_turn_limit = False
-
+        already_recorded = 0  # messages earlier events hold: past requests, and responses
+        # When the loop runs out of turns while Claude still asks for tools, there is no
+        # final answer; derive.py reads that from the last recorded response.
         for _ in range(self._max_tool_turns):
-            response = await self._anthropic.messages.create(
-                model=self._model,
-                max_tokens=1024,
-                tools=available_tools,
-                messages=messages,
+            request = {
+                "model": self._model,
+                "max_tokens": MAX_TOKENS,
+                "tools": [tool["name"] for tool in self._tools],  # in full in raw.runs.tools_offered
+                "messages": messages[already_recorded:],
+            }
+            response = await record.call(
+                "model_call",
+                "anthropic",
+                request,
+                self._anthropic.messages.create(
+                    model=self._model, max_tokens=MAX_TOKENS, tools=self._tools, messages=messages
+                ),
             )
-            input_tokens += response.usage.input_tokens
-            output_tokens += response.usage.output_tokens
+            messages.append({"role": "assistant", "content": plain_content(response.content)})
+            already_recorded = len(messages)  # the reply just appended is that call's response
             tool_calls = [block for block in response.content if block.type == "tool_use"]
             if not tool_calls:
-                # Final, text-only turn -- append it so `raw_trace` captures the
-                # agent's actual stated answer, not just what led up to it.
-                messages.append({"role": "assistant", "content": plain_content(response.content)})
-                break
+                return
 
-            messages.append({"role": "assistant", "content": plain_content(response.content)})
             tool_results = []
             for call in tool_calls:
-                tools_used.append(call.name)
-                result = await self._mcp.call_tool(call.name, call.input)
+                result = await record.call(
+                    "tool_call",
+                    "mcp",
+                    {"tool_use_id": call.id, "name": call.name, "arguments": call.input},
+                    self._mcp.call_tool(call.name, call.input),
+                )
                 text = "\n".join(block.text for block in result.content if getattr(block, "type", None) == "text")
                 tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": text,
-                        "is_error": result.is_error,
-                    }
+                    {"type": "tool_result", "tool_use_id": call.id, "content": text, "is_error": result.is_error}
                 )
             messages.append({"role": "user", "content": tool_results})
-        else:
-            # The `for` loop's `else` runs only when the loop completes without
-            # hitting `break` -- i.e. `max_tool_turns` was exhausted and Claude
-            # was still requesting tools on the last turn. The tool_use/
-            # tool_result turns above are still recorded in `messages`, but
-            # there was no further `messages.create` call to let Claude respond
-            # to that last result, so there's no real final answer to report.
-            hit_turn_limit = True
-
-        final_text = "".join(block.text for block in (response.content if response else []) if block.type == "text")
-        if hit_turn_limit:
-            final_text = (
-                f"[honest-agent error] Exceeded max_tool_turns={self._max_tool_turns} without a final answer -- "
-                "the agent was still requesting tools on the last turn. See agent_trace for detail."
-            )
-        latency_ms = int((time.monotonic() - start) * 1000)
-
-        return AgentRunResult(
-            answer=final_text.strip(),
-            tools_used=tools_used,
-            raw_trace=messages,
-            model_name=self._model,
-            latency_ms=latency_ms,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            hit_turn_limit=hit_turn_limit,
-        )

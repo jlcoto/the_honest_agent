@@ -64,7 +64,7 @@ reads the evals in `evals/`.
   recomputing TPC-H's revenue formula by hand — if it queries the wrong
   table, `provenance_score` drops below threshold even though the *answer*
   might still come out correct. Run `honest-agent logs` after a run to see
-  exactly what SQL it executed.
+  every call it made, including the SQL it executed.
 - `honest-agent report` writes the web report to `honest_agent_report/`: the
   report UI plus `data/report.json`, holding every stored run's results,
   agent traces, and SQL calls.

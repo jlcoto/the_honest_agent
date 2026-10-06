@@ -9,10 +9,10 @@ from types import SimpleNamespace as NS
 
 from click.testing import CliRunner
 
+from honest_agent.agent_runner import to_jsonable
 from honest_agent.cli import main
-from honest_agent.llm import ANTHROPIC, OPENAI, OpenAIJudge, provider_for
+from honest_agent.llm import ANTHROPIC, OPENAI, OpenAIJudge, provider_for, response_text, response_tokens
 from honest_agent.openai_agent_runner import OpenAIMCPAgentClient
-from honest_agent.sql_capture import extract_sql_calls
 
 
 def test_provider_is_inferred_from_the_model_name():
@@ -41,14 +41,15 @@ def _fake_openai(*responses):
     return NS(chat=NS(completions=_FakeCompletions(responses)))
 
 
-def test_openai_judge_returns_text_and_token_usage():
+def test_the_openai_judge_returns_the_response_as_is_and_it_reads_back():
     client = _fake_openai(_completion('{"score": 1.0}', prompt_tokens=30, completion_tokens=8))
 
-    assert asyncio.run(OpenAIJudge(client).complete("grade this", model="gpt-5.4-mini", max_tokens=200)) == (
-        '{"score": 1.0}',
-        30,
-        8,
-    )
+    response = asyncio.run(OpenAIJudge(client).complete("grade this", model="gpt-5.4-mini", max_tokens=200))
+    recorded = to_jsonable(response)
+
+    assert response_text(OPENAI, recorded) == '{"score": 1.0}'
+    assert response_tokens(OPENAI, recorded) == (30, 8)
+    assert response_tokens(ANTHROPIC, {"usage": {"input_tokens": 12, "output_tokens": 3}}) == (12, 3)
 
 
 class _FakeMCP:
@@ -68,52 +69,50 @@ def _tool_call(sql: str):
     return NS(id="call_1", function=NS(name="execute_query", arguments=json.dumps({"sql": sql})))
 
 
-def test_openai_agent_runs_tools_and_records_the_shared_trace_format():
+class _Recorder:
+    """Stands in for raw.EvalRecorder: keeps what each call was recorded with."""
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    async def call(self, kind, provider, request, pending):
+        self.calls.append((kind, provider, json.loads(json.dumps(request))))
+        return await pending
+
+
+def test_openai_agent_records_each_call_and_sends_tool_results_back():
     sql = "select count(*) from orders where year(o_orderdate) = 1996"
-    openai = _fake_openai(
-        _completion(None, [_tool_call(sql)], prompt_tokens=100, completion_tokens=20),
-        _completion("**2297**", prompt_tokens=150, completion_tokens=10),
-    )
-    mcp = _FakeMCP()
+    openai = _fake_openai(_completion(None, [_tool_call(sql)]), _completion("**2297**"))
+    mcp, recorder = _FakeMCP(), _Recorder()
+    tools = asyncio.run(mcp.list_tools()).tools
 
-    result = asyncio.run(OpenAIMCPAgentClient(mcp, model="gpt-5.4-mini", client=openai).run("How many orders?"))
+    asyncio.run(OpenAIMCPAgentClient(mcp, model="gpt-5.4-mini", tools=tools, client=openai).run("How many?", recorder))
 
-    assert result.answer == "**2297**"
-    assert (result.input_tokens, result.output_tokens) == (250, 30)
-    assert result.tools_used == ["execute_query"]
+    assert [(kind, provider) for kind, provider, _ in recorder.calls] == [
+        ("model_call", "openai"),
+        ("tool_call", "mcp"),
+        ("model_call", "openai"),
+    ]
     assert mcp.calls == [("execute_query", {"sql": sql})]
-    assert result.raw_trace == [
-        {"role": "user", "content": "How many orders?"},
-        {
-            "role": "assistant",
-            "content": [{"type": "tool_use", "id": "call_1", "name": "execute_query", "input": {"sql": sql}}],
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "call_1", "content": "order_count\n2297", "is_error": False}
-            ],
-        },
-        {"role": "assistant", "content": [{"type": "text", "text": "**2297**"}]},
-    ]
-    # Provenance scoring reads SQL from this trace, exactly as it does for Claude.
-    assert extract_sql_calls(result.raw_trace, {"execute_query": "sql"}) == [
-        {"tool_name": "execute_query", "sql": sql, "is_error": False, "generated": False}
-    ]
-    # The second request carried the tool result back to OpenAI in its own format.
-    second = openai.chat.completions.calls[1]["messages"]
-    assert second[-1] == {"role": "tool", "tool_call_id": "call_1", "content": "order_count\n2297"}
+    assert recorder.calls[1][2] == {"tool_use_id": "call_1", "name": "execute_query", "arguments": {"sql": sql}}
+    # The second request carried the tool result back to OpenAI in its own format; the
+    # record keeps only that new message, since earlier events hold the rest.
+    sent = openai.chat.completions.calls[1]["messages"]
+    assert sent[-1] == {"role": "tool", "tool_call_id": "call_1", "content": "order_count\n2297"}
+    assert recorder.calls[2][2]["messages"] == [sent[-1]]
 
 
-def test_openai_agent_reports_the_turn_limit():
+def test_openai_agent_stops_at_max_tool_turns():
     openai = _fake_openai(_completion(None, [_tool_call("select 1")]))
+    recorder = _Recorder()
 
-    result = asyncio.run(
-        OpenAIMCPAgentClient(_FakeMCP(), model="gpt-5.4-mini", max_tool_turns=1, client=openai).run("?")
+    asyncio.run(
+        OpenAIMCPAgentClient(_FakeMCP(), model="gpt-5.4-mini", tools=[], max_tool_turns=1, client=openai).run(
+            "?", recorder
+        )
     )
 
-    assert result.hit_turn_limit
-    assert result.answer.startswith("[honest-agent error] Exceeded max_tool_turns=1")
+    assert [kind for kind, _, _ in recorder.calls] == ["model_call", "tool_call"]
 
 
 def _invoke_run(args, env):

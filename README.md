@@ -134,13 +134,19 @@ uv run honest-agent serve     # opens it in your browser (Ctrl+C to stop)
 
 - `run --target motherduck` evaluates another target.
 - To see why an eval failed, `uv run honest-agent logs --eval-id
-  orders_placed_in_1996` prints the answer, the SQL the agent ran and the
-  full trace. An eval's id comes from its title unless you set `id:`.
+  orders_placed_in_1996` prints what the agent sent and received, call by
+  call: every model call, tool call and grading call, with its timing (`--json`
+  for the records as stored). An eval's id comes from its title unless you set
+  `id:`.
+- `uv run honest-agent rebuild` re-scores past runs from what they recorded,
+  after an upgrade changes how honest-agent scores or reads them. It calls no
+  model, so it costs nothing.
 - To update honest-agent: `uv lock --upgrade-package honest-agent && uv sync`.
 
 **Your results contain what the agent saw.** The results file
-(`honest_agent_results/results.duckdb`) and the report folder keep each
-eval's full trace, including what the agent's tools returned: query results
+(`honest_agent_results/results.duckdb`) keeps everything each run sent and
+received, and the report folder the agent's conversations, including what
+the agent's tools returned: query results
 (possibly customer rows, names or emails), table and column listings, error
 messages that can name accounts and roles, and the agent's answers. Access
 tokens are never stored. Keeping these files safe is up to you: treat them

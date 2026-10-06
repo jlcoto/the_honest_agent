@@ -5,10 +5,10 @@ import pytest
 
 from honest_agent.storage import (
     export_to_s3_parquet,
-    read_agent_logs,
     read_all_results,
     read_latest_run_results,
     read_tool_calls,
+    read_traces,
     write_run_results,
 )
 
@@ -76,20 +76,20 @@ def test_write_then_read_all_results_roundtrips(tmp_path: Path):
     assert by_id["r2"]["tools_used"] == ["calculator"]
     assert by_id["r2"]["accuracy_rationale"] is None
     assert by_id["r2"]["agent_backend"] == "mcp"
-    assert "agent_trace" not in by_id["r1"]  # lives in agent_logs, not results
+    assert "agent_trace" not in by_id["r1"]  # lives in traces, not results
     assert "sql_calls" not in by_id["r1"]
 
 
-def test_write_then_read_agent_logs_roundtrips(tmp_path: Path):
+def test_write_then_read_traces_roundtrips(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [ROW_1, ROW_2])
 
-    logs = read_agent_logs(db_path)
+    logs = read_traces(db_path)
 
     assert len(logs) == 2
     by_id = {r["result_id"]: r for r in logs}
     assert json.loads(by_id["r1"]["agent_trace"]) == [{"role": "user", "content": "What is 2+2?"}]
-    assert "sql_calls" not in by_id["r1"]  # lives in tool_calls, not agent_logs
+    assert "sql_calls" not in by_id["r1"]  # lives in tool_calls, not traces
     assert by_id["r1"]["run_id"] == "run_1"
     assert by_id["r1"]["eval_id"] == "q1"
 
@@ -144,27 +144,27 @@ def test_read_tool_calls_on_missing_path_returns_empty(tmp_path: Path):
     assert read_tool_calls(str(tmp_path / "does_not_exist.duckdb")) == []
 
 
-def test_read_agent_logs_filters_by_run_id(tmp_path: Path):
+def test_read_traces_filters_by_run_id(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [ROW_1, ROW_2])
     write_run_results(db_path, "run_2", [ROW_3_LATER_RUN])
 
-    logs = read_agent_logs(db_path, run_id="run_2")
+    logs = read_traces(db_path, run_id="run_2")
 
     assert {r["result_id"] for r in logs} == {"r3"}
 
 
-def test_read_agent_logs_filters_by_eval_id(tmp_path: Path):
+def test_read_traces_filters_by_eval_id(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [ROW_1, ROW_2])
 
-    logs = read_agent_logs(db_path, eval_id="q2")
+    logs = read_traces(db_path, eval_id="q2")
 
     assert {r["result_id"] for r in logs} == {"r2"}
 
 
-def test_read_agent_logs_on_missing_path_returns_empty(tmp_path: Path):
-    assert read_agent_logs(str(tmp_path / "does_not_exist.duckdb")) == []
+def test_read_traces_on_missing_path_returns_empty(tmp_path: Path):
+    assert read_traces(str(tmp_path / "does_not_exist.duckdb")) == []
 
 
 def test_read_all_results_concatenates_multiple_runs(tmp_path: Path):

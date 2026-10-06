@@ -5,6 +5,7 @@ tool-schema conversion), which runs before build_mcp_client() imports `mcp`.
 from __future__ import annotations
 
 import asyncio
+import copy
 from dataclasses import dataclass, field
 
 import pytest
@@ -89,8 +90,10 @@ class _FakeResponse:
 class _FakeMessages:
     def __init__(self, responses: list[_FakeResponse]):
         self._responses = list(responses)
+        self.sent: list[list[dict]] = []  # the full `messages` of each call
 
     async def create(self, **kwargs):
+        self.sent.append(copy.deepcopy(kwargs["messages"]))
         return self._responses.pop(0)
 
 
@@ -111,6 +114,17 @@ class _FakeMCP:
         return _FakeCallToolResult(content=[_FakeToolResultBlock(type="text", text="2")])
 
 
+class _Recorder:
+    """Stands in for raw.EvalRecorder: keeps what each call was recorded with."""
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    async def call(self, kind, provider, request, pending):
+        self.calls.append((kind, provider, copy.deepcopy(request)))
+        return await pending
+
+
 def _make_client(responses: list[_FakeResponse], max_tool_turns: int = 5) -> MCPAgentClient:
     # Bypasses __init__ (which builds a real anthropic.AsyncAnthropic()) so
     # this stays a pure unit test of the loop, no real API key needed.
@@ -119,74 +133,58 @@ def _make_client(responses: list[_FakeResponse], max_tool_turns: int = 5) -> MCP
     client._mcp = _FakeMCP()
     client._model = "claude-test"
     client._max_tool_turns = max_tool_turns
-    client._tools_cache = []  # skip list_tools() -- no real MCP tool schema needed for these tests
+    client._tools = [{"name": "calculator", "description": "Does math", "input_schema": {}}]
     return client
 
 
-def test_run_appends_final_text_only_turn_to_raw_trace():
-    """Regression test for the same bug fixed in agent_runner.py: the
-    agent's final, text-only turn used to be dropped from raw_trace.
-    """
+def _two_turns() -> list[_FakeResponse]:
     tool_call = _FakeToolUseBlock(type="tool_use", id="call_1", name="calculator", input={"expression": "1+1"})
-    final_text = _FakeTextBlock(type="text", text="The answer is 2.")
-    client = _make_client([_FakeResponse(content=[tool_call]), _FakeResponse(content=[final_text])])
+    return [_FakeResponse(content=[tool_call]), _FakeResponse(content=[_FakeTextBlock(type="text", text="2")])]
 
-    result = asyncio.run(client.run("What is 1+1?"))
 
-    assert result.answer == "The answer is 2."
-    assert result.hit_turn_limit is False
-    assert len(result.raw_trace) == 4  # user, assistant(tool_use), user(tool_result), assistant(text)
-    assert result.raw_trace[-1] == {
-        "role": "assistant",
-        "content": [{"type": "text", "text": "The answer is 2."}],
+def test_run_records_each_model_and_tool_call_in_order():
+    client, recorder = _make_client(_two_turns()), _Recorder()
+
+    asyncio.run(client.run("What is 1+1?", recorder))
+
+    assert [(kind, provider) for kind, provider, _ in recorder.calls] == [
+        ("model_call", "anthropic"),
+        ("tool_call", "mcp"),
+        ("model_call", "anthropic"),
+    ]
+    assert recorder.calls[1][2] == {"tool_use_id": "call_1", "name": "calculator", "arguments": {"expression": "1+1"}}
+
+
+def test_a_model_calls_request_leaves_out_what_earlier_events_hold():
+    """Claude gets the whole conversation every turn; the record keeps only what's new:
+    the prompt first, then the tool results (the reply before them is the last response)."""
+    client, recorder = _make_client(_two_turns()), _Recorder()
+
+    asyncio.run(client.run("What is 1+1?", recorder))
+
+    first, second = recorder.calls[0][2], recorder.calls[2][2]
+    assert first == {
+        "model": "claude-test",
+        "max_tokens": 1024,
+        "tools": ["calculator"],
+        "messages": [{"role": "user", "content": "What is 1+1?"}],
     }
+    assert second["messages"] == [
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "call_1", "content": "2", "is_error": False}],
+        }
+    ]
+    assert len(client._anthropic.messages.sent[1]) == 3  # Claude itself got all three
 
 
-def test_run_sums_tokens_across_every_turn():
+def test_run_stops_at_max_tool_turns():
     tool_call = _FakeToolUseBlock(type="tool_use", id="call_1", name="calculator", input={"expression": "1+1"})
-    final_text = _FakeTextBlock(type="text", text="The answer is 2.")
-    client = _make_client(
-        [
-            _FakeResponse(content=[tool_call], usage=_FakeUsage(input_tokens=100, output_tokens=20)),
-            _FakeResponse(content=[final_text], usage=_FakeUsage(input_tokens=150, output_tokens=10)),
-        ]
-    )
+    client, recorder = _make_client([_FakeResponse(content=[tool_call])] * 2, max_tool_turns=2), _Recorder()
 
-    result = asyncio.run(client.run("What is 1+1?"))
+    asyncio.run(client.run("Keep going", recorder))
 
-    assert result.input_tokens == 250
-    assert result.output_tokens == 30
-
-
-def test_run_reports_error_when_max_tool_turns_exhausted():
-    """If Claude is still requesting tools on the very last allowed turn,
-    the loop has no further `messages.create` call to let it respond -- so
-    `hit_turn_limit` should be set and `answer` should clearly say why,
-    rather than silently coming back empty (see the `for...else` in
-    MCPAgentClient.run).
-    """
-    tool_call_1 = _FakeToolUseBlock(type="tool_use", id="call_1", name="calculator", input={"expression": "1+1"})
-    tool_call_2 = _FakeToolUseBlock(type="tool_use", id="call_2", name="calculator", input={"expression": "2+2"})
-    client = _make_client(
-        [_FakeResponse(content=[tool_call_1]), _FakeResponse(content=[tool_call_2])],
-        max_tool_turns=2,
-    )
-
-    result = asyncio.run(client.run("What is 1+1, then 2+2?"))
-
-    assert result.hit_turn_limit is True
-    assert "max_tool_turns=2" in result.answer
-    assert result.tools_used == ["calculator", "calculator"]
-
-
-def test_run_hit_turn_limit_false_when_within_budget():
-    final_text = _FakeTextBlock(type="text", text="Paris.")
-    client = _make_client([_FakeResponse(content=[final_text])], max_tool_turns=1)
-
-    result = asyncio.run(client.run("What is the capital of France?"))
-
-    assert result.hit_turn_limit is False
-    assert result.answer == "Paris."
+    assert [kind for kind, _, _ in recorder.calls] == ["model_call", "tool_call", "model_call", "tool_call"]
 
 
 def test_a_local_server_gets_only_the_variables_it_is_given(monkeypatch):
