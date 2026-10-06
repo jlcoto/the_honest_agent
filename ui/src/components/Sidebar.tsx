@@ -55,7 +55,8 @@ export function Sidebar({
     }
   }, [mini])
 
-  const active = route.name === 'result' ? 'overview' : route.name
+  // A result page belongs to neither section (it opens from the overview or the comparison), so nothing is active there.
+  const active = route.name
   return (
     <aside
       onMouseEnter={() => setHov(true)}

@@ -26,6 +26,8 @@ export interface ResultRow {
   expected_database: string | null
   expected_schema: string | null
   provenance_min_score: number | null
+  // Every table/view the agent's counted queries read, with the database/schema each resolved to.
+  queried_sources: SourceRef[] | null
   model_name: string
   agent_backend: string
   agent_name: string | null // null for results stored before agents were recorded
@@ -34,6 +36,12 @@ export interface ResultRow {
   agent_output_tokens: number | null
   grading_input_tokens: number | null
   grading_output_tokens: number | null
+}
+
+export interface SourceRef {
+  database: string | null // null: the SQL didn't say and no `use` statement set it
+  schema: string | null
+  name: string
 }
 
 export interface AgentLogRow {
@@ -51,6 +59,8 @@ export interface ToolCallRow {
   tool_name: string
   type: string // "sql" today
   payload: string // JSON, shape depends on `type`
+  is_error: boolean | null // the tool returned an error
+  generated: boolean | null // SQL a tool wrote (e.g. Cortex Analyst), not necessarily run
 }
 
 export interface ReportData {

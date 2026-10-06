@@ -11,7 +11,7 @@ import {
   stripMarkdown,
   toolCallsFor,
 } from '../data/derive'
-import type { ReportData, ResultRow } from '../data/types'
+import type { ReportData, ResultRow, SourceRef } from '../data/types'
 import { Badge, Button, Card, ScoreStat } from '../ds'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -29,15 +29,6 @@ const codeBlock: CSSProperties = {
 }
 const para: CSSProperties = { margin: 0, font: 'var(--type-body)', color: 'var(--fg-1)', textWrap: 'pretty' }
 const stack = (gap: number): CSSProperties => ({ display: 'flex', flexDirection: 'column', gap })
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div style={{ ...stack(8), minWidth: 0 }}>
-      <span style={{ font: 'var(--type-label)', color: 'var(--fg-2)' }}>{label}</span>
-      {children}
-    </div>
-  )
-}
 
 function Num({ n, label }: { n: number; label: ReactNode }) {
   return (
@@ -148,6 +139,13 @@ function toleranceLabels(r: ResultRow): string[] {
   return labels
 }
 
+const table: CSSProperties = {
+  display: 'grid',
+  border: '1px solid var(--border-1)',
+  borderRadius: 'var(--radius-sm)',
+  overflow: 'hidden',
+}
+
 const ledgerKey: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -183,15 +181,7 @@ interface LedgerRow {
 /** Label/value rows in one bordered table: the label column on a sunken ground. */
 function Ledger({ rows }: { rows: LedgerRow[] }) {
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(120px, max-content) 1fr',
-        border: '1px solid var(--border-1)',
-        borderRadius: 'var(--radius-sm)',
-        overflow: 'hidden',
-      }}
-    >
+    <div style={{ ...table, gridTemplateColumns: 'minmax(120px, max-content) 1fr' }}>
       {rows.map((row, i) => {
         const divider = i ? '1px solid var(--border-1)' : 'none'
         return (
@@ -273,6 +263,207 @@ function AccuracyCard({ r }: { r: ResultRow }) {
           : null}
         {r.accuracy_method === 'llm_judge' && r.grading_model ? <Badge mono>judge {r.grading_model}</Badge> : null}
       </div>
+    </Card>
+  )
+}
+
+// ---- Provenance ---------------------------------------------------------------------------
+
+/** Splits a source name like SQL does: `table`, `schema.table` or `database.schema.table`; "quoted" parts keep their dots. */
+function splitName(entry: string): string[] {
+  const parts: string[] = []
+  let current = ''
+  let quoted = false
+  for (const ch of entry.trim()) {
+    if (ch === '"') quoted = !quoted
+    else if (ch === '.' && !quoted) {
+      parts.push(current)
+      current = ''
+    } else current += ch
+  }
+  return [...parts, current]
+}
+
+/** An `expected_sources` entry, with the eval's expected_database/expected_schema filling in what it leaves out
+ * (the same rule as provenance.py's `_expected`). A null part means any. */
+function expectedSource(entry: string, r: ResultRow): SourceRef {
+  const parts = splitName(entry)
+  const name = parts[parts.length - 1]
+  const schema = parts.length >= 2 ? parts[parts.length - 2] : r.expected_schema
+  const database = parts.length === 3 ? parts[0] : r.expected_database
+  return { database, schema, name }
+}
+
+const same = (got: string | null, want: string | null) => want == null || (got ?? '').toLowerCase() === want.toLowerCase()
+/** provenance.py's `_matches`: every part the expectation names must match. */
+const matches = (got: SourceRef, want: SourceRef) =>
+  same(got.database, want.database) && same(got.schema, want.schema) && same(got.name, want.name)
+const fullName = (s: SourceRef) => [s.database, s.schema, s.name].map((p) => p ?? '?').join('.').toLowerCase()
+const distinct = (xs: (string | null)[]) => [...new Map(xs.map((x) => [x?.toLowerCase() ?? null, x])).keys()]
+
+const provValue: CSSProperties = {
+  minWidth: 0,
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '4px 14px',
+  padding: '12px 14px',
+  font: '400 15px/1.4 var(--font-mono)',
+  wordBreak: 'break-all',
+}
+const unknown: CSSProperties = { font: 'italic 400 13px/1.4 var(--font-sans)', color: 'var(--fg-3)' }
+
+/** Values at one level (database, schema or name), green if the expectation allows them, red if not. */
+function Values({ values, ok }: { values: (string | null)[]; ok: (v: string | null) => boolean }) {
+  if (values.length === 0) return <span style={unknown}>—</span>
+  return (
+    <>
+      {values.map((v) =>
+        v == null ? (
+          <span key="?" style={unknown}>
+            not specified
+          </span>
+        ) : (
+          <span key={v} style={{ color: ok(v) ? 'var(--acc-correct-ink)' : 'var(--acc-wrong-ink)' }}>
+            {v}
+          </span>
+        ),
+      )}
+    </>
+  )
+}
+
+interface ProvRow {
+  label: string
+  expected: ReactNode
+  queried: ReactNode
+}
+
+/** Expected | Agent queried, one row per level, styled like the Accuracy card's table. */
+function ProvTable({ rows }: { rows: ProvRow[] }) {
+  const head: CSSProperties = { ...ledgerKey, font: '500 12px/1.3 var(--font-sans)', color: 'var(--fg-3)', padding: '8px 14px' }
+  return (
+    <div style={{ ...table, gridTemplateColumns: 'minmax(120px, max-content) 1fr 1fr' }}>
+      <div style={head} />
+      <div style={head}>Expected</div>
+      <div style={head}>Agent queried</div>
+      {rows.map((row) => {
+        const divider = '1px solid var(--border-1)'
+        return (
+          <Fragment key={row.label}>
+            <div style={{ ...ledgerKey, borderTop: divider }}>{row.label}</div>
+            <div style={{ ...provValue, borderTop: divider }}>{row.expected}</div>
+            <div style={{ ...provValue, borderTop: divider }}>{row.queried}</div>
+          </Fragment>
+        )
+      })}
+    </div>
+  )
+}
+
+const any = <span style={unknown}>any</span>
+
+/** One expected source: its full name, an optional pill, and how it compares with what the agent read. */
+function SourceSection({ want, queried, pill }: { want: SourceRef; queried: SourceRef[]; pill?: ReactNode }) {
+  const read = (key: keyof SourceRef) => distinct(queried.map((s) => s[key]))
+  const ok = (key: keyof SourceRef) => (v: string | null) => same(v, want[key])
+  return (
+    <div style={stack(8)}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ font: '500 13px/1.3 var(--font-mono)', color: 'var(--fg-1)', wordBreak: 'break-all' }}>
+          {[want.database, want.schema, want.name].filter((p) => p != null).join('.')}
+        </span>
+        {pill}
+      </div>
+      <ProvTable
+        rows={[
+          { label: 'Database', expected: want.database ?? any, queried: <Values values={read('database')} ok={ok('database')} /> },
+          { label: 'Schema', expected: want.schema ?? any, queried: <Values values={read('schema')} ok={ok('schema')} /> },
+          {
+            label: 'Source',
+            expected: want.name,
+            queried: queried.length ? (
+              <Values values={read('name')} ok={ok('name')} />
+            ) : (
+              <span style={{ ...unknown, fontStyle: 'normal', color: 'var(--acc-wrong-ink)' }}>not read</span>
+            ),
+          },
+        ]}
+      />
+    </div>
+  )
+}
+
+function ToolsUsed({ r }: { r: ResultRow }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Tools used</span>
+      <Ids ids={r.tools_used} />
+    </div>
+  )
+}
+
+const note: CSSProperties = { margin: 0, font: 'var(--type-small)', color: 'var(--fg-2)' }
+
+/** Expected sources vs. what the agent's counted queries read (results.queried_sources). */
+function ProvenanceCard({ r }: { r: ResultRow }) {
+  if (r.provenance_score == null) {
+    return (
+      <Card title="Provenance" actions={<Badge dot>Not checked</Badge>}>
+        <p style={note}>No provenance checks are defined for this eval.</p>
+      </Card>
+    )
+  }
+  const ok = provenancePasses(r)
+  const queried = r.queried_sources ?? []
+  const wanted = (r.expected_sources ?? []).map((e) => expectedSource(e, r))
+  const pill = (
+    <Badge tone={ok ? 'correct' : 'wrong'} dot>
+      {ok ? 'Passed' : 'Failed'}
+    </Badge>
+  )
+
+  if (wanted.length === 1) {
+    // One source: the agent column lists everything read, and the card's pill is that source's result.
+    return (
+      <Card title="Provenance" actions={pill}>
+        <SourceSection want={wanted[0]} queried={queried} />
+        <ToolsUsed r={r} />
+      </Card>
+    )
+  }
+
+  // Several: each section shows what was read under that source's name; anything else goes under "Also read".
+  const names = new Set(wanted.map((w) => w.name.toLowerCase()))
+  const extra = queried.filter((s) => !names.has(s.name.toLowerCase()))
+  const passed = wanted.map((w) => queried.some((s) => matches(s, w)))
+  return (
+    <Card title="Provenance" actions={pill}>
+      <div style={stack(16)}>
+        {wanted.map((w, i) => (
+          <SourceSection
+            key={fullName(w)}
+            want={w}
+            queried={queried.filter((s) => s.name.toLowerCase() === w.name.toLowerCase())}
+            pill={
+              <Badge size="sm" tone={passed[i] ? 'correct' : 'wrong'} dot>
+                {passed[i] ? 'Passed' : 'Failed'}
+              </Badge>
+            }
+          />
+        ))}
+      </div>
+      {extra.length ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Also read</span>
+          <Ids ids={extra.map(fullName)} />
+        </div>
+      ) : null}
+      <ToolsUsed r={r} />
+      <p style={note}>
+        Score <b style={{ fontWeight: 500, color: 'var(--fg-1)' }}>{pct(r.provenance_score)}</b>: {passed.filter(Boolean).length} of{' '}
+        {wanted.length} sources passed, minimum {pct(r.provenance_min_score)}
+      </p>
     </Card>
   )
 }
@@ -392,11 +583,13 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           gap: '4px 14px',
           alignItems: 'baseline',
           padding: '6px 0 6px 16px',
-          borderLeft: '3px solid var(--accent)',
+          borderLeft: '5px solid var(--green-300)',
+          // Optical alignment: the cards below have rounded corners, so their edge reads a little further in.
+          marginLeft: 4,
         }}
       >
         <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)', letterSpacing: 'var(--ls-caps)' }}>Q</span>
-        <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty', maxWidth: '68ch' }}>
+        <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty' }}>
           {r.prompt}
         </p>
       </div>
@@ -436,21 +629,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
 
       <AccuracyCard r={r} />
 
-      <Card title="Provenance">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
-          <Field label="Expected sources">
-            <Ids ids={r.expected_sources} />
-          </Field>
-          <Field label="Expected database / schema">
-            <span style={{ font: '400 13px/1.4 var(--font-mono)' }}>
-              {r.expected_database ?? '—'} / {r.expected_schema ?? '—'}
-            </span>
-          </Field>
-          <Field label="Tools used">
-            <Ids ids={r.tools_used} />
-          </Field>
-        </div>
-      </Card>
+      <ProvenanceCard r={r} />
 
       <Card title={`SQL calls (${calls.length})`}>
         {calls.length === 0 ? (
@@ -461,7 +640,19 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
               const payload = parseJson(c.payload) as { sql?: string } | null
               return (
                 <div key={c.call_index} style={stack(8)}>
-                  <Num n={c.call_index + 1} label={<span style={mono}>{c.tool_name}</span>} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <Num n={c.call_index + 1} label={<span style={mono}>{c.tool_name}</span>} />
+                    {c.is_error ? (
+                      <Badge size="sm" tone="wrong" dot>
+                        Error
+                      </Badge>
+                    ) : null}
+                    {c.generated ? (
+                      <Badge size="sm" dot>
+                        Generated, not run
+                      </Badge>
+                    ) : null}
+                  </div>
                   <Code text={payload?.sql ?? c.payload} />
                 </div>
               )
