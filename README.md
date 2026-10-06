@@ -138,6 +138,16 @@ uv run honest-agent serve     # opens it in your browser (Ctrl+C to stop)
   full trace. An eval's id comes from its title unless you set `id:`.
 - To update honest-agent: `uv lock --upgrade-package honest-agent && uv sync`.
 
+**Your results contain what the agent saw.** The results file
+(`honest_agent_results/results.duckdb`) and the report folder keep each
+eval's full trace, including what the agent's tools returned: query results
+(possibly customer rows, names or emails), table and column listings, error
+messages that can name accounts and roles, and the agent's answers. Access
+tokens are never stored. Keeping these files safe is up to you: treat them
+like the data your agent can query, and think before hosting or sharing the
+report. Both are kept out of git by default; `honest-agent export` sends
+only the results table to S3, never the traces.
+
 ### Alternative: one `honest-agent` command for every project
 
 ```bash
