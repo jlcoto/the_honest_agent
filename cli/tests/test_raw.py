@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from recorded import claude_reply, model_call, record, text
 
-from honest_agent.raw import RawRecorder, read_records
+from honest_agent.raw import RunRecorder, read_records
 from honest_agent.storage import connect
 
 
@@ -22,7 +22,7 @@ def test_a_call_that_raises_is_recorded_with_its_error_and_re_raised(tmp_path: P
     record(path, [model_call(claude_reply(text("4")))])
     con = connect(path)
     try:
-        evaluation = RawRecorder(con).start_eval("r2", "run_1", _definition())
+        evaluation = RunRecorder(con).start_eval("r2", "run_1", _definition())
         with pytest.raises(RuntimeError):
             asyncio.run(evaluation.call("tool_call", "mcp", {"name": "query_warehouse"}, _fails()))
     finally:

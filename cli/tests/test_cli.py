@@ -12,7 +12,7 @@ from click.testing import CliRunner
 from recorded import claude_reply, definition, model_call, record, text, tool_call, tool_use
 
 from honest_agent.cli import _eval_loop, main
-from honest_agent.raw import RawRecorder, read_records
+from honest_agent.raw import RunRecorder, read_records
 from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
 
 SQL = "select count(*) from agent_quiz_demo.public.orders"
@@ -212,7 +212,7 @@ async def _returns(value):
 def _run_loop(path: str, agent, judge, definitions) -> list[dict]:
     con = connect(path)
     try:
-        recorder = RawRecorder(con)
+        recorder = RunRecorder(con)
         recorder.start_run(
             "run_1",
             agent_name="demo",

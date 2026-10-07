@@ -89,8 +89,9 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-class RawRecorder:
-    """Writes a run's raw records to an open DuckDB connection as they happen."""
+class RunRecorder:
+    """Records one run as it happens: its row in `raw.runs`, and each eval's row in
+    `raw.evals`. `start_eval` hands back an EvalRecorder, which records that eval's calls."""
 
     def __init__(self, con):
         self._con = con
@@ -131,7 +132,8 @@ class RawRecorder:
 
 
 class EvalRecorder:
-    """Records one eval's calls, in order. Agent runners and grading go through `call`."""
+    """Records one eval's calls in `raw.events`, in order. Agent runners and grading go
+    through `call`."""
 
     def __init__(self, con, result_id: str):
         self._con = con

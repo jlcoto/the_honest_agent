@@ -1,12 +1,12 @@
 """Builds raw records (raw.py) for tests: a run and its evals recorded through the real
-RawRecorder, with responses shaped like the SDKs' (as dicts, which to_jsonable keeps)."""
+RunRecorder, with responses shaped like the SDKs' (as dicts, which to_jsonable keeps)."""
 
 from __future__ import annotations
 
 import asyncio
 
 from honest_agent.eval_loader import EvalDefinition
-from honest_agent.raw import RawRecorder
+from honest_agent.raw import RunRecorder
 from honest_agent.storage import connect
 
 SETTINGS = {"max_tool_turns": 5, "max_tokens": 1024, "mcp": {"command": "python server.py"}, "ignore_tools": []}
@@ -74,7 +74,7 @@ def record(
     """Records one eval (and its run, the first time) with the given events, in order."""
     con = connect(results_path)
     try:
-        recorder = RawRecorder(con)
+        recorder = RunRecorder(con)
         if not con.execute("select count(*) from raw.runs where run_id = ?", [run_id]).fetchone()[0]:
             recorder.start_run(
                 run_id,

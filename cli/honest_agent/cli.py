@@ -27,7 +27,7 @@ from .derive import derive_result, recorded_answer
 from .eval_loader import EvalDefinition, filter_by_tags, load_evals
 from .grading import GRADING_MAX_TOKENS, grading_prompt
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
-from .raw import RawRecorder, read_records
+from .raw import RunRecorder, read_records
 from .storage import connect, export_to_s3_parquet, read_all_results, write_derived
 from .thresholds import failing_rows
 
@@ -111,7 +111,7 @@ async def _eval_loop(
     judge: Judge,
     judge_model: str,
     run_id: str,
-    recorder: RawRecorder,
+    recorder: RunRecorder,
     con,
 ) -> list[dict]:
     """Runs and grades each eval, recording every call as it returns (raw layer), then
@@ -277,7 +277,7 @@ async def _run_async(
         click.echo(f"Evaluating agent: {agent_name}")
         tools = (await connected.list_tools()).tools
         openai_agent = provider_for(model) == OPENAI
-        recorder = RawRecorder(con)
+        recorder = RunRecorder(con)
         recorder.start_run(
             run_id,
             agent_name=agent_name,
