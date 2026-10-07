@@ -96,8 +96,9 @@ function Ids({ ids }: { ids: string[] | null }) {
   if (!ids?.length) return <span style={{ font: 'var(--type-small)', color: 'var(--fg-3)' }}>None</span>
   return (
     <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {ids.map((id) => (
-        <Badge key={id} mono>
+      {/* Tools used repeats a tool once per call, so a name isn't unique. */}
+      {ids.map((id, i) => (
+        <Badge key={`${i}-${id}`} mono>
           {id}
         </Badge>
       ))}
@@ -1037,15 +1038,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         {back}
       </PageHeader>
 
-      <div
-        style={{
-          ...stack(4),
-          padding: '6px 0 6px 16px',
-          borderLeft: '5px solid var(--green-300)',
-          // Optical alignment: the cards below have rounded corners, so their edge reads a little further in.
-          marginLeft: 4,
-        }}
-      >
+      <div style={{ ...stack(4), padding: '6px 0' }}>
         <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Prompt</span>
         <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty' }}>
           {r.prompt}
