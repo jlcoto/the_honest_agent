@@ -548,11 +548,7 @@ function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
     document.getElementById(`step-${step}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        <h3 style={{ margin: 0, font: 'var(--type-h2)', color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>SQL calls</h3>
-        <span style={{ font: 'var(--type-small)', color: 'var(--fg-3)' }}>{sent.length}</span>
-      </div>
+    <Card title={`SQL calls (${sent.length})`}>
       {sent.length === 0 ? (
         <p style={note}>No SQL was run for this answer.</p>
       ) : (
