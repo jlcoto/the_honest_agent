@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 import click
@@ -24,12 +23,12 @@ from .config_file import (
     load_config,
     missing_config_hint,
 )
+from .derive import derive_result, recorded_answer
 from .eval_loader import EvalDefinition, filter_by_tags, load_evals
-from .grading import grade_accuracy
+from .grading import GRADING_MAX_TOKENS, grading_prompt
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
-from .provenance import check_provenance
-from .sql_capture import extract_sql_calls
-from .storage import export_to_s3_parquet, read_agent_logs, read_all_results, read_tool_calls, write_run_results
+from .raw import RunRecorder, read_records
+from .storage import connect, export_to_s3_parquet, read_all_results, write_derived
 from .thresholds import failing_rows
 
 DEFAULT_RESULTS_PATH = "./honest_agent_results/results.duckdb"
@@ -112,82 +111,38 @@ async def _eval_loop(
     judge: Judge,
     judge_model: str,
     run_id: str,
-    agent_name: str | None,
-    ignore_tools: list[str],
+    recorder: RunRecorder,
+    con,
 ) -> list[dict]:
+    """Runs and grades each eval, recording every call as it returns (raw layer), then
+    derives the eval's results from that record and writes them before the next one."""
     rows: list[dict] = []
     for definition in definitions:
         click.echo(f"  - {definition.eval_id}: {definition.prompt!r}")
-        result = await agent.run(definition.prompt)
-        if result.hit_turn_limit:
-            click.echo(f"    WARNING: {definition.eval_id} hit the tool-turn limit without a final answer.")
-
-        grade = await grade_accuracy(
-            definition.grading_method,
-            result.answer,
-            definition.expected_answer,
-            definition.prompt,
-            judge=judge,
-            model=judge_model,
-            tolerance=definition.tolerance,
-            tolerance_percent=definition.tolerance_percent,
-        )
-        sql_calls = extract_sql_calls(result.raw_trace, definition.sql_fields, ignore_tools)
-        # Only SQL the agent sent and that ran counts toward provenance: a query that
-        # errored read nothing, and SQL a tool generated (e.g. Cortex Analyst) may never have run.
-        provenance = check_provenance(
-            [call["sql"] for call in sql_calls if not call["is_error"] and not call["generated"]],
-            definition.expected_sources,
-            definition.expected_database,
-            definition.expected_schema,
-        )
-        for sql in provenance.unparsed:
-            click.echo(f"    WARNING: couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
         result_id = str(uuid.uuid4())
-
-        rows.append(
-            {
-                # -- results --
-                "result_id": result_id,
-                "run_id": run_id,
-                "run_timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                "eval_id": definition.eval_id,
-                "eval_title": definition.title,
-                "prompt": definition.prompt,
-                "category": definition.category,
-                "tags": definition.tags,
-                "expected_answer": definition.expected_answer,
-                "agent_answer": result.answer,
-                "tools_used": result.tools_used,
-                "accuracy_score": grade.score,
-                "accuracy_method": definition.grading_method,
-                "grading_model": _grading_model(definition.grading_method, judge_model),
-                "accuracy_rationale": grade.rationale,
-                "extracted_answer": grade.extracted_answer,
-                "accuracy_tolerance": definition.tolerance,
-                "accuracy_tolerance_percent": definition.tolerance_percent,
-                "accuracy_min_score": definition.accuracy_min_score,
-                "provenance_score": provenance.score,
-                "queried_sources": [source._asdict() for source in provenance.queried_sources],
-                "expected_sources": definition.expected_sources,
-                "expected_database": definition.expected_database,
-                "expected_schema": definition.expected_schema,
-                # No threshold for a check that didn't happen (see check_provenance).
-                "provenance_min_score": definition.provenance_min_score if provenance.score is not None else None,
-                "model_name": result.model_name,
-                "agent_backend": "mcp",
-                "agent_name": agent_name,
-                "latency_ms": result.latency_ms,
-                "agent_input_tokens": result.input_tokens,
-                "agent_output_tokens": result.output_tokens,
-                "grading_input_tokens": grade.input_tokens,
-                "grading_output_tokens": grade.output_tokens,
-                # -- agent_logs --
-                "agent_trace": json.dumps(result.raw_trace),
-                # -- tool_calls (expanded into one row per call by storage.py) --
-                "sql_calls": sql_calls,
-            }
-        )
+        record = recorder.start_eval(result_id, run_id, definition)
+        try:
+            await agent.run(definition.prompt, record)
+            answer, hit_turn_limit = recorded_answer(con, result_id)
+            if hit_turn_limit:
+                click.echo(f"    WARNING: {definition.eval_id} hit the tool-turn limit without a final answer.")
+            prompt = grading_prompt(definition.grading_method, answer, definition.expected_answer, definition.prompt)
+            if prompt is not None:
+                request = {"model": judge_model, "max_tokens": GRADING_MAX_TOKENS, "prompt": prompt}
+                await record.call(
+                    "grading_call",
+                    provider_for(judge_model),
+                    request,
+                    judge.complete(prompt, model=judge_model, max_tokens=GRADING_MAX_TOKENS),
+                )
+            derived = derive_result(con, result_id)
+        except Exception as exc:
+            record.eval_error(exc)
+            raise
+        write_derived(con, [derived.row])
+        for sql in derived.unparsed:
+            click.echo(f"    WARNING: couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
+        rows.append(derived.row)
     return rows
 
 
@@ -258,11 +213,6 @@ def _resolve_server(
     return file_command, file_url, os.environ[token_env]
 
 
-def _grading_model(method: str, model: str) -> str | None:
-    """The judge model a grading method uses -- `contains` is a plain string check with none."""
-    return None if method == "contains" else model
-
-
 def _resolve_agent_name(explicit: str | None, connected_client) -> str:
     """`--agent-name` wins; otherwise the name the MCP server reported during the handshake."""
     return explicit or connected_client.server_info.name
@@ -280,6 +230,7 @@ async def _run_async(
     select: str | None,
     exclude: str | None,
     agent_name: str | None,
+    target: str | None,
     ignore_tools: list[str],
     mcp_cwd: str | None,
     mcp_env: list[str],
@@ -296,7 +247,7 @@ async def _run_async(
     if not definitions:
         raise click.ClickException(f"No evals matched --select {select!r} --exclude {exclude!r}")
 
-    from .mcp_agent_runner import MCPAgentClient, build_mcp_client
+    from .mcp_agent_runner import MAX_TOKENS, MCPAgentClient, build_mcp_client
 
     judge = make_judge(provider_for(judge_model))
     run_id = str(uuid.uuid4())
@@ -320,22 +271,40 @@ async def _run_async(
             "Could not establish the MCP connection -- no evals were run, nothing was graded.\n"
             f"{_describe_mcp_connection_error(exc)}"
         ) from exc
+    con = connect(results_path)
     try:
         agent_name = _resolve_agent_name(agent_name, connected)
         click.echo(f"Evaluating agent: {agent_name}")
-        if provider_for(model) == OPENAI:
+        tools = (await connected.list_tools()).tools
+        openai_agent = provider_for(model) == OPENAI
+        recorder = RunRecorder(con)
+        recorder.start_run(
+            run_id,
+            agent_name=agent_name,
+            target=target,
+            model=model,
+            judge_model=judge_model,
+            settings={
+                "max_tool_turns": max_tool_turns,
+                "max_tokens": None if openai_agent else MAX_TOKENS,
+                "mcp": {"url": mcp_url} if mcp_url else {"command": mcp_command},
+                "ignore_tools": ignore_tools,
+            },
+            tools_offered=tools,
+        )
+        if openai_agent:
             from .openai_agent_runner import OpenAIMCPAgentClient
 
-            agent = OpenAIMCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
+            agent = OpenAIMCPAgentClient(connected, model=model, tools=tools, max_tool_turns=max_tool_turns)
         else:
-            agent = MCPAgentClient(connected, model=model, max_tool_turns=max_tool_turns)
+            agent = MCPAgentClient(connected, model=model, tools=tools, max_tool_turns=max_tool_turns)
         click.echo(f"Model: {model} · judge model: {judge_model}")
-        rows = await _eval_loop(agent, definitions, judge, judge_model, run_id, agent_name, ignore_tools)
+        rows = await _eval_loop(agent, definitions, judge, judge_model, run_id, recorder, con)
     finally:
+        con.close()
         await mcp_client.__aexit__(None, None, None)
 
-    written_path = write_run_results(results_path, run_id, rows)
-    click.echo(f"Wrote {len(rows)} result(s) to {written_path}")
+    click.echo(f"Wrote {len(rows)} result(s) to {results_path}")
 
     failures = failing_rows(rows)
     if failures:
@@ -524,6 +493,7 @@ def run(
             select=select,
             exclude=exclude,
             agent_name=agent_name,
+            target=chosen.name if chosen else None,
             ignore_tools=chosen.settings.get("ignore_tools", []) if chosen else [],
             mcp_cwd=mcp_cwd,
             mcp_env=env_names,
@@ -592,45 +562,90 @@ def export(ctx: click.Context, results_path: str | None, s3_path: str, run_id: s
 
 @main.command()
 @click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
+@click.option("--run-id", default=None, help="Only rebuild this run.")
+@click.pass_context
+def rebuild(ctx: click.Context, results_path: str | None, run_id: str | None):
+    """Re-derive results, SQL calls and traces from the raw record of past runs, after a
+    change to how honest-agent scores or reads them. Calls no model: it costs nothing and
+    uses each run's own settings and eval definitions. Runs recorded before honest-agent
+    kept raw records, and evals stopped by an error, are left as they are."""
+    from .raw import has_raw_layer
+
+    results_path = _results_path(ctx, results_path)
+    if not Path(results_path).exists():
+        raise click.ClickException(f"No results file at {results_path}.")
+    con = connect(results_path)
+    try:
+        if not has_raw_layer(con):
+            raise click.ClickException("This results file has no raw records yet; nothing to rebuild.")
+        # An eval stopped by an error has nothing to derive, as during the run.
+        clauses = ["not exists (select 1 from raw.events v where v.result_id = e.result_id and v.kind = 'eval_error')"]
+        params = []
+        if run_id:
+            clauses.append("e.run_id = ?")
+            params.append(run_id)
+        query = f"select e.result_id from raw.evals e where {' and '.join(clauses)} order by e.started_at"
+        result_ids = [row[0] for row in con.execute(query, params).fetchall()]
+        for result_id in result_ids:
+            write_derived(con, [derive_result(con, result_id).row])
+        runs = {row[0] for row in con.execute("select distinct run_id from raw.evals").fetchall()}
+    finally:
+        con.close()
+    if run_id and not result_ids:
+        raise click.ClickException(f"No raw records for run {run_id}.")
+    click.echo(f"Rebuilt {len(result_ids)} result(s) from {1 if run_id else len(runs)} run(s) in {results_path}.")
+
+
+@main.command()
+@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option("--run-id", default=None, help="Only show logs for this run.")
 @click.option("--eval-id", default=None, help="Only show logs for this eval id.")
+@click.option("--json", "as_json", is_flag=True, help="Print the raw records as JSON, exactly as stored.")
 @click.pass_context
-def logs(ctx: click.Context, results_path: str | None, run_id: str | None, eval_id: str | None):
-    """Print each matching eval's agent trace and any captured SQL, for digging into
-    *why* a result came out the way it did (as opposed to `report`, which only shows
-    scores)."""
+def logs(ctx: click.Context, results_path: str | None, run_id: str | None, eval_id: str | None, as_json: bool):
+    """Print what each matching eval sent and received, call by call, as recorded: every
+    model call, tool call and grading call with its request, response and timing. Scores
+    and SQL summaries are in the report (`honest-agent report`)."""
     results_path = _results_path(ctx, results_path)
-    rows = read_agent_logs(results_path, run_id=run_id, eval_id=eval_id)
-    if not rows:
-        click.echo("No matching logs found.")
+    records = read_records(results_path, run_id=run_id, eval_id=eval_id)
+    if as_json:
+        click.echo(json.dumps(records, indent=2, default=str))
         return
-    # Looked up per row below (not passed through read_agent_logs) so `agent_logs`
-    # stays a pure trace table -- `results` already carries the answer/scores.
-    results_by_id = {r["result_id"]: r for r in read_all_results(results_path)}
-    calls_by_result: dict[str, list[dict]] = {}
-    for call_row in read_tool_calls(results_path, run_id=run_id, eval_id=eval_id):
-        calls_by_result.setdefault(call_row["result_id"], []).append(call_row)
-
-    for row in rows:
-        click.echo(f"=== eval {row['eval_id']} (run {row['run_id']}, result {row['result_id']}) ===")
-        result_row = results_by_id.get(row["result_id"])
-        if result_row:
-            click.echo(f"Answer: {result_row['agent_answer']}")
-            if result_row["provenance_score"] is None:
-                provenance_text = "not checked"
-            else:
-                provenance_text = f"{result_row['provenance_score']:.2f} (min {result_row['provenance_min_score']:.2f})"
+    if not records:
+        derived = [
+            r
+            for r in read_all_results(results_path)
+            if (run_id is None or r["run_id"] == run_id) and (eval_id is None or r["eval_id"] == eval_id)
+        ]
+        if derived:
             click.echo(
-                f"Accuracy: {result_row['accuracy_score']:.2f} (min {result_row['accuracy_min_score']:.2f})  |  "
-                f"Provenance: {provenance_text}"
+                "These results were recorded before honest-agent kept raw records, so there is no log "
+                "to show. See them in the report (`honest-agent report`)."
             )
-        call_rows = calls_by_result.get(row["result_id"], [])
-        if call_rows:
-            click.echo("Tool calls:")
-            for call_row in call_rows:
-                click.echo(f"  [{call_row['tool_name']}] ({call_row['type']}) {call_row['payload']}")
-        click.echo("Trace:")
-        click.echo(json.dumps(json.loads(row["agent_trace"]), indent=2))
+        else:
+            click.echo("No matching logs found.")
+        return
+
+    def pretty(value: str | None) -> str:
+        return json.dumps(json.loads(value), indent=2) if value is not None else "null"
+
+    for record in records:
+        run, evaluation = record["run"], record["eval"]
+        click.echo(
+            f"=== eval {evaluation['eval_id']} (run {evaluation['run_id']}, result {evaluation['result_id']}) ==="
+        )
+        click.echo(
+            f"{run['agent_name']} · {run['model']} · judge {run['judge_model']} · started {evaluation['started_at']}"
+        )
+        for event in record["events"]:
+            provider = f" ({event['provider']})" if event["provider"] else ""
+            click.echo(f"--- #{event['seq']} {event['kind']}{provider} · {event['duration_ms']} ms")
+            if event["request"] is not None:
+                click.echo(f"request: {pretty(event['request'])}")
+            if event["response"] is not None:
+                click.echo(f"response: {pretty(event['response'])}")
+            if event["error"]:
+                click.echo(f"error: {event['error']}")
         click.echo()
 
 

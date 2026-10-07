@@ -16,7 +16,7 @@ finds a genuine, fixable cause, open a PR with the fix.
 
 1. `thresholds.failing_rows` already identifies which eval(s) regressed
    this run. We already capture rich forensic context per result: the full
-   reasoning trace (`agent_logs.agent_trace`), every tool/SQL call it made
+   exchange with the model and tools (the raw layer, `raw.events`), every tool/SQL call it made
    (`tool_calls`), which model ran it (`results.model_name`), and the run
    timestamp -- more than enough to start an investigation from.
 2. Feed a failure to an "investigator" agent, whose job is to correlate it

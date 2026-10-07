@@ -1,6 +1,7 @@
 """Writes the report: the prebuilt React UI (`report_ui/`, built from the
 repo's `ui/` folder and shipped inside this package) plus `data/report.json`,
-which holds every row of the `results`, `agent_logs`, and `tool_calls` tables.
+which holds every row of the `results`, `traces`, and `tool_calls` tables (the raw
+layer stays in the results file).
 
 The output is a folder of static files. Browsers won't fetch the JSON from a
 `file://` page, so view it through `honest-agent serve` or any static host.
@@ -13,7 +14,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .storage import make_output_dir, read_agent_logs, read_all_results, read_tool_calls
+from .storage import make_output_dir, read_all_results, read_tool_calls, read_traces
 
 UI_DIR = Path(__file__).parent / "report_ui"
 # Marks a folder as honest-agent's report, which `report` may clear and rewrite.
@@ -29,7 +30,8 @@ def build_report_data(results_path: str) -> dict:
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "results": results,
-        "agent_logs": read_agent_logs(results_path),
+        # `traces` rows, under the key the report UI reads (ui/src/data/types.ts).
+        "agent_logs": read_traces(results_path),
         "tool_calls": read_tool_calls(results_path),
     }
 

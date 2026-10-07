@@ -4,8 +4,6 @@ import json
 import re
 from typing import NamedTuple
 
-from .llm import Judge
-
 
 class Grade(NamedTuple):
     score: float
@@ -13,8 +11,6 @@ class Grade(NamedTuple):
     rationale: str | None
     # The value extract_match pulled from the answer and compared (extract_match only).
     extracted_answer: str | None
-    input_tokens: int
-    output_tokens: int
 
 
 def grade_contains(answer: str, expected_answer: str) -> float:
@@ -80,105 +76,79 @@ def _as_data(answer: str) -> str:
     return "<answer>\n" + answer.replace("</answer", "<\\/answer") + "\n</answer>"
 
 
-async def grade_llm_judge(
-    judge: Judge, answer: str, expected_answer: str, prompt: str, model: str = "claude-haiku-4-5"
-) -> Grade:
-    judge_prompt = (
-        "You are grading whether an AI-generated answer is correct.\n\n"
-        f"{_DATA_NOTE}"
-        f"Question: {prompt}\n"
-        f"Expected answer: {expected_answer}\n"
-        f"Given answer:\n{_as_data(answer)}\n\n"
-        "Score the given answer from 0.0 (completely wrong) to 1.0 (fully correct "
-        "and equivalent to the expected answer). Minor wording/formatting "
-        "differences that don't change the meaning should still score 1.0. An answer "
-        "that contradicts itself, offers several candidate values, or doesn't commit "
-        "to one final value scores 0.0, even if one of those values matches the "
-        "expected answer.\n\n"
-        'Respond with ONLY a JSON object: {"score": <float 0-1>, "rationale": "<one sentence>"}'
-    )
-    text, input_tokens, output_tokens = await judge.complete(judge_prompt, model=model, max_tokens=200)
-    match = re.search(r"\{.*\}", text, re.DOTALL)
+# Output cap for a grading call: the reply is a one-line JSON object.
+GRADING_MAX_TOKENS = 200
+
+
+def grading_prompt(method: str, answer: str, expected_answer: str, prompt: str) -> str | None:
+    """What a run asks the grading model for this answer; None for `contains`, which uses
+    no model. The reply comes back to `score` (via the raw record), so grading can be
+    re-scored later without asking again."""
+    if method == "contains":
+        return None
+    if method == "extract_match":
+        # The model only extracts and normalizes the value; `score` compares it in code.
+        return (
+            "Extract the final answer value from the response below and normalize it "
+            "to its simplest literal form (strip punctuation, units, thousands "
+            "separators, leading articles like 'the') so it can be compared directly "
+            "against a canonical answer. Do not judge whether it's correct -- only "
+            "extract and normalize.\n\n"
+            f"{_DATA_NOTE}"
+            f"Question: {prompt}\n"
+            f"Response:\n{_as_data(answer)}\n\n"
+            'Respond with ONLY a JSON object: {"extracted_answer": "<normalized value>"}'
+        )
+    if method == "llm_judge":
+        return (
+            "You are grading whether an AI-generated answer is correct.\n\n"
+            f"{_DATA_NOTE}"
+            f"Question: {prompt}\n"
+            f"Expected answer: {expected_answer}\n"
+            f"Given answer:\n{_as_data(answer)}\n\n"
+            "Score the given answer from 0.0 (completely wrong) to 1.0 (fully correct "
+            "and equivalent to the expected answer). Minor wording/formatting "
+            "differences that don't change the meaning should still score 1.0. An answer "
+            "that contradicts itself, offers several candidate values, or doesn't commit "
+            "to one final value scores 0.0, even if one of those values matches the "
+            "expected answer.\n\n"
+            'Respond with ONLY a JSON object: {"score": <float 0-1>, "rationale": "<one sentence>"}'
+        )
+    raise ValueError(f"Unknown grading method: {method!r}")
+
+
+def _reply_json(reply: str) -> dict:
+    match = re.search(r"\{.*\}", reply, re.DOTALL)
     if not match:
-        raise ValueError(f"LLM judge did not return parseable JSON: {text!r}")
-    payload = json.loads(match.group(0))
-    return Grade(float(payload["score"]), str(payload.get("rationale", "")), None, input_tokens, output_tokens)
+        raise ValueError(f"The grading model did not return parseable JSON: {reply!r}")
+    return json.loads(match.group(0))
 
 
-async def grade_extract_match(
-    judge: Judge,
-    answer: str,
-    expected_answer: str,
-    prompt: str,
-    model: str = "claude-haiku-4-5",
-    tolerance: float | None = None,
-    tolerance_percent: float | None = None,
-) -> Grade:
-    """Extracts a normalized literal value from the agent's (likely
-    conversational) answer, then compares it against `expected_answer` with
-    deterministic equality -- unlike `grade_llm_judge`, the model here only
-    extracts/normalizes, it never judges correctness itself.
-
-    This is the reliable replacement for what the old `exact` method tried
-    to do: it tolerates however the agent phrases its answer, but the actual
-    pass/fail comparison is still deterministic, not a model's holistic
-    opinion. Only fits evals whose `expected_answer` really is a single
-    literal value (a name, a number, a short phrase) -- for anything where
-    correctness itself requires judgment, use `llm_judge` instead.
-
-    `tolerance`/`tolerance_percent`, if given, allow a numeric answer to
-    differ from `expected_answer` instead of requiring an exact string match
-    (see `_values_match`) -- for expected values that are themselves
-    rounded/approximate rather than exact.
-    """
-    extraction_prompt = (
-        "Extract the final answer value from the response below and normalize it "
-        "to its simplest literal form (strip punctuation, units, thousands "
-        "separators, leading articles like 'the') so it can be compared directly "
-        "against a canonical answer. Do not judge whether it's correct -- only "
-        "extract and normalize.\n\n"
-        f"{_DATA_NOTE}"
-        f"Question: {prompt}\n"
-        f"Response:\n{_as_data(answer)}\n\n"
-        'Respond with ONLY a JSON object: {"extracted_answer": "<normalized value>"}'
-    )
-    text, input_tokens, output_tokens = await judge.complete(extraction_prompt, model=model, max_tokens=200)
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise ValueError(f"Extraction did not return parseable JSON: {text!r}")
-    payload = json.loads(match.group(0))
-    extracted = str(payload["extracted_answer"])
-
-    score = 1.0 if _values_match(extracted, expected_answer, tolerance, tolerance_percent) else 0.0
-    return Grade(score, None, extracted, input_tokens, output_tokens)
-
-
-async def grade_accuracy(
+def score(
     method: str,
     answer: str,
     expected_answer: str,
-    prompt: str,
-    judge: Judge | None = None,
-    model: str = "claude-haiku-4-5",
+    reply: str | None,
     tolerance: float | None = None,
     tolerance_percent: float | None = None,
 ) -> Grade:
+    """Scores an answer from the grading model's `reply` (None for `contains`).
+    Deterministic: the same answer and reply always give the same grade.
+
+    - contains: the expected answer appears in the agent's answer.
+    - extract_match: the model's extracted value equals `expected_answer`, or is within
+      `tolerance` / `tolerance_percent` for numbers (see `_values_match`). The model
+      only extracts; the comparison is code, so it never judges correctness itself.
+      Fits evals whose answer is one literal value (a name, a number, a short phrase).
+    - llm_judge: the model's own score and one-sentence rationale.
+    """
     if method == "contains":
-        return Grade(grade_contains(answer, expected_answer), None, None, 0, 0)
+        return Grade(grade_contains(answer, expected_answer), None, None)
+    payload = _reply_json(reply or "")
     if method == "extract_match":
-        if judge is None:
-            raise ValueError("extract_match grading requires a judge model")
-        return await grade_extract_match(
-            judge,
-            answer,
-            expected_answer,
-            prompt,
-            model=model,
-            tolerance=tolerance,
-            tolerance_percent=tolerance_percent,
-        )
+        extracted = str(payload["extracted_answer"])
+        matched = _values_match(extracted, expected_answer, tolerance, tolerance_percent)
+        return Grade(1.0 if matched else 0.0, None, extracted)
     if method == "llm_judge":
-        if judge is None:
-            raise ValueError("llm_judge grading requires a judge model")
-        return await grade_llm_judge(judge, answer, expected_answer, prompt, model=model)
+        return Grade(float(payload["score"]), str(payload.get("rationale", "")), None)
     raise ValueError(f"Unknown grading method: {method!r}")

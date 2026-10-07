@@ -23,11 +23,10 @@ def provider_for(model: str) -> str:
 
 
 class Judge(Protocol):
-    """A single prompt-in, text-out call, which is all grading needs."""
+    """A single prompt-in call, which is all grading needs. Returns the provider's
+    response object as-is: the run records it raw, and derive.py reads it back."""
 
-    async def complete(self, prompt: str, model: str, max_tokens: int) -> tuple[str, int, int]:
-        """Returns (text, input_tokens, output_tokens)."""
-        ...
+    async def complete(self, prompt: str, model: str, max_tokens: int) -> Any: ...
 
 
 class AnthropicJudge:
@@ -38,27 +37,36 @@ class AnthropicJudge:
             client = anthropic.AsyncAnthropic()
         self._client = client
 
-    async def complete(self, prompt: str, model: str, max_tokens: int) -> tuple[str, int, int]:
-        response = await self._client.messages.create(
+    async def complete(self, prompt: str, model: str, max_tokens: int) -> Any:
+        return await self._client.messages.create(
             model=model, max_tokens=max_tokens, messages=[{"role": "user", "content": prompt}]
         )
-        text = "".join(block.text for block in response.content if block.type == "text")
-        return text, response.usage.input_tokens, response.usage.output_tokens
 
 
 class OpenAIJudge:
     def __init__(self, client: Any = None):
         self._client = client or openai_client()
 
-    async def complete(self, prompt: str, model: str, max_tokens: int) -> tuple[str, int, int]:
+    async def complete(self, prompt: str, model: str, max_tokens: int) -> Any:
         # No output cap here: on reasoning models (gpt-5.x, o-series) the cap also
         # counts hidden reasoning tokens, so a small one can leave the answer empty.
         # Grading prompts ask for a one-line JSON object, so the output stays short.
-        response = await self._client.chat.completions.create(
-            model=model, messages=[{"role": "user", "content": prompt}]
-        )
-        text = response.choices[0].message.content or ""
-        return text, response.usage.prompt_tokens, response.usage.completion_tokens
+        return await self._client.chat.completions.create(model=model, messages=[{"role": "user", "content": prompt}])
+
+
+def response_text(provider: str, response: dict) -> str:
+    """The text of a recorded model response (the JSON raw.events keeps), for either provider."""
+    if provider == OPENAI:
+        return response["choices"][0]["message"].get("content") or ""
+    return "".join(block.get("text", "") for block in response.get("content", []) if block.get("type") == "text")
+
+
+def response_tokens(provider: str, response: dict) -> tuple[int, int]:
+    """(input, output) tokens of a recorded model response, for either provider."""
+    usage = response.get("usage") or {}
+    if provider == OPENAI:
+        return usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+    return usage.get("input_tokens", 0), usage.get("output_tokens", 0)
 
 
 def make_judge(provider: str) -> Judge:

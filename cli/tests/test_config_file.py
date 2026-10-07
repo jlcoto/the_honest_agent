@@ -171,7 +171,7 @@ def test_the_file_is_found_from_a_subfolder_and_its_paths_stay_relative_to_it(pr
 
 def test_other_commands_read_results_path_from_the_file(project, monkeypatch, fake_run):
     read_from = []
-    monkeypatch.setattr(cli_mod, "read_agent_logs", lambda path, **_: read_from.append(path) or [])
+    monkeypatch.setattr(cli_mod, "read_records", lambda path, **_: read_from.append(path) or [])
 
     result = CliRunner().invoke(main, ["logs"])
 

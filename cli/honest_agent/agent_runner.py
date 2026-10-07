@@ -1,39 +1,32 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import is_dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .raw import EvalRecorder
 
 
-@dataclass
-class AgentRunResult:
-    answer: str
-    tools_used: list[str]
-    raw_trace: Any
-    model_name: str
-    latency_ms: int
-    # Summed across every turn of the tool-use loop (each turn is its own
-    # `messages.create` call, so a multi-turn eval genuinely spends tokens
-    # more than once) -- not just the final turn's usage.
-    input_tokens: int
-    output_tokens: int
-    # True if the tool-use loop hit its max_tool_turns cap while the agent
-    # was still requesting tools -- i.e. there was no final, text-only turn
-    # to report as `answer`. See MCPAgentClient.run's `for...else`.
-    hit_turn_limit: bool = False
+def to_jsonable(obj: Any) -> Any:
+    """A JSON-safe copy of an SDK object (pydantic models from the Anthropic, OpenAI and
+    MCP SDKs), as close to the object as JSON allows: field names as the SDK's wire
+    format spells them (`isError`, `inputSchema`), nothing dropped."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="json", by_alias=True)
+    if isinstance(obj, dict):
+        return {k: to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [to_jsonable(v) for v in obj]
+    if is_dataclass(obj) or hasattr(obj, "__dict__"):
+        return {k: to_jsonable(v) for k, v in vars(obj).items() if not k.startswith("_")}
+    return obj
 
 
 def plain_content(content: Any) -> Any:
-    """Converts Anthropic SDK content blocks (pydantic models, from
-    `response.content`) into plain JSON-safe dicts/lists, leaving content
-    that's already plain (our own hand-built tool_result dicts) untouched.
-
-    `MCPAgentClient` calls this before appending a turn to `messages`, so the
-    full `messages` list returned as `raw_trace` is always `json.dumps`-able
-    as-is -- that's what lets `cli.py` persist it as the agent's
-    reasoning/tool-call trace without the caller having to know about the
-    SDK's internal block types.
-    """
+    """Converts Anthropic SDK content blocks (pydantic models, from `response.content`)
+    into plain dicts, so the conversation sent back to Claude on the next turn -- and
+    recorded in that turn's request -- is JSON-safe."""
     if isinstance(content, list):
         return [plain_content(item) for item in content]
     if hasattr(content, "model_dump"):
@@ -44,14 +37,11 @@ def plain_content(content: Any) -> Any:
 class AgentClient(ABC):
     """Interface any agent backend must implement to be evaluated.
 
-    `MCPAgentClient` (mcp_agent_runner.py) is currently the only
-    implementation -- it sources tools from a live MCP server rather than a
-    local stand-in, which is what `honest-agent` needs to test the actual
-    agent employees connect to (see mcp_agent_runner.py's module docstring).
-    This stays an ABC, rather than `cli.py` depending on `MCPAgentClient`
-    directly, so the eval loop doesn't need to know which concrete backend
-    it's driving if another one is ever added.
+    `run` drives the agent's tool-use loop for one prompt and sends every model and tool
+    call through `record` (raw.EvalRecorder), which keeps the raw exchange. It returns
+    nothing: the answer, the trace and the scores are all derived from that record
+    (derive.py), so a past run can be re-derived without running the agent again.
     """
 
     @abstractmethod
-    async def run(self, prompt: str) -> AgentRunResult: ...
+    async def run(self, prompt: str, record: EvalRecorder) -> None: ...
