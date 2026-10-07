@@ -309,9 +309,12 @@ def read_all_results(results_path: str) -> list[dict[str, Any]]:
         con.close()
 
 
-def read_latest_run_results(results_path: str) -> list[dict[str, Any]]:
-    """Reads only the most recent run's `results` rows (by max run_timestamp)."""
+def read_latest_run_results(results_path: str, agent_name: str | None = None) -> list[dict[str, Any]]:
+    """Reads only the most recent run's `results` rows (by max run_timestamp), of
+    `agent_name`'s runs when given, else of every agent's."""
     all_rows = read_all_results(results_path)
+    if agent_name is not None:
+        all_rows = [r for r in all_rows if r["agent_name"] == agent_name]
     if not all_rows:
         return []
     latest_run_id = max(all_rows, key=lambda r: r["run_timestamp"])["run_id"]

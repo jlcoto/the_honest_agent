@@ -4,6 +4,7 @@
 #
 #   honest-agent run                       # the default target (demo)
 #   honest-agent run --target motherduck   # another target
+#   honest-agent notify --target motherduck --webhook-url ...   # Slack alert on its latest run
 #
 # A flag or environment variable still overrides any setting here, for one-off runs.
 
