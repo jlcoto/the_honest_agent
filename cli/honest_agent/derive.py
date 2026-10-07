@@ -83,14 +83,14 @@ def conversation(prompt: str, events: list[dict]) -> list[dict]:
     return trace
 
 
-def agent_answer(events: list[dict], max_tool_turns: int) -> tuple[str, bool]:
-    """(the agent's final answer, whether it ran out of tool turns). The answer is the
+def agent_answer(events: list[dict], max_tool_steps: int) -> tuple[str, bool]:
+    """(the agent's final answer, whether it ran out of steps). The answer is the
     text of its last reply; a last reply still asking for tools means the loop ran out."""
     replies = [e for e in events if e["kind"] == "model_call" and e["response"] is not None]
     if not replies or _wants_tools(replies[-1]):
         return (
-            f"[honest-agent error] Exceeded max_tool_turns={max_tool_turns} without a final answer -- "
-            "the agent was still requesting tools on the last turn. See agent_trace for detail.",
+            f"[honest-agent error] Exceeded max_tool_steps={max_tool_steps} without a final answer -- "
+            "the agent was still requesting tools on the last step. See agent_trace for detail.",
             True,
         )
     last = replies[-1]
@@ -124,10 +124,10 @@ def _read(con, result_id: str) -> tuple[dict, dict, list[dict]]:
 
 
 def recorded_answer(con, result_id: str) -> tuple[str, bool]:
-    """The agent's answer as recorded so far, for `run` to grade: (answer, ran out of turns)."""
+    """The agent's answer as recorded so far, for `run` to grade: (answer, ran out of steps)."""
     run, _, events = _read(con, result_id)
     agent_events = [e for e in events if e["kind"] in ("model_call", "tool_call")]
-    return agent_answer(agent_events, json.loads(run["settings"])["max_tool_turns"])
+    return agent_answer(agent_events, json.loads(run["settings"])["max_tool_steps"])
 
 
 def derive_result(con, result_id: str) -> Derived:
@@ -139,7 +139,7 @@ def derive_result(con, result_id: str) -> Derived:
     definition = EvalDefinition(**json.loads(evaluation["definition"]))
 
     agent_events = [e for e in events if e["kind"] in ("model_call", "tool_call")]
-    answer, _ = agent_answer(agent_events, settings["max_tool_turns"])
+    answer, _ = agent_answer(agent_events, settings["max_tool_steps"])
     trace = conversation(definition.prompt, agent_events)
 
     grading = next((e for e in events if e["kind"] == "grading_call"), None)

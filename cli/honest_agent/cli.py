@@ -34,7 +34,7 @@ from .thresholds import failing_rows
 DEFAULT_RESULTS_PATH = "./honest_agent_results/results.duckdb"
 _RESULTS_PATH_HELP = "Local DuckDB file where results are stored (created on first `run`)."
 DEFAULT_REPORT_DIR = "honest_agent_report"
-DEFAULT_MAX_TOOL_TURNS = 5
+DEFAULT_MAX_TOOL_STEPS = 5
 _REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
 
 
@@ -125,7 +125,7 @@ async def _eval_loop(
             await agent.run(definition.prompt, record)
             answer, hit_turn_limit = recorded_answer(con, result_id)
             if hit_turn_limit:
-                click.echo(f"    WARNING: {definition.eval_id} hit the tool-turn limit without a final answer.")
+                click.echo(f"    WARNING: {definition.eval_id} hit the step limit without a final answer.")
             prompt = grading_prompt(definition.grading_method, answer, definition.expected_answer, definition.prompt)
             if prompt is not None:
                 request = {"model": judge_model, "max_tokens": GRADING_MAX_TOKENS, "prompt": prompt}
@@ -209,7 +209,7 @@ async def _run_async(
     evals_dir: Path,
     results_path: str,
     model: str,
-    max_tool_turns: int,
+    max_tool_steps: int,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -272,7 +272,7 @@ async def _run_async(
             model=model,
             judge_model=judge_model,
             settings={
-                "max_tool_turns": max_tool_turns,
+                "max_tool_steps": max_tool_steps,
                 "max_tokens": None if openai_agent else MAX_TOKENS,
                 "mcp": {"url": mcp_url} if mcp_url else {"command": mcp_command},
                 "ignore_tools": ignore_tools,
@@ -282,9 +282,9 @@ async def _run_async(
         if openai_agent:
             from .openai_agent_runner import OpenAIMCPAgentClient
 
-            agent = OpenAIMCPAgentClient(connected, model=model, tools=tools, max_tool_turns=max_tool_turns)
+            agent = OpenAIMCPAgentClient(connected, model=model, tools=tools, max_tool_steps=max_tool_steps)
         else:
-            agent = AnthropicMCPAgentClient(connected, model=model, tools=tools, max_tool_turns=max_tool_turns)
+            agent = AnthropicMCPAgentClient(connected, model=model, tools=tools, max_tool_steps=max_tool_steps)
         click.echo(f"Model: {model} · judge model: {judge_model}")
         rows = await _eval_loop(agent, definitions, judge, judge_model, run_id, recorder, con)
     finally:
@@ -339,10 +339,10 @@ async def _run_async(
     "runs keeps comparisons between agent models fair.",
 )
 @click.option(
-    "--max-tool-turns",
+    "--max-tool-steps",
     type=click.IntRange(min=1),
-    default=DEFAULT_MAX_TOOL_TURNS,
-    help="Max rounds of tool calls per eval before giving up (each round is one model API call). "
+    default=DEFAULT_MAX_TOOL_STEPS,
+    help="Max steps per eval before giving up: each step is one model API call and the tool calls it asks for. "
     "If Claude is still requesting tools when this is hit, that eval fails with a clear error "
     "instead of silently returning an empty answer.",
 )
@@ -406,7 +406,7 @@ def run(
     results_path: str | None,
     model: str | None,
     judge_model: str | None,
-    max_tool_turns: int,
+    max_tool_steps: int,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -428,11 +428,11 @@ def run(
     if chosen:
         click.echo(f"Target: {chosen.name} ({config.path})")
 
-    # Without targets, the file's top-level model/judge_model/max_tool_turns still apply.
+    # Without targets, the file's top-level model/judge_model/max_tool_steps still apply.
     layer = chosen or (Target("config", config.shared) if config else None)
     model = _from_layers(ctx, "model", model, layer)
     judge_model = _from_layers(ctx, "judge_model", judge_model, layer)
-    max_tool_turns = _from_layers(ctx, "max_tool_turns", max_tool_turns, layer)
+    max_tool_steps = _from_layers(ctx, "max_tool_steps", max_tool_steps, layer)
     evals_dir = evals_dir or (chosen and chosen.settings.get("evals_dir")) or "evals"
     if not Path(evals_dir).is_dir():
         raise click.ClickException(f"Evals folder {evals_dir} not found. Pass --evals-dir or set evals_dir.")
@@ -473,7 +473,7 @@ def run(
             evals_dir=Path(evals_dir).resolve(),
             results_path=_results_path(ctx, results_path),
             model=model,
-            max_tool_turns=max_tool_turns,
+            max_tool_steps=max_tool_steps,
             mcp_command=mcp_command,
             mcp_url=mcp_url,
             mcp_bearer_token=mcp_bearer_token,

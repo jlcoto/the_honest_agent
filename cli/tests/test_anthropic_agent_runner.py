@@ -103,14 +103,14 @@ class _Recorder:
         return await pending
 
 
-def _make_client(responses: list[_FakeResponse], max_tool_turns: int = 5) -> AnthropicMCPAgentClient:
+def _make_client(responses: list[_FakeResponse], max_tool_steps: int = 5) -> AnthropicMCPAgentClient:
     # Bypasses __init__ (which builds a real anthropic.AsyncAnthropic()) so
     # this stays a pure unit test of the loop, no real API key needed.
     client = AnthropicMCPAgentClient.__new__(AnthropicMCPAgentClient)
     client._anthropic = type("_FakeAnthropicClient", (), {"messages": _FakeMessages(responses)})()
     client._mcp = _FakeMCP()
     client._model = "claude-test"
-    client._max_tool_turns = max_tool_turns
+    client._max_tool_steps = max_tool_steps
     client._tools = [{"name": "calculator", "description": "Does math", "input_schema": {}}]
     return client
 
@@ -156,9 +156,9 @@ def test_a_model_calls_request_leaves_out_what_earlier_events_hold():
     assert len(client._anthropic.messages.sent[1]) == 3  # Claude itself got all three
 
 
-def test_run_stops_at_max_tool_turns():
+def test_run_stops_at_max_tool_steps():
     tool_call = _FakeToolUseBlock(type="tool_use", id="call_1", name="calculator", input={"expression": "1+1"})
-    client, recorder = _make_client([_FakeResponse(content=[tool_call])] * 2, max_tool_turns=2), _Recorder()
+    client, recorder = _make_client([_FakeResponse(content=[tool_call])] * 2, max_tool_steps=2), _Recorder()
 
     asyncio.run(client.run("Keep going", recorder))
 

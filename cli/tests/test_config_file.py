@@ -28,7 +28,7 @@ targets:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN
     evals_dir: evals_motherduck
-    max_tool_turns: 10
+    max_tool_steps: 10
     ignore_tools: [list_shares]
 """
 
@@ -69,7 +69,7 @@ def test_the_default_target_runs_without_any_flags(project, monkeypatch, fake_ru
     assert run["evals_dir"] == project / "evals"
     assert run["results_path"] == str(project / "out" / "results.duckdb")
     assert run["model"] == "claude-haiku-4-5"
-    assert run["max_tool_turns"] == 5
+    assert run["max_tool_steps"] == 5
     assert run["agent_name"] == "demo"
 
 
@@ -82,16 +82,16 @@ def test_a_named_target_brings_its_own_settings(project, monkeypatch, fake_run):
     assert (run["mcp_command"], run["mcp_url"]) == (None, "https://api.motherduck.com/mcp")
     assert run["mcp_bearer_token"] == "md-token"
     assert run["evals_dir"] == project / "evals_motherduck"
-    assert run["max_tool_turns"] == 10
+    assert run["max_tool_steps"] == 10
     assert run["ignore_tools"] == ["list_shares"]
     assert run["agent_name"] == "motherduck"
 
 
 def test_a_flag_beats_the_file(project, monkeypatch, fake_run):
-    result, run = _run(fake_run, "--max-tool-turns", "3", "--agent-name", "mine", "--mcp-url", "https://x/mcp")
+    result, run = _run(fake_run, "--max-tool-steps", "3", "--agent-name", "mine", "--mcp-url", "https://x/mcp")
 
     assert result.exit_code == 0, result.output
-    assert (run["max_tool_turns"], run["agent_name"]) == (3, "mine")
+    assert (run["max_tool_steps"], run["agent_name"]) == (3, "mine")
     assert (run["mcp_command"], run["mcp_url"]) == (None, "https://x/mcp")
 
 

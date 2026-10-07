@@ -305,7 +305,7 @@ targets:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN   # names the variable in .env, never the token
     evals_dir: evals_motherduck
-    max_tool_turns: 10
+    max_tool_steps: 10
 ```
 
 - `honest-agent run` evaluates the `default_target`; `honest-agent run --target
@@ -320,7 +320,7 @@ targets:
 | Setting | Where | Flag it replaces |
 |---|---|---|
 | `results_path` | top level only: every agent's results share one file, so the report can compare them | `--results-path` |
-| `model`, `judge_model`, `max_tool_turns` | top level, or per target | `--model`, `--judge-model`, `--max-tool-turns` |
+| `model`, `judge_model`, `max_tool_steps` | top level, or per target | `--model`, `--judge-model`, `--max-tool-steps` |
 | `mcp_command` or `mcp_url` (one of them) | target | `--mcp-command`, `--mcp-url` |
 | `bearer_token_env`: the variable holding the server's token | target | `--mcp-bearer-token` |
 | `evals_dir` | target | `--evals-dir` |
@@ -332,7 +332,7 @@ targets:
 
 For each setting, the first one found:
 
-1. a flag in the command, e.g. `--max-tool-turns 3`
+1. a flag in the command, e.g. `--max-tool-steps 3`
 2. an environment variable, from your shell or `.env`, e.g. `HONEST_AGENT_MODEL`
 3. the target in `honest_agent_config.yml`
 4. the built-in default
@@ -400,7 +400,7 @@ uv run honest-agent run --target motherduck
 - **Expect more tokens per eval.** The server describes 45 tools to the model
   on every call, and the agent explores (databases, tables, columns) before
   it queries: about 75k–140k input tokens per eval, against about 7k with the
-  demo server. That's also why the target sets `max_tool_turns: 10`.
+  demo server. That's also why the target sets `max_tool_steps: 10`.
 
 MotherDuck also publishes a local server (`uvx mcp-server-motherduck`). To
 use it instead:

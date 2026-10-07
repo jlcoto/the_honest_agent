@@ -42,7 +42,7 @@ _RAW_TABLES = {
         ("model", "varchar"),
         ("judge_model", "varchar"),
         ("honest_agent_version", "varchar"),
-        # JSON: max_tool_turns, max_tokens, the MCP server (URL or command, never a token), ignore_tools.
+        # JSON: max_tool_steps, max_tokens, the MCP server (URL or command, never a token), ignore_tools.
         ("settings", "varchar"),
         # JSON: the MCP server's tool list as returned by list_tools.
         ("tools_offered", "varchar"),

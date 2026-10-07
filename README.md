@@ -86,7 +86,7 @@ Other servers work the same way, for example MotherDuck's hosted one:
   motherduck:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN
-    max_tool_turns: 10
+    max_tool_steps: 10
 ```
 
 A server you run locally takes `mcp_command:` instead of `mcp_url:`, plus
@@ -175,7 +175,7 @@ same version, instead of the one pinned in its `uv.lock`.
 | A local server fails to log in to its database | It only gets the variables listed in its target's `mcp_env`; add the one it needs. |
 | `report` says a folder `isn't an honest-agent report folder` | `report` only writes into a new or empty folder, or one it wrote before, because it clears old files there. Pick another `--out`. |
 | `Address already in use` from `serve` | Another server uses the port: `serve --port 8001`. |
-| `hit the tool-turn limit without a final answer` | The agent needed more steps: set `max_tool_turns: 10` on the target. |
+| `hit the step limit without a final answer` | The agent needed more steps: set `max_tool_steps: 10` on the target. |
 
 ## Try the bundled example
 
