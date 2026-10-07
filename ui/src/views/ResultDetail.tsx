@@ -539,7 +539,7 @@ function StatusDot({ error }: { error: boolean }) {
         borderRadius: '50%',
         marginRight: 8,
         verticalAlign: 'middle',
-        background: error ? 'var(--acc-wrong)' : 'color-mix(in srgb, var(--ink-data) 70%, transparent)',
+        background: error ? 'var(--acc-wrong)' : 'var(--green-500)',
       }}
     />
   )
