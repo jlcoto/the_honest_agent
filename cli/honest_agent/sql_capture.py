@@ -57,6 +57,7 @@ general shape from one example.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 _HEURISTIC_FIELD_NAMES = ("sql", "query", "statement")
@@ -91,6 +92,70 @@ def _find_field(data: Any, field: str | None) -> str | None:
     return None
 
 
+def _text(content: Any) -> str:
+    """A tool result's content as text: a string as is, a list of content blocks joined."""
+    if isinstance(content, list):
+        return "\n".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
+    return content if isinstance(content, str) else json.dumps(content)
+
+
+_ERROR_PREFIXES = (
+    r"MCP error calling tool \S+:\s*",
+    r"MCP Server tool error:\s*",
+    r"Error calling tool '\S+':\s*",
+    r"Agent error \(code \d+\):\s*",
+    r"SQL compilation error:\s*",
+)
+
+
+def error_message(text: str) -> str:
+    """The readable part of a failed tool call's result: the MCP wrapper's prefixes,
+    request ids and a bare "SQL compilation error:" header dropped."""
+    quoted = re.search(r'^error:\s*"(.*)"\s*$', text, re.MULTILINE)  # MotherDuck: `error: "..."`
+    if quoted:
+        return quoted.group(1).replace('\\"', '"')
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        for prefix in _ERROR_PREFIXES:
+            line = re.sub("^" + prefix, "", line)
+        if line and not line.lower().startswith("request-id"):
+            lines.append(line)
+    return " ".join(lines)
+
+
+def single_value(text: str) -> tuple[str, str] | None:
+    """(column, value) when a query's result is exactly one row and one column, in any
+    of the formats the servers seen so far return; None otherwise."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        if isinstance(data.get("result_set"), dict):  # Snowflake
+            result_set = data["result_set"]
+            columns = [c.get("name") for c in result_set.get("resultSetMetaData", {}).get("rowType", [])]
+            rows = result_set.get("data") or []
+        else:  # MotherDuck's local server
+            columns, rows = data.get("columns") or [], data.get("rows") or []
+        if len(columns) == 1 and len(rows) == 1 and isinstance(rows[0], list) and len(rows[0]) == 1:
+            return str(columns[0]), str(rows[0][0])
+        return None
+    # MotherDuck's hosted server: `columns[1]: name` ... `rows[1]:` then `- [1]: value`.
+    toon = re.search(
+        r"^columns\[1\]:[ \t]*([^\n]+)$.*^rows\[1\]:[ \t]*\n[ \t]*- \[1\]:[ \t]*([^\n]+)$",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if toon:
+        return toon.group(1).strip(), toon.group(2).strip().strip('"')
+    # A header line and a value line, as the demo server returns.
+    lines = [line.strip() for line in text.strip().splitlines()]
+    if len(lines) == 2 and all(line and "," not in line and ":" not in line for line in lines):
+        return lines[0], lines[1]
+    return None
+
+
 def extract_sql_calls(
     trace: list[dict[str, Any]],
     sql_fields: dict[str, str] | None = None,
@@ -99,7 +164,11 @@ def extract_sql_calls(
     """Scans a message trace (as produced by agent_runner.plain_content) for
     tool_use blocks and pulls out SQL calls, in the order they happened.
     Each returned item is `{"tool_name": ..., "sql": ..., "is_error": ...,
-    "generated": ...}`. `is_error` is True when the tool's result was an error
+    "generated": ..., "step": ..., "error": ..., "result_column": ...,
+    "result_value": ...}`. `step` is the 1-based model call that made it.
+    `error` is the readable error message when the call failed;
+    `result_column`/`result_value` hold the result when it is exactly one row and
+    one column (bigger results stay out of the report). `is_error` is True when the tool's result was an error
     (e.g. a SQL compilation error). `generated` is True when the SQL came from
     the tool's response rather than its input: the tool wrote it (e.g. Cortex
     Analyst) but didn't necessarily run it. Provenance counts neither, since
@@ -118,11 +187,15 @@ def extract_sql_calls(
     sql_fields = sql_fields or {}
     skipped = _NON_SQL_TOOLS.union(ignore_tools or [])
 
-    tool_uses: list[tuple[Any, str, dict]] = []
+    tool_uses: list[tuple[Any, str, dict, int]] = []
     results_by_id: dict[Any, Any] = {}
+    texts_by_id: dict[Any, str] = {}
     errored_ids: set[Any] = set()
 
+    step = 0
     for message in trace:
+        if message.get("role") == "assistant":
+            step += 1
         content = message.get("content")
         if not isinstance(content, list):
             continue
@@ -131,9 +204,10 @@ def extract_sql_calls(
                 continue
             block_type = block.get("type")
             if block_type == "tool_use":
-                tool_uses.append((block.get("id"), block.get("name"), block.get("input") or {}))
+                tool_uses.append((block.get("id"), block.get("name"), block.get("input") or {}, step))
             elif block_type == "tool_result":
                 result_content = block.get("content")
+                texts_by_id[block.get("tool_use_id")] = _text(result_content)
                 if isinstance(result_content, str):
                     try:
                         result_content = json.loads(result_content)
@@ -144,19 +218,26 @@ def extract_sql_calls(
                     errored_ids.add(block.get("tool_use_id"))
 
     calls: list[dict[str, Any]] = []
-    for tool_use_id, tool_name, tool_input in tool_uses:
+    for tool_use_id, tool_name, tool_input, step in tool_uses:
         if tool_name in skipped and tool_name not in sql_fields:
             continue
         field = sql_fields.get(tool_name)
         sent = _find_field(tool_input, field)
         value = sent or _find_field(results_by_id.get(tool_use_id), field)
         if value:
+            text = texts_by_id.get(tool_use_id, "")
+            # A generated statement's response is the SQL itself, not a query result.
+            value_ = single_value(text) if sent is not None and tool_use_id not in errored_ids else None
             calls.append(
                 {
                     "tool_name": tool_name,
                     "sql": value,
                     "is_error": tool_use_id in errored_ids,
                     "generated": sent is None,
+                    "step": step,
+                    "error": error_message(text) if tool_use_id in errored_ids else None,
+                    "result_column": value_[0] if value_ else None,
+                    "result_value": value_[1] if value_ else None,
                 }
             )
 

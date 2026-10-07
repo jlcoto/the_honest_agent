@@ -11,7 +11,7 @@ import {
   stripMarkdown,
   toolCallsFor,
 } from '../data/derive'
-import type { ReportData, ResultRow, SourceRef } from '../data/types'
+import type { ReportData, ResultRow, SourceRef, ToolCallRow } from '../data/types'
 import { Badge, Button, Card, ScoreStat } from '../ds'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -502,6 +502,128 @@ function StepsStat({ r }: { r: ResultRow }) {
   )
 }
 
+const PREVIEW_CHARS = 60
+
+// A query as one line: comments dropped, whitespace collapsed, cut to PREVIEW_CHARS.
+function queryPreview(sql: string): string {
+  const line = sql
+    .replace(/--[^\n]*/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\(\s/g, '(')
+    .replace(/\s\)/g, ')')
+    .replace(/\s*;\s*$/, '')
+    .trim()
+  return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS - 1).trimEnd()}…` : line
+}
+
+const firstSentence = (s: string) => s.split(/(?<=\.)\s/)[0]
+const errorText: CSSProperties = { font: 'var(--type-small)', color: 'var(--acc-wrong-ink)' }
+const stepLink: CSSProperties = {
+  all: 'unset',
+  cursor: 'pointer',
+  font: 'var(--type-small)',
+  color: 'var(--fg-3)',
+  textDecoration: 'underline',
+  textDecorationColor: 'var(--border-2)',
+  textUnderlineOffset: 2,
+  whiteSpace: 'nowrap',
+}
+const sqlCell: CSSProperties = { padding: '11px 14px 11px 0', borderBottom: '1px solid var(--border-1)', verticalAlign: 'baseline' }
+
+/** The queries the agent sent to the warehouse, one row each: the step that ran it (a link
+ * to that step in the Trace) and the query on one line, with the error when it failed.
+ * A row opens to the full SQL and, when the query returned exactly one value, that value.
+ * SQL a tool only generated (e.g. Cortex Analyst) wasn't sent, so it isn't listed. */
+function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
+  const [open, setOpen] = useState<Set<number>>(new Set())
+  const sent = calls.filter((c) => !c.generated)
+  const toggle = (i: number) =>
+    setOpen((was) => {
+      const now = new Set(was)
+      if (now.has(i)) now.delete(i)
+      else now.add(i)
+      return now
+    })
+  const goToStep = (step: number) =>
+    document.getElementById(`step-${step}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <h3 style={{ margin: 0, font: 'var(--type-h2)', color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>SQL calls</h3>
+        <span style={{ font: 'var(--type-small)', color: 'var(--fg-3)' }}>{sent.length}</span>
+      </div>
+      {sent.length === 0 ? (
+        <p style={note}>No SQL was run for this answer.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Step', 'Query'].map((h) => (
+                  <th
+                    key={h}
+                    style={{ font: 'var(--type-label)', color: 'var(--fg-3)', textAlign: 'left', padding: '0 14px 10px 0', borderBottom: '1px solid var(--border-1)' }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sent.map((c) => {
+                const sql = (parseJson(c.payload) as { sql?: string } | null)?.sql ?? c.payload
+                const isOpen = open.has(c.call_index)
+                return (
+                  <Fragment key={c.call_index}>
+                    <tr onClick={() => toggle(c.call_index)} style={{ cursor: 'pointer' }}>
+                      <td style={{ ...sqlCell, width: 64 }}>
+                        {c.step != null ? (
+                          <button
+                            type="button"
+                            style={stepLink}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              goToStep(c.step!)
+                            }}
+                          >
+                            Step {c.step}
+                          </button>
+                        ) : null}
+                      </td>
+                      <td style={sqlCell}>
+                        <span style={{ font: '400 12.5px/1.4 var(--font-mono)', color: 'var(--fg-1)' }}>{queryPreview(sql)}</span>
+                        {c.is_error && c.error && !isOpen ? <div style={{ ...errorText, marginTop: 3 }}>{firstSentence(c.error)}</div> : null}
+                      </td>
+                    </tr>
+                    {isOpen ? (
+                      <tr>
+                        <td style={{ borderBottom: '1px solid var(--border-1)' }} />
+                        <td style={{ padding: '14px 14px 14px 0', borderBottom: '1px solid var(--border-1)' }}>
+                          <div style={stack(10)}>
+                            <Code text={sql} />
+                            {c.is_error && c.error ? <span style={errorText}>{c.error}</span> : null}
+                            {!c.is_error && c.result_value != null ? (
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-sunken)', border: '1px solid var(--border-1)' }}>
+                                <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>{c.result_column}</span>
+                                <span style={{ font: '500 15px/1.2 var(--font-mono)', color: 'var(--fg-1)' }}>{c.result_value}</span>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 const parseJson = (s: string): unknown => {
   try {
     return JSON.parse(s)
@@ -553,10 +675,17 @@ function roleLabel(m: Message): string {
 function Trace({ raw }: { raw: string | undefined }) {
   const messages = raw ? parseJson(raw) : null
   if (!Array.isArray(messages)) return <pre style={codeBlock}>{raw ?? 'No trace recorded.'}</pre>
+  let step = 0
+  const steps = (messages as Message[]).map((m) => (m.role === 'assistant' ? ++step : step))
   return (
     <div style={stack(16)}>
       {(messages as Message[]).map((m, i) => (
-        <div key={i} style={{ ...stack(8), paddingTop: i ? 16 : 0, borderTop: i ? '1px solid var(--border-1)' : 'none' }}>
+        <div
+          key={i}
+          // Each assistant message is one step; SQL calls link here.
+          id={m.role === 'assistant' ? `step-${steps[i]}` : undefined}
+          style={{ ...stack(8), paddingTop: i ? 16 : 0, borderTop: i ? '1px solid var(--border-1)' : 'none', scrollMarginTop: 16 }}
+        >
           <Num n={i + 1} label={roleLabel(m)} />
           {typeof m.content === 'string' ? (
             <Paragraphs text={m.content} />
@@ -660,35 +789,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
 
       <ProvenanceCard r={r} />
 
-      <Card title={`SQL calls (${calls.length})`}>
-        {calls.length === 0 ? (
-          <p style={{ margin: 0, font: 'var(--type-small)', color: 'var(--fg-3)' }}>No SQL was captured for this answer.</p>
-        ) : (
-          <div style={stack(16)}>
-            {calls.map((c) => {
-              const payload = parseJson(c.payload) as { sql?: string } | null
-              return (
-                <div key={c.call_index} style={stack(8)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <Num n={c.call_index + 1} label={<span style={mono}>{c.tool_name}</span>} />
-                    {c.is_error ? (
-                      <Badge size="sm" tone="wrong" dot>
-                        Error
-                      </Badge>
-                    ) : null}
-                    {c.generated ? (
-                      <Badge size="sm" dot>
-                        Generated, not run
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <Code text={payload?.sql ?? c.payload} />
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </Card>
+      <SqlCallsCard calls={calls} />
 
       <Card title="Trace">
         <Trace raw={trace} />

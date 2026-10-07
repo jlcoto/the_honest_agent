@@ -64,6 +64,10 @@ export interface ToolCallRow {
   payload: string // JSON, shape depends on `type`
   is_error: boolean | null // the tool returned an error
   generated: boolean | null // SQL a tool wrote (e.g. Cortex Analyst), not necessarily run
+  step: number | null // the step (model call) that made the call
+  error: string | null // the readable error message, when the call failed
+  result_column: string | null // set only when the result was exactly one row and one column
+  result_value: string | null
 }
 
 export interface ReportData {
