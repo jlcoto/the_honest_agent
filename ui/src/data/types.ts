@@ -32,6 +32,9 @@ export interface ResultRow {
   agent_backend: string
   agent_name: string | null // null for results stored before agents were recorded
   latency_ms: number | null
+  steps: number | null // model calls the agent made, each with the tool calls it asked for
+  max_steps: number | null // the run's max_tool_steps
+  hit_step_limit: boolean | null // used every step and was still asking for tools: no answer
   agent_input_tokens: number | null
   agent_output_tokens: number | null
   grading_input_tokens: number | null

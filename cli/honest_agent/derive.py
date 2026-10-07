@@ -139,7 +139,7 @@ def derive_result(con, result_id: str) -> Derived:
     definition = EvalDefinition(**json.loads(evaluation["definition"]))
 
     agent_events = [e for e in events if e["kind"] in ("model_call", "tool_call")]
-    answer, _ = agent_answer(agent_events, settings["max_tool_steps"])
+    answer, hit_step_limit = agent_answer(agent_events, settings["max_tool_steps"])
     trace = conversation(definition.prompt, agent_events)
 
     grading = next((e for e in events if e["kind"] == "grading_call"), None)
@@ -208,6 +208,10 @@ def derive_result(con, result_id: str) -> Derived:
         "agent_backend": "mcp",
         "agent_name": run["agent_name"],
         "latency_ms": latency_ms,
+        # One step is one model call and the tool calls it asks for.
+        "steps": sum(1 for e in agent_events if e["kind"] == "model_call"),
+        "max_steps": settings["max_tool_steps"],
+        "hit_step_limit": hit_step_limit,
         "agent_input_tokens": sum(t[0] for t in agent_tokens),
         "agent_output_tokens": sum(t[1] for t in agent_tokens),
         "grading_input_tokens": grading_tokens[0],

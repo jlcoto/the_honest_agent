@@ -468,6 +468,40 @@ function ProvenanceCard({ r }: { r: ResultRow }) {
   )
 }
 
+/** Steps the agent took against the run's limit: one bar segment per allowed step. The last
+ * segment turns red, with a note, only when the agent used them all without answering. */
+function StepsStat({ r }: { r: ResultRow }) {
+  if (r.steps == null) return <ScoreStat label="Steps" format="raw" value="—" caption="Not recorded for this run" />
+  const { steps, max_steps: max } = r
+  return (
+    <div style={stack(8)}>
+      <ScoreStat label="Steps" format="raw" value={steps} />
+      {max != null ? (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${max}, 1fr)`, gap: 4 }}>
+          {Array.from({ length: max }, (_, i) => (
+            <div
+              key={i}
+              style={{
+                height: 8,
+                borderRadius: 2,
+                background:
+                  r.hit_step_limit && i === steps - 1
+                    ? 'var(--acc-wrong)'
+                    : i < steps
+                      ? 'color-mix(in srgb, var(--ink-data) 75%, transparent)'
+                      : 'var(--chart-empty)',
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+      {r.hit_step_limit ? (
+        <span style={{ font: 'var(--type-small)', color: 'var(--acc-wrong-ink)' }}>Hit the limit before answering</span>
+      ) : null}
+    </div>
+  )
+}
+
 const parseJson = (s: string): unknown => {
   try {
     return JSON.parse(s)
@@ -606,12 +640,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           )}
         </Card>
         <Card>
-          <ScoreStat
-            label="Latency"
-            format="raw"
-            value={r.latency_ms == null ? '—' : `${(r.latency_ms / 1000).toFixed(1)}s`}
-            caption="Agent time, excluding grading"
-          />
+          <StepsStat r={r} />
         </Card>
         <Card>
           {r.agent_input_tokens == null && r.agent_output_tokens == null ? (
