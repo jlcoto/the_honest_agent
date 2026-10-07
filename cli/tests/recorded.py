@@ -9,7 +9,7 @@ from honest_agent.eval_loader import EvalDefinition
 from honest_agent.raw import RunRecorder
 from honest_agent.storage import connect
 
-SETTINGS = {"max_tool_turns": 5, "max_tokens": 1024, "mcp": {"command": "python server.py"}, "ignore_tools": []}
+SETTINGS = {"max_tool_steps": 5, "max_tokens": 1024, "mcp": {"command": "python server.py"}, "ignore_tools": []}
 
 
 def definition(**overrides) -> EvalDefinition:

@@ -40,7 +40,7 @@ def test_records_come_back_in_order_with_their_run(tmp_path: Path):
     (rec,) = read_records(path)
 
     assert rec["run"]["model"] == "claude-test"
-    assert json.loads(rec["run"]["settings"])["max_tool_turns"] == 5
+    assert json.loads(rec["run"]["settings"])["max_tool_steps"] == 5
     assert [e["seq"] for e in rec["events"]] == [0, 1]
     assert json.loads(rec["events"][1]["response"])["content"] == [text("second")]
 

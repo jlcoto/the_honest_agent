@@ -31,21 +31,21 @@ def _mcp_tool_to_anthropic_schema(tool: Any) -> dict:
 class AnthropicMCPAgentClient(AgentClient):
     """Claude as the agent, with the tools of a live, already-connected `mcp.Client`."""
 
-    def __init__(self, mcp_client, model: str, tools: list, max_tool_turns: int = 5):
+    def __init__(self, mcp_client, model: str, tools: list, max_tool_steps: int = 5):
         import anthropic
 
         self._anthropic = anthropic.AsyncAnthropic()
         self._mcp = mcp_client
         self._model = model
         self._tools = [_mcp_tool_to_anthropic_schema(t) for t in tools]
-        self._max_tool_turns = max_tool_turns
+        self._max_tool_steps = max_tool_steps
 
     async def run(self, prompt: str, record: EvalRecorder) -> None:
         messages: list[dict] = [{"role": "user", "content": prompt}]
         already_recorded = 0  # messages earlier events hold: past requests, and responses
-        # When the loop runs out of turns while Claude still asks for tools, there is no
+        # When the loop runs out of steps while Claude still asks for tools, there is no
         # final answer; derive.py reads that from the last recorded response.
-        for _ in range(self._max_tool_turns):
+        for _ in range(self._max_tool_steps):
             request = {
                 "model": self._model,
                 "max_tokens": MAX_TOKENS,

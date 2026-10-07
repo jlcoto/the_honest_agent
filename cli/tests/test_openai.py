@@ -102,12 +102,12 @@ def test_openai_agent_records_each_call_and_sends_tool_results_back():
     assert recorder.calls[2][2]["messages"] == [sent[-1]]
 
 
-def test_openai_agent_stops_at_max_tool_turns():
+def test_openai_agent_stops_at_max_tool_steps():
     openai = _fake_openai(_completion(None, [_tool_call("select 1")]))
     recorder = _Recorder()
 
     asyncio.run(
-        OpenAIMCPAgentClient(_FakeMCP(), model="gpt-5.4-mini", tools=[], max_tool_turns=1, client=openai).run(
+        OpenAIMCPAgentClient(_FakeMCP(), model="gpt-5.4-mini", tools=[], max_tool_steps=1, client=openai).run(
             "?", recorder
         )
     )

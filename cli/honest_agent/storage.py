@@ -101,6 +101,12 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     # reports at connect time. NULL for rows written before this column existed.
     ("agent_name", "varchar"),
     ("latency_ms", "integer"),
+    # Steps the agent took (one model call each, with the tool calls it asked
+    # for), the run's max_tool_steps, and whether it used them all without
+    # answering. NULL for rows from before the raw layer that weren't backfilled.
+    ("steps", "integer"),
+    ("max_steps", "integer"),
+    ("hit_step_limit", "boolean"),
     # Two cost centers, kept separate rather than one combined total: the
     # agent's own tool-use loop (one or more `messages.create` calls) vs. the
     # grading call (extract_match/llm_judge; zero for contains, which makes

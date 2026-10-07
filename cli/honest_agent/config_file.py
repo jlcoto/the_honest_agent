@@ -13,7 +13,7 @@ from flags, environment variables or built-in defaults, as before.
         mcp_url: https://api.motherduck.com/mcp
         bearer_token_env: MOTHERDUCK_TOKEN                # names the variable, never the secret
         evals_dir: evals_motherduck
-        max_tool_turns: 10
+        max_tool_steps: 10
 
 Precedence, per setting: command-line flag > environment variable > this file > built-in
 default (applied in cli.py). Relative paths are resolved from the file's own folder, so a
@@ -32,7 +32,7 @@ CONFIG_FILE_NAME = "honest_agent_config.yml"
 EXAMPLE_CONFIG_FILE_NAME = "honest_agent_config.example.yml"
 
 # Settings any target can set, or the top level can set for every target.
-_SHARED_KEYS = {"model", "judge_model", "max_tool_turns"}
+_SHARED_KEYS = {"model", "judge_model", "max_tool_steps"}
 _TOP_LEVEL_KEYS = _SHARED_KEYS | {"results_path", "default_target", "targets"}
 # results_path stays top-level only: every agent's results go in one file, so the report
 # can compare them side by side.

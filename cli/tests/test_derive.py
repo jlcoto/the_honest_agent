@@ -64,6 +64,7 @@ def test_a_claude_run_derives_its_answer_trace_tokens_and_tools(tmp_path: Path):
         {"role": "assistant", "content": [text("It was 311928357.78.")]},
     ]
     assert isinstance(row["latency_ms"], int)
+    assert (row["steps"], row["max_steps"], row["hit_step_limit"]) == (2, 5, False)
 
 
 def test_an_openai_run_is_converted_to_the_same_conversation_format(tmp_path: Path):
@@ -104,14 +105,15 @@ def test_an_openai_run_is_converted_to_the_same_conversation_format(tmp_path: Pa
     }
 
 
-def test_a_last_reply_still_asking_for_tools_means_the_agent_ran_out_of_turns(tmp_path: Path):
+def test_a_last_reply_still_asking_for_tools_means_the_agent_ran_out_of_steps(tmp_path: Path):
     path = str(tmp_path / "results.duckdb")
     record(path, [model_call(claude_reply(tool_use("t1", "query_warehouse", {"sql": SQL})))])
 
     row = _derive(path)
 
-    assert row["agent_answer"].startswith("[honest-agent error] Exceeded max_tool_turns=5")
+    assert row["agent_answer"].startswith("[honest-agent error] Exceeded max_tool_steps=5")
     assert row["accuracy_score"] == 0.0
+    assert (row["steps"], row["max_steps"], row["hit_step_limit"]) == (1, 5, True)
 
 
 def test_a_tool_result_flagged_as_an_error_shows_as_one(tmp_path: Path):
@@ -204,7 +206,7 @@ def test_rebuild_uses_the_settings_the_run_had(tmp_path: Path):
             tool_call("t1", "search_tables", {"query": "orders"}, mcp_result("orders, lineitem")),
             model_call(claude_reply(text("4"))),
         ],
-        settings={"max_tool_turns": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": ["search_tables"]},
+        settings={"max_tool_steps": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": ["search_tables"]},
     )
 
     assert _derive(path)["sql_calls"] == []

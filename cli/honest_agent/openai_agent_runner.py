@@ -29,17 +29,17 @@ def _mcp_tool_to_openai_schema(tool: Any) -> dict:
 class OpenAIMCPAgentClient(AgentClient):
     """GPT as the agent, with the tools of a live, already-connected `mcp.Client`."""
 
-    def __init__(self, mcp_client, model: str, tools: list, max_tool_turns: int = 5, client: Any = None):
+    def __init__(self, mcp_client, model: str, tools: list, max_tool_steps: int = 5, client: Any = None):
         self._openai = client or openai_client()
         self._mcp = mcp_client
         self._model = model
         self._tools = [_mcp_tool_to_openai_schema(t) for t in tools]
-        self._max_tool_turns = max_tool_turns
+        self._max_tool_steps = max_tool_steps
 
     async def run(self, prompt: str, record: EvalRecorder) -> None:
         chat: list[dict] = [{"role": "user", "content": prompt}]
         already_recorded = 0  # messages earlier events hold: past requests, and responses
-        for _ in range(self._max_tool_turns):
+        for _ in range(self._max_tool_steps):
             # No max_completion_tokens: on reasoning models it also counts hidden
             # reasoning tokens, so a cap can cut off the answer itself.
             request = {

@@ -23,9 +23,9 @@ targets:
     mcp_url: https://api.motherduck.com/mcp
     bearer_token_env: MOTHERDUCK_TOKEN
     evals_dir: evals_motherduck
-    # The agent explores (databases, tables, columns) before it queries, so 5 turns is
+    # The agent explores (databases, tables, columns) before it queries, so 5 steps is
     # too few here.
-    max_tool_turns: 10
+    max_tool_steps: 10
 
   # A Snowflake-managed MCP server (see README.md). Replace the placeholders with yours.
   snowflake:

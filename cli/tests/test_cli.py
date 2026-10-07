@@ -219,7 +219,7 @@ def _run_loop(path: str, agent, judge, definitions) -> list[dict]:
             target="demo",
             model="claude-test",
             judge_model="claude-judge",
-            settings={"max_tool_turns": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": []},
+            settings={"max_tool_steps": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": []},
             tools_offered=[],
         )
         return asyncio.run(_eval_loop(agent, definitions, judge, "claude-judge", "run_1", recorder, con))
