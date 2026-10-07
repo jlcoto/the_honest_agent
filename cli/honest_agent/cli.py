@@ -514,15 +514,39 @@ def serve(out: str, port: int, open_browser: bool):
 
 
 @main.command()
+@click.option(
+    "--target",
+    default=None,
+    help=f"Target (agent) from {CONFIG_FILE_NAME} to alert on. Defaults to its default_target.",
+)
 @click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option("--webhook-url", envvar="SLACK_WEBHOOK_URL", default=None)
+@click.option(
+    "--report-url",
+    envvar="HONEST_AGENT_REPORT_URL",
+    default=None,
+    help="Where the report is published, so the alert links to each failing eval.",
+)
 @click.pass_context
-def notify(ctx: click.Context, results_path: str | None, webhook_url: str | None):
-    """Send a Slack alert if the most recent run had any eval below its threshold."""
+def notify(
+    ctx: click.Context, target: str | None, results_path: str | None, webhook_url: str | None, report_url: str | None
+):
+    """Send a Slack alert if the target's most recent run had any eval below its threshold."""
     results_path = _results_path(ctx, results_path)
     if not webhook_url:
         raise click.ClickException("No Slack webhook URL. Pass --webhook-url or set SLACK_WEBHOOK_URL.")
-    notify_mod.notify_on_failures(results_path, webhook_url)
+    config = _config(ctx)
+    if config is None and target is not None:
+        raise click.ClickException(
+            f"--target {target} needs a {CONFIG_FILE_NAME}, and none was found." + missing_config_hint(Path.cwd())
+        )
+    try:
+        chosen = config.target(target) if config and config.targets else None
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    # Without targets there's one agent to alert on: whichever ran last.
+    agent_name = (chosen.settings.get("agent_name") or chosen.name) if chosen else None
+    notify_mod.notify_on_failures(results_path, webhook_url, agent_name, report_url)
 
 
 @main.command()

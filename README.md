@@ -189,7 +189,7 @@ export ANTHROPIC_API_KEY=...                                 # or put it in a .e
 uv run honest-agent run                                        # evaluates the default target in honest_agent_config.yml
 uv run honest-agent report                                     # writes the web report to honest_agent_report/
 uv run honest-agent serve                                      # opens the report in your browser, like `dbt docs serve`
-uv run honest-agent notify --webhook-url ...                   # Slack alert on regressions
+uv run honest-agent notify --webhook-url ...                   # Slack alert if the default target's latest run failed
 ```
 
 `honest_agent_config.yml` holds the project's settings, with one target
@@ -206,6 +206,14 @@ MCP server (MotherDuck, Snowflake, or your own) instead of the bundled demo
 one, and `example_project/evals/example_eval.yml` for how each eval
 declares its own accuracy/provenance thresholds (`grading.min_score` /
 `provenance.min_score`).
+
+`honest-agent notify` alerts on one target's latest run: the default target,
+or another with `--target`, the same way `run` picks one. Use one webhook per
+environment (`notify --target snowflake_dev` to a dev channel), and give a dev
+target its own `agent_name`: two targets with the same `agent_name` file their
+runs, and alerts, as the same agent. Pass `--report-url` (or set
+`HONEST_AGENT_REPORT_URL`) to where the report is published, and the alert
+links each failing eval to its page.
 
 ## Developing the CLI
 
