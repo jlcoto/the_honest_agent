@@ -1,6 +1,5 @@
-"""Tests only the pure logic in mcp_agent_runner.py (argument validation and
-tool-schema conversion), which runs before build_mcp_client() imports `mcp`.
-"""
+"""The Claude agent loop and its tool-schema conversion, with a fake Anthropic client and
+MCP server (no API key or network needed)."""
 
 from __future__ import annotations
 
@@ -8,28 +7,7 @@ import asyncio
 import copy
 from dataclasses import dataclass, field
 
-import pytest
-
-from honest_agent.mcp_agent_runner import (
-    MCPAgentClient,
-    _mcp_tool_to_anthropic_schema,
-    build_mcp_client,
-)
-
-
-def test_build_mcp_client_rejects_both_command_and_url():
-    with pytest.raises(ValueError, match="not both"):
-        build_mcp_client(command="python server.py", url="https://example.com/mcp")
-
-
-def test_build_mcp_client_requires_one_of_command_or_url():
-    with pytest.raises(ValueError, match="neither"):
-        build_mcp_client()
-
-
-def test_build_mcp_client_rejects_empty_command():
-    with pytest.raises(ValueError, match="empty"):
-        build_mcp_client(command="   ")
+from honest_agent.anthropic_agent_runner import AnthropicMCPAgentClient, _mcp_tool_to_anthropic_schema
 
 
 @dataclass
@@ -125,10 +103,10 @@ class _Recorder:
         return await pending
 
 
-def _make_client(responses: list[_FakeResponse], max_tool_turns: int = 5) -> MCPAgentClient:
+def _make_client(responses: list[_FakeResponse], max_tool_turns: int = 5) -> AnthropicMCPAgentClient:
     # Bypasses __init__ (which builds a real anthropic.AsyncAnthropic()) so
     # this stays a pure unit test of the loop, no real API key needed.
-    client = MCPAgentClient.__new__(MCPAgentClient)
+    client = AnthropicMCPAgentClient.__new__(AnthropicMCPAgentClient)
     client._anthropic = type("_FakeAnthropicClient", (), {"messages": _FakeMessages(responses)})()
     client._mcp = _FakeMCP()
     client._model = "claude-test"
@@ -185,17 +163,3 @@ def test_run_stops_at_max_tool_turns():
     asyncio.run(client.run("Keep going", recorder))
 
     assert [kind for kind, _, _ in recorder.calls] == ["model_call", "tool_call", "model_call", "tool_call"]
-
-
-def test_a_local_server_gets_only_the_variables_it_is_given(monkeypatch):
-    import mcp
-
-    monkeypatch.setattr(mcp, "Client", lambda params: params)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
-    monkeypatch.setenv("MOTHERDUCK_TOKEN", "md-token")
-
-    params = build_mcp_client(command="uvx mcp-server-motherduck", env_names=["MOTHERDUCK_TOKEN"])
-
-    assert params.env["MOTHERDUCK_TOKEN"] == "md-token"
-    assert "ANTHROPIC_API_KEY" not in params.env
-    assert "PATH" in params.env

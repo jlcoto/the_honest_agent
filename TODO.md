@@ -64,9 +64,6 @@ Left on purpose, low value for now (small, rarely-changing code):
   in `Overview.tsx` and `derive.ts` instead of `bucketOf`/`pct` from
   `ui/src/ds/components/data/scale.js`; `METRICS` and the empty-state card
   in `Overview.tsx` / `Compare.tsx`.
-- **Naming:** `mcp_agent_runner.MCPAgentClient` is the Claude one, next to
-  `OpenAIMCPAgentClient`; rename to `anthropic_agent_runner` /
-  `AnthropicMCPAgentClient`.
 
 ## Semantic-layer provenance checking
 
@@ -162,31 +159,23 @@ left open on purpose:
    correct queries as misses; if that comes up, let a target declare its
    default database/schema.
 
-## Store the full agent trace (own branch, after the result page)
+## Result page: SQL calls and Trace cards
 
-Agreed on 2026-10-06. `agent_logs.agent_trace` keeps the conversation, not the
-full exchange, so these can't be recovered for any run made so far:
-
-- why each model turn ended (`stop_reason` / `finish_reason`): Claude runs
-  with `max_tokens=1024`, and a cut-off answer looks like a finished one;
-- per-turn token usage (only totals are kept) and per-tool-call timings;
-- the tools offered to the agent (names, descriptions, input schemas);
-- non-text MCP tool output (structured content, images, resources): only
-  text blocks are kept;
-- the grader's raw exchange (the prompt can be rebuilt from code, the reply
-  can't).
-
-Plan: store everything sent to and received from the model and the tools, as
-raw as possible: each model call's settings and full response, each MCP
-result in full, the tools offered, and the grading prompt and reply. It goes in
-`agent_logs` (no new tables). `report.json` copies only what the result
-page's Trace card shows, so the report doesn't grow; the full trace stays in
-`results.duckdb` for `honest-agent logs` and DuckDB queries. Old runs stay as
-they are. Sensitive data is the user's responsibility (README, "Run and look
-at the results").
-
-Separately, the Trace card shows Claude's (redacted) thinking blocks as raw
-JSON with a long signature; that's a frontend fix, independent of this.
+These need a frontend pass (seen 2026-10-06, kept apart from the storage work
+on purpose). The raw record (`raw.events`, see `honest-agent logs`) now also
+holds each call's `stop_reason`, usage and timing, and full tool results, which
+the cards could show (e.g. flag a turn cut off by `max_tokens`); report.json
+doesn't carry it yet:
+- thinking blocks show as raw JSON with a long signature and empty text
+  (Claude returns them redacted);
+- tool results are raw JSON dumps (Snowflake's `result_set` with all its
+  column metadata); the actual values are hard to find;
+- long results don't collapse: the 12-line limit counts newlines, and these
+  are one wrapped line;
+- a tool call and its result are separate numbered steps, not visibly paired;
+  steps count messages, not the agent's actions;
+- every query appears twice (SQL calls card and Trace), and the SQL calls card
+  doesn't show what each call returned.
 
 ## Migrate S3 export from plain Parquet to DuckLake
 

@@ -1,5 +1,5 @@
 """An AgentClient that evaluates an OpenAI model (GPT) against a live MCP server --
-the same loop as MCPAgentClient (mcp_agent_runner.py), on OpenAI's Chat
+the same loop as AnthropicMCPAgentClient (anthropic_agent_runner.py), on OpenAI's Chat
 Completions API instead of Anthropic's.
 
 Every call is recorded as OpenAI sent and returned it (raw.py); derive.py turns
