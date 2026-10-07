@@ -1039,17 +1039,14 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
 
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          gap: '4px 14px',
-          alignItems: 'baseline',
+          ...stack(4),
           padding: '6px 0 6px 16px',
           borderLeft: '5px solid var(--green-300)',
           // Optical alignment: the cards below have rounded corners, so their edge reads a little further in.
           marginLeft: 4,
         }}
       >
-        <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)', letterSpacing: 'var(--ls-caps)', textTransform: 'uppercase' }}>Prompt</span>
+        <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Prompt</span>
         <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty' }}>
           {r.prompt}
         </p>
