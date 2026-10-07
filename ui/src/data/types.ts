@@ -52,6 +52,12 @@ export interface AgentLogRow {
   run_id: string
   eval_id: string
   agent_trace: string // JSON-encoded turn-by-turn trace
+  step_details: string | null // JSON StepDetails; null for runs from before the raw layer
+}
+
+export interface StepDetails {
+  steps: { input_tokens: number; output_tokens: number; duration_ms: number | null; stop_reason: string | null }[]
+  tool_ms: Record<string, number | null> // each tool call's duration, by tool_use id
 }
 
 export interface ToolCallRow {
@@ -64,6 +70,10 @@ export interface ToolCallRow {
   payload: string // JSON, shape depends on `type`
   is_error: boolean | null // the tool returned an error
   generated: boolean | null // SQL a tool wrote (e.g. Cortex Analyst), not necessarily run
+  step: number | null // the step (model call) that made the call
+  error: string | null // the readable error message, when the call failed
+  result_column: string | null // set only when the result was exactly one row and one column
+  result_value: string | null
 }
 
 export interface ReportData {

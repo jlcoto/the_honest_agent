@@ -134,6 +134,9 @@ _TRACES_COLUMNS: list[tuple[str, str]] = [
     # JSON: the prompt, each model reply (text, tool_use) and each batch of
     # tool_result blocks, in the shared format derive.conversation builds.
     ("agent_trace", "varchar"),
+    # JSON: each step's tokens, duration and stop reason, and each tool call's duration
+    # (derive.step_details). NULL for rows from before the raw layer.
+    ("step_details", "varchar"),
 ]
 _TRACES_COLUMN_NAMES = [name for name, _ in _TRACES_COLUMNS]
 
@@ -157,6 +160,12 @@ _TOOL_CALLS_COLUMNS: list[tuple[str, str]] = [
     # The SQL came from the tool's response (written by the tool, e.g. Cortex
     # Analyst, not necessarily run), not from what the agent sent.
     ("generated", "boolean"),
+    ("step", "integer"),  # the 1-based step (model call) that made the call
+    ("error", "varchar"),  # the readable error message, when the call failed
+    # The result, only when it is exactly one row and one column: bigger results
+    # stay out of the report.
+    ("result_column", "varchar"),
+    ("result_value", "varchar"),
 ]
 _TOOL_CALLS_COLUMN_NAMES = [name for name, _ in _TOOL_CALLS_COLUMNS]
 
@@ -218,8 +227,7 @@ def write_derived(con, rows: list[dict[str, Any]]) -> None:
     already have, in one transaction -- so a rebuild never leaves a result half-written.
 
     Each row carries the union of `results` and `traces` fields (result_id, scores, ...,
-    agent_trace), plus `sql_calls` -- a list of `{"tool_name", "sql", "is_error",
-    "generated"}` dicts (see sql_capture.extract_sql_calls) that becomes zero or more
+    agent_trace), plus `sql_calls` -- a list of dicts from sql_capture.extract_sql_calls that becomes zero or more
     `tool_calls` rows (each `type="sql"`, `payload={"sql": ...}` JSON-encoded).
     """
     if not rows:
@@ -250,6 +258,10 @@ def write_derived(con, rows: list[dict[str, Any]]) -> None:
                 json.dumps({"sql": call.get("sql")}),
                 bool(call.get("is_error")),
                 bool(call.get("generated")),
+                call.get("step"),
+                call.get("error"),
+                call.get("result_column"),
+                call.get("result_value"),
             ]
             for row in rows
             for call_index, call in enumerate(row.get("sql_calls") or [])
