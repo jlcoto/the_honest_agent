@@ -12,7 +12,7 @@ import {
   toolCallsFor,
 } from '../data/derive'
 import type { ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
-import { Badge, Button, Card, ScoreStat } from '../ds'
+import { Badge, Button, Card, Icon, ScoreStat } from '../ds'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
 const codeBlock: CSSProperties = {
@@ -923,8 +923,10 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
                 onClick={() => toggle(s.n)}
                 style={{ display: 'grid', gridTemplateColumns: '18px 52px minmax(0, 1fr) auto', gap: '0 8px', alignItems: 'baseline', padding: '11px 0', cursor: 'pointer' }}
               >
-                <span style={{ fontSize: 11, color: 'var(--fg-2)', textAlign: 'center', display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>
-                  ▶
+                <span
+                  style={{ display: 'inline-flex', alignSelf: 'center', color: 'var(--fg-2)', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform var(--dur-fast) var(--ease-out)' }}
+                >
+                  <Icon name="chevron-right" size={14} />
                 </span>
                 <span style={{ font: '500 12px/1 var(--font-mono)', color: 'var(--fg-3)' }}>Step {s.n}</span>
                 {isOpen ? (
