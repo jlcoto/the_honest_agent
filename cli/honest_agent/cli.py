@@ -146,20 +146,6 @@ async def _eval_loop(
     return rows
 
 
-def _describe_mcp_connection_error(exc: BaseException) -> str:
-    """MCP handshake failures typically arrive wrapped in nested
-    (Base)ExceptionGroups (anyio task groups) -- unwrap them so the actual
-    reason (e.g. an auth error from the server) is visible instead of just
-    "unhandled errors in a TaskGroup". Duck-typed on `.exceptions` rather
-    than `isinstance(exc, BaseExceptionGroup)` since that builtin doesn't
-    exist before Python 3.11, one version above this package's own floor.
-    """
-    nested = getattr(exc, "exceptions", None)
-    if nested:
-        return "; ".join(_describe_mcp_connection_error(e) for e in nested)
-    return str(exc)
-
-
 def _resolve_server(
     ctx: click.Context,
     command: str | None,
@@ -247,7 +233,8 @@ async def _run_async(
     if not definitions:
         raise click.ClickException(f"No evals matched --select {select!r} --exclude {exclude!r}")
 
-    from .mcp_agent_runner import MAX_TOKENS, MCPAgentClient, build_mcp_client
+    from .anthropic_agent_runner import MAX_TOKENS, AnthropicMCPAgentClient
+    from .mcp_client import build_mcp_client, describe_connection_error
 
     judge = make_judge(provider_for(judge_model))
     run_id = str(uuid.uuid4())
@@ -269,7 +256,7 @@ async def _run_async(
     except Exception as exc:
         raise click.ClickException(
             "Could not establish the MCP connection -- no evals were run, nothing was graded.\n"
-            f"{_describe_mcp_connection_error(exc)}"
+            f"{describe_connection_error(exc)}"
         ) from exc
     con = connect(results_path)
     try:
@@ -297,7 +284,7 @@ async def _run_async(
 
             agent = OpenAIMCPAgentClient(connected, model=model, tools=tools, max_tool_turns=max_tool_turns)
         else:
-            agent = MCPAgentClient(connected, model=model, tools=tools, max_tool_turns=max_tool_turns)
+            agent = AnthropicMCPAgentClient(connected, model=model, tools=tools, max_tool_turns=max_tool_turns)
         click.echo(f"Model: {model} · judge model: {judge_model}")
         rows = await _eval_loop(agent, definitions, judge, judge_model, run_id, recorder, con)
     finally:
