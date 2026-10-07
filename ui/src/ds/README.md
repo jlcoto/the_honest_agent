@@ -16,6 +16,18 @@ and the kit's quiz → eval rename on 2026-10-07. The project's `readme.md` hold
 - `globals.d.ts` and `allowUmdGlobalAccess` in `tsconfig.app.json` exist only
   so the copied `.d.ts` files type-check under React 19.
 
+## Where changes go
+
+Claude Design holds the guidelines (`readme.md`) and the `ui_kits/dashboard`
+screens; this folder holds a copy of the tokens and components the report is
+built from; `src/views/` holds the real screens.
+
+- **Tokens and components:** change them in Claude Design, then copy them here.
+- **Screens:** design them in Claude Design, or mock them as artifacts when real
+  data matters (as the result page's Trace did). Either way, check them against
+  the guidelines before building, and after merging update the matching kit
+  screen in Claude Design so it shows the product as it is.
+
 ## Syncing with Claude Design
 
 The Claude Design project holds files that exist only there, so never run the
