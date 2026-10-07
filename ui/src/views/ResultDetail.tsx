@@ -640,9 +640,6 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           )}
         </Card>
         <Card>
-          <StepsStat r={r} />
-        </Card>
-        <Card>
           {r.agent_input_tokens == null && r.agent_output_tokens == null ? (
             <ScoreStat label="Agent tokens" format="raw" value="—" caption="Not recorded for this run" />
           ) : (
@@ -653,6 +650,9 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
               caption={`${fmt(r.agent_input_tokens)} in · ${fmt(r.agent_output_tokens)} out`}
             />
           )}
+        </Card>
+        <Card>
+          <StepsStat r={r} />
         </Card>
       </div>
 
