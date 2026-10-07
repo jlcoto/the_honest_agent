@@ -1,5 +1,5 @@
 // Follows the design system's ui_kits/dashboard/Detail.jsx.
-import { Fragment, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import {
   accuracyPasses,
@@ -11,7 +11,7 @@ import {
   stripMarkdown,
   toolCallsFor,
 } from '../data/derive'
-import type { ReportData, ResultRow, SourceRef, ToolCallRow } from '../data/types'
+import type { ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
 import { Badge, Button, Card, ScoreStat } from '../ds'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -29,15 +29,6 @@ const codeBlock: CSSProperties = {
 }
 const para: CSSProperties = { margin: 0, font: 'var(--type-body)', color: 'var(--fg-1)', textWrap: 'pretty' }
 const stack = (gap: number): CSSProperties => ({ display: 'flex', flexDirection: 'column', gap })
-
-function Num({ n, label }: { n: number; label: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ font: '500 12px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 18 }}>{n}</span>
-      <span style={{ font: '500 13px/1 var(--font-sans)', color: 'var(--fg-2)' }}>{label}</span>
-    </div>
-  )
-}
 
 const COLLAPSED_LINES = 12
 
@@ -559,8 +550,16 @@ function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
       else now.add(i)
       return now
     })
-  const goToStep = (step: number) =>
-    document.getElementById(`step-${step}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const goToStep = openStep
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const i = (e as CustomEvent<number>).detail
+      setOpen((was) => new Set(was).add(i))
+      requestAnimationFrame(() => flash(document.getElementById(`sql-call-${i}`)))
+    }
+    window.addEventListener(OPEN_SQL_CALL, onOpen)
+    return () => window.removeEventListener(OPEN_SQL_CALL, onOpen)
+  }, [])
   const legend = (
     <div style={{ display: 'flex', gap: 16, font: 'var(--type-small)', color: 'var(--fg-3)' }}>
       <span>
@@ -588,7 +587,7 @@ function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
                 const line = i === sent.length - 1 && !isOpen ? 'none' : '1px solid var(--border-1)'
                 return (
                   <Fragment key={c.call_index}>
-                    <tr onClick={() => toggle(c.call_index)} style={{ cursor: 'pointer' }}>
+                    <tr id={`sql-call-${c.call_index}`} onClick={() => toggle(c.call_index)} style={{ cursor: 'pointer' }}>
                       <td style={{ ...sqlCell, borderBottom: line, width: 64 }}>
                         {c.step != null ? (
                           <button
@@ -649,8 +648,11 @@ const parseJson = (s: string): unknown => {
 interface Block {
   type?: string
   text?: string
+  thinking?: string
+  id?: string
   name?: string
-  input?: unknown
+  input?: Record<string, unknown>
+  tool_use_id?: string
   content?: unknown
   is_error?: boolean
 }
@@ -659,56 +661,337 @@ interface Message {
   content?: unknown
 }
 
-function TraceBlock({ block }: { block: Block }) {
-  if (block.type === 'text') return <Paragraphs text={block.text ?? ''} />
-  if (block.type === 'tool_use') {
-    const input = block.input as { sql?: unknown } | undefined
-    return (
-      <>
-        <span style={{ font: '400 12px/1.3 var(--font-mono)', color: 'var(--fg-3)' }}>{block.name}</span>
-        <Code text={typeof input?.sql === 'string' ? input.sql : JSON.stringify(block.input, null, 2)} />
-      </>
-    )
-  }
-  if (block.type === 'tool_result') {
-    const content = Array.isArray(block.content)
-      ? block.content.map((c: Block) => c.text ?? JSON.stringify(c)).join('\n')
-      : String(block.content ?? '')
-    return <Code text={content} color={block.is_error ? 'var(--acc-wrong-ink)' : undefined} />
-  }
-  return <Code text={JSON.stringify(block, null, 2)} />
+// The two cards point at each other: SQL calls opens a step in the Trace, and the Trace
+// opens a query in SQL calls. Each card owns what's open, so they talk through events.
+const OPEN_STEP = 'honest-agent:open-step'
+const OPEN_SQL_CALL = 'honest-agent:open-sql-call'
+const openStep = (step: number) => window.dispatchEvent(new CustomEvent(OPEN_STEP, { detail: step }))
+const openSqlCall = (callIndex: number) => window.dispatchEvent(new CustomEvent(OPEN_SQL_CALL, { detail: callIndex }))
+const flash = (el: HTMLElement | null) => {
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el?.animate([{ background: 'color-mix(in srgb, var(--green-300) 40%, transparent)' }, { background: 'transparent' }], {
+    duration: 1600,
+    easing: 'ease-out',
+  })
 }
 
-// A user message carrying only tool results is the tool talking back, so it's labelled that way.
-function roleLabel(m: Message): string {
-  const blocks = Array.isArray(m.content) ? (m.content as Block[]) : []
-  if (m.role === 'user' && blocks.length > 0 && blocks.every((b) => b.type === 'tool_result')) return 'Tool result'
-  return m.role === 'assistant' ? 'Assistant' : 'User'
+const blocksOf = (m: Message): Block[] => (Array.isArray(m.content) ? (m.content as Block[]) : [])
+const resultText = (content: unknown): string =>
+  Array.isArray(content) ? content.map((c: Block) => c.text ?? JSON.stringify(c)).join('\n') : String(content ?? '')
+const normSql = (s: string) => s.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').replace(/\s*;\s*$/, '').trim().toLowerCase()
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
+const argText = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v))
+const secs = (ms: number | null | undefined) => (ms == null ? null : `${(ms / 1000).toFixed(1)}s`)
+
+interface Call {
+  use: Block
+  result: Block | undefined
+  sqlRow: ToolCallRow | undefined // the SQL calls row this call ran, if it sent SQL
+  generated: ToolCallRow | undefined // SQL the tool returned without running it (Cortex Analyst)
+}
+interface Step {
+  n: number
+  blocks: Block[]
+  calls: Call[]
 }
 
-function Trace({ raw }: { raw: string | undefined }) {
-  const messages = raw ? parseJson(raw) : null
-  if (!Array.isArray(messages)) return <pre style={codeBlock}>{raw ?? 'No trace recorded.'}</pre>
-  let step = 0
-  const steps = (messages as Message[]).map((m) => (m.role === 'assistant' ? ++step : step))
+/** The agent's turns as steps: each model reply with the tool calls it made and what came back. */
+function stepsOf(messages: Message[], sqlCalls: ToolCallRow[]): Step[] {
+  const results = new Map<string, Block>()
+  for (const m of messages) for (const b of blocksOf(m)) if (b.type === 'tool_result' && b.tool_use_id) results.set(b.tool_use_id, b)
+  const steps: Step[] = []
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue
+    const n = steps.length + 1
+    const rows = sqlCalls.filter((c) => c.step === n)
+    const used = new Set<ToolCallRow>()
+    const take = (match: (c: ToolCallRow) => boolean) => {
+      const row = rows.find((c) => !used.has(c) && match(c))
+      if (row) used.add(row)
+      return row
+    }
+    const calls = blocksOf(m)
+      .filter((b) => b.type === 'tool_use')
+      .map((use) => {
+        const values = Object.values(use.input ?? {})
+        const sqlOf = (c: ToolCallRow) => (parseJson(c.payload) as { sql?: string } | null)?.sql
+        return {
+          use,
+          result: use.id ? results.get(use.id) : undefined,
+          sqlRow: take((c) => !c.generated && c.tool_name === use.name && values.includes(sqlOf(c))),
+          generated: take((c) => !!c.generated && c.tool_name === use.name),
+        }
+      })
+    steps.push({ n, blocks: blocksOf(m), calls })
+  }
+  return steps
+}
+
+// The step a generated statement was later run in, if any.
+function ranLater(generated: ToolCallRow, sqlCalls: ToolCallRow[]): number | null {
+  const sql = normSql((parseJson(generated.payload) as { sql?: string } | null)?.sql ?? '')
+  const hit = sqlCalls.find(
+    (c) => !c.generated && !c.is_error && (c.step ?? 0) > (generated.step ?? 0) && normSql((parseJson(c.payload) as { sql?: string } | null)?.sql ?? '') === sql,
+  )
+  return hit?.step ?? null
+}
+
+const traceMono = (size: number, color = 'var(--fg-2)'): CSSProperties => ({ font: `400 ${size}px/1.5 var(--font-mono)`, color, wordBreak: 'break-word' })
+const muted: CSSProperties = { font: 'var(--type-small)', color: 'var(--fg-3)' }
+const linkish: CSSProperties = { all: 'unset', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'var(--border-2)', textUnderlineOffset: 2 }
+const RAW_HEIGHT = 220
+
+/** A tool's output exactly as it came back, cut to a first chunk with "Show all output". */
+function RawOutput({ text, error }: { text: string; error: boolean }) {
+  const [all, setAll] = useState(false)
+  const [long, setLong] = useState(false)
+  const ref = useRef<HTMLPreElement>(null)
+  useLayoutEffect(() => {
+    if (ref.current) setLong(ref.current.scrollHeight > RAW_HEIGHT + 2)
+  }, [text])
   return (
-    <div style={stack(16)}>
-      {(messages as Message[]).map((m, i) => (
+    <div style={{ ...stack(6), position: 'relative' }}>
+      <pre ref={ref} style={{ ...codeBlock, color: error ? 'var(--acc-wrong-ink)' : codeBlock.color, maxHeight: all ? 'none' : RAW_HEIGHT, overflow: 'hidden' }}>
+        {text || '(empty)'}
+      </pre>
+      {long && !all ? (
         <div
-          key={i}
-          // Each assistant message is one step; SQL calls link here.
-          id={m.role === 'assistant' ? `step-${steps[i]}` : undefined}
-          style={{ ...stack(8), paddingTop: i ? 16 : 0, borderTop: i ? '1px solid var(--border-1)' : 'none', scrollMarginTop: 16 }}
-        >
-          <Num n={i + 1} label={roleLabel(m)} />
-          {typeof m.content === 'string' ? (
-            <Paragraphs text={m.content} />
+          style={{
+            position: 'absolute', left: 1, right: 1, bottom: 26, height: 48, pointerEvents: 'none',
+            borderRadius: '0 0 var(--radius-sm) var(--radius-sm)', background: 'linear-gradient(to bottom, transparent, var(--bg-sunken))',
+          }}
+        />
+      ) : null}
+      {long ? (
+        <button type="button" onClick={() => setAll(!all)} style={{ all: 'unset', cursor: 'pointer', font: 'var(--type-label)', color: 'var(--accent)' }}>
+          {all ? 'Show less' : 'Show all output'}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+/** One tool call: its line (tool and arguments, with the call's time once open), then, open,
+ * the arguments in full when the line had to cut them, and the raw output. */
+function TraceCall({ call, open, ms, sqlCalls }: { call: Call; open: boolean; ms: number | null | undefined; sqlCalls: ToolCallRow[] }) {
+  const { use, result, sqlRow, generated } = call
+  const input = use.input ?? {}
+  const sql = sqlRow ? ((parseJson(sqlRow.payload) as { sql?: string } | null)?.sql ?? '') : null
+  const args = Object.entries(input).map(([k, v]) => `${k}: ${argText(v)}`).join(', ')
+  const message = typeof input.message === 'string' ? input.message : null
+  const shown = sql != null ? queryPreview(sql) : message != null ? `("${cut(message, 60)}")` : `(${cut(args, 70)})`
+  const wasCut = sql != null || (message != null ? message.length > 60 : args.length > 70)
+  const failed = !!result?.is_error
+  const later = generated ? ranLater(generated, sqlCalls) : null
+  const notes: ReactNode[] = []
+  if (failed) notes.push(<span key="f" style={{ color: 'var(--acc-wrong-ink)' }}>failed</span>)
+  if (generated)
+    notes.push(
+      later ? (
+        <span key="g">returned SQL · ran later in step {later}</span>
+      ) : (
+        <span key="g" style={{ color: 'var(--acc-wrong-ink)' }}>returned SQL · never run in this trace</span>
+      ),
+    )
+  if (sqlRow)
+    notes.push(
+      <button key="s" type="button" style={linkish} onClick={() => openSqlCall(sqlRow.call_index)}>
+        SQL calls
+      </button>,
+    )
+  return (
+    <div style={stack(6)}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', alignItems: 'baseline' }}>
+        <span style={traceMono(12.5)}>
+          <span style={{ color: 'var(--fg-1)', fontWeight: 500 }}>{use.name}</span>
+          <span style={{ color: 'var(--fg-3)' }}>
+            {sql != null ? ' ' : ''}
+            {shown}
+          </span>
+          {open && ms != null ? <span style={{ color: 'var(--fg-3)' }}> · {secs(ms)}</span> : null}
+        </span>
+        {notes.length ? (
+          <span style={muted}>
+            {notes.map((n, i) => (
+              <Fragment key={i}>
+                {i ? ' · ' : ''}
+                {n}
+              </Fragment>
+            ))}
+          </span>
+        ) : null}
+      </div>
+      {open && wasCut ? (
+        sql != null ? (
+          <Code text={sql} />
+        ) : (
+          <span style={{ ...traceMono(12, 'var(--fg-3)'), whiteSpace: 'pre-wrap' }}>
+            {Object.entries(input).map(([k, v]) => `${k}: ${argText(v)}`).join('\n')}
+          </span>
+        )
+      ) : null}
+      {open ? <RawOutput text={resultText(result?.content)} error={failed} /> : null}
+    </div>
+  )
+}
+
+const said = (blocks: Block[]) =>
+  blocks
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text ?? '')
+    .join('\n\n')
+    .trim()
+const thought = (blocks: Block[]) => blocks.find((b) => b.type === 'thinking')
+
+/** How the agent worked through the question: the question, one line per step (what the
+ * agent said and the tools it called), each opening to the full text, every call with its
+ * arguments and raw output, and the step's tokens and time; then the final answer, or the
+ * step limit. */
+function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | undefined; details: StepDetails | null; sqlCalls: ToolCallRow[] }) {
+  const [open, setOpen] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const n = (e as CustomEvent<number>).detail
+      setOpen((was) => new Set(was).add(n))
+      requestAnimationFrame(() => flash(document.getElementById(`step-${n}`)))
+    }
+    window.addEventListener(OPEN_STEP, onOpen)
+    return () => window.removeEventListener(OPEN_STEP, onOpen)
+  }, [])
+
+  const messages = raw ? parseJson(raw) : null
+  if (!Array.isArray(messages))
+    return (
+      <Card title="Trace">
+        <pre style={codeBlock}>{raw ?? 'No trace recorded.'}</pre>
+      </Card>
+    )
+  const steps = stepsOf(messages as Message[], sqlCalls)
+  const last = steps[steps.length - 1]
+  const answered = last && last.calls.length === 0
+  const shownSteps = answered ? steps.slice(0, -1) : steps
+  const toggle = (n: number) =>
+    setOpen((was) => {
+      const now = new Set(was)
+      if (now.has(n)) now.delete(n)
+      else now.add(n)
+      return now
+    })
+  const allOpen = shownSteps.length > 0 && shownSteps.every((s) => open.has(s.n))
+  const tokens = (r.agent_input_tokens ?? 0) + (r.agent_output_tokens ?? 0)
+  const question = (messages as Message[])[0]?.content
+  const line = '1px solid var(--border-1)'
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <h3 style={{ margin: 0, font: 'var(--type-h2)', color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>Trace</h3>
+          <span style={muted}>
+            {steps.length} steps · {tokens.toLocaleString('en-US')} tokens
+          </span>
+        </div>
+        {shownSteps.length ? (
+          <button
+            type="button"
+            style={{ all: 'unset', cursor: 'pointer', font: 'var(--type-label)', color: 'var(--accent)' }}
+            onClick={() => setOpen(allOpen ? new Set() : new Set(shownSteps.map((s) => s.n)))}
+          >
+            {allOpen ? 'Collapse all' : 'Expand all'}
+          </button>
+        ) : null}
+      </div>
+      <div>
+        <div style={{ ...stack(4), paddingBottom: 14, borderBottom: line }}>
+          <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Question</span>
+          <p style={{ ...para, fontSize: 15 }}>{typeof question === 'string' ? question.trim() : r.prompt}</p>
+        </div>
+        {shownSteps.map((s) => {
+          const isOpen = open.has(s.n)
+          const text = said(s.blocks)
+          const think = thought(s.blocks)
+          const stats = details?.steps[s.n - 1]
+          const tools = new Map<string, { n: number; failed: boolean }>()
+          for (const c of s.calls) {
+            const t = tools.get(c.use.name ?? '?') ?? { n: 0, failed: false }
+            tools.set(c.use.name ?? '?', { n: t.n + 1, failed: t.failed || !!c.result?.is_error })
+          }
+          return (
+            <div key={s.n} id={`step-${s.n}`} style={{ borderBottom: line, scrollMarginTop: 16 }}>
+              <div
+                onClick={() => toggle(s.n)}
+                style={{ display: 'grid', gridTemplateColumns: '18px 52px minmax(0, 1fr) auto', gap: '0 8px', alignItems: 'baseline', padding: '11px 0', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: 11, color: 'var(--fg-2)', textAlign: 'center', display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>
+                  ▶
+                </span>
+                <span style={{ font: '500 12px/1 var(--font-mono)', color: 'var(--fg-3)' }}>Step {s.n}</span>
+                {isOpen ? (
+                  <span />
+                ) : (
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--fg-1)' }}>
+                    {text ? stripMarkdown(text) : <i style={{ color: 'var(--fg-3)' }}>{think ? 'Thought (hidden)' : 'No text'}</i>}
+                  </span>
+                )}
+                {isOpen ? (
+                  <span />
+                ) : (
+                  <span style={{ ...traceMono(12, 'var(--fg-3)'), whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    {[...tools].map(([name, t], i) => (
+                      <Fragment key={name}>
+                        {i ? ', ' : ''}
+                        <span style={t.failed ? { color: 'var(--acc-wrong-ink)' } : undefined}>
+                          {name}
+                          {t.n > 1 ? ` ×${t.n}` : ''}
+                          {t.failed ? ' ✕' : ''}
+                        </span>
+                      </Fragment>
+                    ))}
+                  </span>
+                )}
+              </div>
+              {isOpen ? (
+                <div style={{ ...stack(6), padding: '0 0 14px 86px', marginTop: -30 }}>
+                  {think ? (
+                    <i style={muted}>{think.thinking ? think.thinking : 'Thought before acting (hidden by the provider)'}</i>
+                  ) : null}
+                  {text ? <Paragraphs text={text} /> : null}
+                  {stats ? (
+                    <span style={traceMono(12, 'var(--fg-3)')}>
+                      {stats.input_tokens.toLocaleString('en-US')} in · {stats.output_tokens.toLocaleString('en-US')} out
+                      {stats.duration_ms != null ? ` · ${secs(stats.duration_ms)}` : ''}
+                      {stats.stop_reason === 'tool_use' ? ' · stopped for tool calls' : stats.stop_reason === 'end_turn' ? ' · stopped for the answer' : stats.stop_reason ? ` · stopped: ${stats.stop_reason}` : ''}
+                    </span>
+                  ) : null}
+                  <div style={{ ...stack(14), marginTop: 4 }}>
+                    {s.calls.map((c, i) => (
+                      <TraceCall key={c.use.id ?? i} call={c} open ms={c.use.id ? details?.tool_ms[c.use.id] : null} sqlCalls={sqlCalls} />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
+        <div style={{ ...stack(6), paddingTop: 14 }}>
+          {answered ? (
+            <>
+              <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Final answer · step {last.n}</span>
+              {said(last.blocks) ? <Paragraphs text={said(last.blocks)} /> : <p style={para}>(empty answer)</p>}
+            </>
           ) : (
-            (Array.isArray(m.content) ? (m.content as Block[]) : []).map((b, j) => <TraceBlock key={j} block={b} />)
+            <>
+              <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>No answer</span>
+              <p style={{ ...para, color: 'var(--acc-wrong-ink)' }}>
+                {r.hit_step_limit
+                  ? `Hit the limit before answering: step ${steps.length}${r.max_steps ? ` of ${r.max_steps}` : ''} still called a tool.`
+                  : 'The agent stopped without an answer.'}
+              </p>
+            </>
           )}
         </div>
-      ))}
-    </div>
+      </div>
+    </Card>
   )
 }
 
@@ -724,7 +1007,8 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
   const accOk = accuracyPasses(r)
   const provOk = provenancePasses(r)
   const calls = toolCallsFor(data, r.result_id)
-  const trace = data.agent_logs.find((l) => l.result_id === r.result_id)?.agent_trace
+  const log = data.agent_logs.find((l) => l.result_id === r.result_id)
+  const details = log?.step_details ? (parseJson(log.step_details) as StepDetails | null) : null
   const tokens = (r.agent_input_tokens ?? 0) + (r.agent_output_tokens ?? 0)
   const title = evalTitles(data.results).get(r.eval_id)
   const fmt = (n: number | null) => (n ?? 0).toLocaleString('en-US')
@@ -805,9 +1089,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
 
       <SqlCallsCard calls={calls} />
 
-      <Card title="Trace">
-        <Trace raw={trace} />
-      </Card>
+      <TraceCard r={r} raw={log?.agent_trace} details={details} sqlCalls={calls} />
     </div>
   )
 }

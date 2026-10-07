@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 
 from .eval_loader import EvalDefinition
 from .grading import score
-from .llm import OPENAI, response_text, response_tokens
+from .llm import OPENAI, response_stop, response_text, response_tokens
 from .provenance import check_provenance
 from .raw import honest_agent_version
 from .sql_capture import extract_sql_calls
@@ -66,6 +66,28 @@ def _assistant_content(event: dict) -> list[dict]:
         }
         for call in message.get("tool_calls") or []
     ]
+
+
+def step_details(events: list[dict]) -> dict:
+    """What the conversation doesn't hold, for the report's Trace: each step's (model
+    call's) tokens, duration and stop reason, in order, and each tool call's duration
+    by its tool_use id."""
+    steps = []
+    for event in events:
+        if event["kind"] == "model_call" and event["response"] is not None:
+            tokens = response_tokens(event["provider"], event["response"])
+            steps.append(
+                {
+                    "input_tokens": tokens[0],
+                    "output_tokens": tokens[1],
+                    "duration_ms": event["duration_ms"],
+                    "stop_reason": response_stop(event["provider"], event["response"]),
+                }
+            )
+    tool_ms = {
+        event["request"]["tool_use_id"]: event["duration_ms"] for event in events if event["kind"] == "tool_call"
+    }
+    return {"steps": steps, "tool_ms": tool_ms}
 
 
 def conversation(prompt: str, events: list[dict]) -> list[dict]:
@@ -220,6 +242,7 @@ def derive_result(con, result_id: str) -> Derived:
         "honest_agent_version": honest_agent_version(),
         # -- traces --
         "agent_trace": json.dumps(trace),
+        "step_details": json.dumps(step_details(agent_events)),
         # -- tool_calls (expanded into one row per call by storage.py) --
         "sql_calls": sql_calls,
     }

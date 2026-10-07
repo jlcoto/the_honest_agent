@@ -52,6 +52,12 @@ export interface AgentLogRow {
   run_id: string
   eval_id: string
   agent_trace: string // JSON-encoded turn-by-turn trace
+  step_details: string | null // JSON StepDetails; null for runs from before the raw layer
+}
+
+export interface StepDetails {
+  steps: { input_tokens: number; output_tokens: number; duration_ms: number | null; stop_reason: string | null }[]
+  tool_ms: Record<string, number | null> // each tool call's duration, by tool_use id
 }
 
 export interface ToolCallRow {

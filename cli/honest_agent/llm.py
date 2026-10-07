@@ -69,6 +69,15 @@ def response_tokens(provider: str, response: dict) -> tuple[int, int]:
     return usage.get("input_tokens", 0), usage.get("output_tokens", 0)
 
 
+def response_stop(provider: str, response: dict) -> str | None:
+    """Why a recorded model response stopped, in Anthropic's terms for either provider:
+    "tool_use" (it asked for tools), "end_turn" (it answered), or the provider's own reason."""
+    if provider == OPENAI:
+        reason = (response.get("choices") or [{}])[0].get("finish_reason")
+        return {"tool_calls": "tool_use", "stop": "end_turn"}.get(reason, reason)
+    return response.get("stop_reason")
+
+
 def make_judge(provider: str) -> Judge:
     return OpenAIJudge() if provider == OPENAI else AnthropicJudge()
 

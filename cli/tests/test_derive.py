@@ -65,6 +65,12 @@ def test_a_claude_run_derives_its_answer_trace_tokens_and_tools(tmp_path: Path):
     ]
     assert isinstance(row["latency_ms"], int)
     assert (row["steps"], row["max_steps"], row["hit_step_limit"]) == (2, 5, False)
+    details = json.loads(row["step_details"])
+    assert [(s["input_tokens"], s["output_tokens"], s["stop_reason"]) for s in details["steps"]] == [
+        (100, 20, "tool_use"),
+        (150, 10, "end_turn"),
+    ]
+    assert list(details["tool_ms"]) == ["t1"]
 
 
 def test_an_openai_run_is_converted_to_the_same_conversation_format(tmp_path: Path):
@@ -98,6 +104,8 @@ def test_an_openai_run_is_converted_to_the_same_conversation_format(tmp_path: Pa
     row = _derive(path)
 
     assert row["agent_answer"] == "4"
+    # OpenAI's finish reasons read the same as Anthropic's stop reasons.
+    assert [s["stop_reason"] for s in json.loads(row["step_details"])["steps"]] == ["tool_use", "end_turn"]
     assert (row["agent_input_tokens"], row["agent_output_tokens"]) == (250, 23)
     assert json.loads(row["agent_trace"])[1] == {
         "role": "assistant",
