@@ -516,7 +516,6 @@ function queryPreview(sql: string): string {
   return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS - 1).trimEnd()}…` : line
 }
 
-const firstSentence = (s: string) => s.split(/(?<=\.)\s/)[0]
 const errorText: CSSProperties = { font: 'var(--type-small)', color: 'var(--acc-wrong-ink)' }
 const stepLink: CSSProperties = {
   all: 'unset',
@@ -530,10 +529,26 @@ const stepLink: CSSProperties = {
 }
 const sqlCell: CSSProperties = { padding: '11px 14px 11px 0', borderBottom: '1px solid var(--border-1)', verticalAlign: 'baseline' }
 
-/** The queries the agent sent to the warehouse, one row each: the step that ran it (a link
- * to that step in the Trace) and the query on one line, with the error when it failed.
- * A row opens to the full SQL and, when the query returned exactly one value, that value.
- * SQL a tool only generated (e.g. Cortex Analyst) wasn't sent, so it isn't listed. */
+function StatusDot({ error }: { error: boolean }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 7,
+        height: 7,
+        borderRadius: '50%',
+        marginRight: 8,
+        verticalAlign: 'middle',
+        background: error ? 'var(--acc-wrong)' : 'color-mix(in srgb, var(--ink-data) 70%, transparent)',
+      }}
+    />
+  )
+}
+
+/** The queries the agent sent to the warehouse, one line each: a link to the step that ran
+ * it in the Trace, a dot for whether it ran or failed, and the query. A row opens to the full
+ * SQL, plus the error when it failed or the value when it returned exactly one row and one
+ * column. SQL a tool only generated (e.g. Cortex Analyst) wasn't sent, so it isn't listed. */
 function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
   const [open, setOpen] = useState<Set<number>>(new Set())
   const sent = calls.filter((c) => !c.generated)
@@ -546,34 +561,35 @@ function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
     })
   const goToStep = (step: number) =>
     document.getElementById(`step-${step}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const legend = (
+    <div style={{ display: 'flex', gap: 16, font: 'var(--type-small)', color: 'var(--fg-3)' }}>
+      <span>
+        <StatusDot error={false} />
+        ran
+      </span>
+      <span>
+        <StatusDot error />
+        error
+      </span>
+    </div>
+  )
 
   return (
-    <Card title={`SQL calls (${sent.length})`}>
+    <Card title={`SQL calls (${sent.length})`} actions={sent.length ? legend : undefined}>
       {sent.length === 0 ? (
         <p style={note}>No SQL was run for this answer.</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Step', 'Query'].map((h) => (
-                  <th
-                    key={h}
-                    style={{ font: 'var(--type-label)', color: 'var(--fg-3)', textAlign: 'left', padding: '0 14px 10px 0', borderBottom: '1px solid var(--border-1)' }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
             <tbody>
-              {sent.map((c) => {
+              {sent.map((c, i) => {
                 const sql = (parseJson(c.payload) as { sql?: string } | null)?.sql ?? c.payload
                 const isOpen = open.has(c.call_index)
+                const line = i === sent.length - 1 && !isOpen ? 'none' : '1px solid var(--border-1)'
                 return (
                   <Fragment key={c.call_index}>
                     <tr onClick={() => toggle(c.call_index)} style={{ cursor: 'pointer' }}>
-                      <td style={{ ...sqlCell, width: 64 }}>
+                      <td style={{ ...sqlCell, borderBottom: line, width: 64 }}>
                         {c.step != null ? (
                           <button
                             type="button"
@@ -587,15 +603,17 @@ function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
                           </button>
                         ) : null}
                       </td>
-                      <td style={sqlCell}>
-                        <span style={{ font: '400 12.5px/1.4 var(--font-mono)', color: 'var(--fg-1)' }}>{queryPreview(sql)}</span>
-                        {c.is_error && c.error && !isOpen ? <div style={{ ...errorText, marginTop: 3 }}>{firstSentence(c.error)}</div> : null}
+                      <td style={{ ...sqlCell, borderBottom: line }}>
+                        <StatusDot error={!!c.is_error} />
+                        <span style={{ font: '400 12.5px/1.4 var(--font-mono)', color: 'var(--fg-1)', verticalAlign: 'middle' }}>
+                          {queryPreview(sql)}
+                        </span>
                       </td>
                     </tr>
                     {isOpen ? (
                       <tr>
-                        <td style={{ borderBottom: '1px solid var(--border-1)' }} />
-                        <td style={{ padding: '14px 14px 14px 0', borderBottom: '1px solid var(--border-1)' }}>
+                        <td style={{ borderBottom: i === sent.length - 1 ? 'none' : '1px solid var(--border-1)' }} />
+                        <td style={{ padding: '14px 14px 14px 0', borderBottom: i === sent.length - 1 ? 'none' : '1px solid var(--border-1)' }}>
                           <div style={stack(10)}>
                             <Code text={sql} />
                             {c.is_error && c.error ? <span style={errorText}>{c.error}</span> : null}
