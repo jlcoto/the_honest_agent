@@ -12,7 +12,7 @@ import {
   toolCallsFor,
 } from '../data/derive'
 import type { ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
-import { Badge, Button, Card, ScoreStat } from '../ds'
+import { Badge, Button, Card, Icon, ScoreStat } from '../ds'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
 const codeBlock: CSSProperties = {
@@ -96,8 +96,9 @@ function Ids({ ids }: { ids: string[] | null }) {
   if (!ids?.length) return <span style={{ font: 'var(--type-small)', color: 'var(--fg-3)' }}>None</span>
   return (
     <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {ids.map((id) => (
-        <Badge key={id} mono>
+      {/* Tools used repeats a tool once per call, so a name isn't unique. */}
+      {ids.map((id, i) => (
+        <Badge key={`${i}-${id}`} mono>
           {id}
         </Badge>
       ))}
@@ -922,8 +923,10 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
                 onClick={() => toggle(s.n)}
                 style={{ display: 'grid', gridTemplateColumns: '18px 52px minmax(0, 1fr) auto', gap: '0 8px', alignItems: 'baseline', padding: '11px 0', cursor: 'pointer' }}
               >
-                <span style={{ fontSize: 11, color: 'var(--fg-2)', textAlign: 'center', display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>
-                  ▶
+                <span
+                  style={{ display: 'inline-flex', alignSelf: 'center', color: 'var(--fg-2)', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform var(--dur-fast) var(--ease-out)' }}
+                >
+                  <Icon name="chevron-right" size={14} />
                 </span>
                 <span style={{ font: '500 12px/1 var(--font-mono)', color: 'var(--fg-3)' }}>Step {s.n}</span>
                 {isOpen ? (
@@ -1037,15 +1040,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         {back}
       </PageHeader>
 
-      <div
-        style={{
-          ...stack(4),
-          padding: '6px 0 6px 16px',
-          borderLeft: '5px solid var(--green-300)',
-          // Optical alignment: the cards below have rounded corners, so their edge reads a little further in.
-          marginLeft: 4,
-        }}
-      >
+      <div style={{ ...stack(4), padding: '6px 0' }}>
         <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Prompt</span>
         <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty' }}>
           {r.prompt}
