@@ -903,7 +903,7 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
       </div>
       <div>
         <div style={{ ...stack(4), paddingBottom: 14, borderBottom: line }}>
-          <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Question</span>
+          <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Prompt</span>
           <p style={{ ...para, fontSize: 15 }}>{typeof question === 'string' ? question.trim() : r.prompt}</p>
         </div>
         {shownSteps.map((s) => {
@@ -1049,7 +1049,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           marginLeft: 4,
         }}
       >
-        <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)', letterSpacing: 'var(--ls-caps)' }}>Q</span>
+        <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)', letterSpacing: 'var(--ls-caps)' }}>Prompt</span>
         <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty' }}>
           {r.prompt}
         </p>
