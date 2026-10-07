@@ -1049,7 +1049,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           marginLeft: 4,
         }}
       >
-        <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)', letterSpacing: 'var(--ls-caps)' }}>Prompt</span>
+        <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)', letterSpacing: 'var(--ls-caps)', textTransform: 'uppercase' }}>Prompt</span>
         <p style={{ margin: 0, font: '400 18px/1.45 var(--font-sans)', color: 'var(--fg-1)', textWrap: 'pretty' }}>
           {r.prompt}
         </p>
