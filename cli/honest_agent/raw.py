@@ -184,13 +184,11 @@ def read_records(results_path: str, run_id: str | None = None, eval_id: str | No
     """The raw records of matching evals, oldest first: each is `{"run", "eval", "events"}`
     with the rows as stored (request/response still JSON strings). [] when the file has
     no raw layer yet, or nothing matches."""
-    from pathlib import Path
+    from .storage import open_results, results_exist
 
-    import duckdb
-
-    if not Path(results_path).exists():
+    if not results_exist(results_path):
         return []
-    con = duckdb.connect(results_path, read_only=True)
+    con = open_results(results_path, read_only=True)
     try:
         if not has_raw_layer(con):
             return []

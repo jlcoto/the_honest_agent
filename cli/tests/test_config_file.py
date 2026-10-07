@@ -224,3 +224,10 @@ def test_mcp_env_flags_replace_the_targets_list(project, monkeypatch, fake_run):
 
     assert result.exit_code == 0, result.output
     assert run["mcp_env"] == ["OTHER_TOKEN"]
+
+
+def test_a_motherduck_results_path_is_not_resolved_as_a_file(tmp_path: Path):
+    path = tmp_path / "honest_agent_config.yml"
+    path.write_text("results_path: md:honest_agent_results\ntargets:\n  demo: {mcp_command: x}\n")
+
+    assert load_config(path).results_path == "md:honest_agent_results"

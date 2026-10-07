@@ -142,6 +142,9 @@ def _check_keys(settings: dict, allowed: set[str], where: str) -> None:
 
 
 def _resolve_paths(settings: dict[str, Any], base: Path) -> dict[str, Any]:
+    """Relative paths become relative to the config file's folder; a MotherDuck results
+    database (md:<name>) isn't a path and stays as written."""
     return {
-        key: str(base / value) if key in _PATH_KEYS and value is not None else value for key, value in settings.items()
+        key: str(base / value) if key in _PATH_KEYS and value is not None and not value.startswith("md:") else value
+        for key, value in settings.items()
     }

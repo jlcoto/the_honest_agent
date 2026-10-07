@@ -125,3 +125,22 @@ def test_notify_unknown_target_is_an_error(two_agents):
 
     assert result.exit_code != 0
     assert "No target 'nope'" in result.output
+
+
+def test_motherduck_results_need_the_results_token(in_tmp_dir, monkeypatch):
+    monkeypatch.delenv("HONEST_AGENT_RESULTS_TOKEN", raising=False)
+
+    result = CliRunner().invoke(main, ["notify", "--results-path", "md:results", "--webhook-url", "http://hook"])
+
+    assert result.exit_code != 0
+    assert "HONEST_AGENT_RESULTS_TOKEN is not set" in result.output
+
+
+def test_a_token_in_a_motherduck_results_path_is_refused(in_tmp_dir, monkeypatch):
+    monkeypatch.setenv("HONEST_AGENT_RESULTS_TOKEN", "x")
+    path = "md:results?motherduck_token=secret"
+
+    result = CliRunner().invoke(main, ["notify", "--results-path", path, "--webhook-url", "http://hook"])
+
+    assert result.exit_code != 0
+    assert "Don't put a token in results_path" in result.output
