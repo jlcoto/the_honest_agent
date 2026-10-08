@@ -654,10 +654,6 @@ signing in shows the new run.
 
 ## Known issues
 
-- **Slack links lose the result after signing in.** An alert links to
-  `<report>#/result/<id>`; behind any sign-in, the part after `#` is dropped
-  during the login redirect, so people land on the Overview. A fix is
-  planned (`?result=<id>` links).
 - **Hidden helper files.** The report folder holds `.gitignore` and
   `.honest_agent_report`; `wrangler pages deploy` would publish them, hence
   the `rsync --exclude '.*'` copy above. A fix in honest-agent is planned.

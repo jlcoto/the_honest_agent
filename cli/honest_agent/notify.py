@@ -30,6 +30,17 @@ def _context(text: str) -> dict[str, Any]:
     return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
 
 
+def _result_link(report_url: str, result_id: str) -> str:
+    """A link to one result's page as `?result=<id>`, not `#/result/<id>`: a sign-in in
+    front of a hosted report keeps the query through its login but drops the `#...` part.
+    The report's router turns the query into its usual route."""
+    parts = urllib.parse.urlsplit(report_url)
+    query = urllib.parse.parse_qsl(parts.query) + [("result", result_id)]
+    return urllib.parse.urlunsplit(
+        parts._replace(query=urllib.parse.urlencode(query, quote_via=urllib.parse.quote), fragment="")
+    )
+
+
 def alert_message(
     rows: list[dict[str, Any]], failures: list[dict[str, Any]], report_url: str | None = None
 ) -> dict[str, Any]:
@@ -48,7 +59,7 @@ def alert_message(
     for f in failures[:_MAX_LISTED]:
         title = _escape(f["eval_title"] or f["eval_id"])
         if report_url:
-            title = f"<{report_url}#/result/{urllib.parse.quote(f['result_id'], safe='')}|{title}>"
+            title = f"<{_result_link(report_url, f['result_id'])}|{title}>"
         scores = [f"Accuracy *{f['accuracy_score']:.2f}* (min {f['accuracy_min_score']})"]
         if f["provenance_score"] is not None:
             scores.append(f"Provenance *{f['provenance_score']:.2f}* (min {f['provenance_min_score']})")

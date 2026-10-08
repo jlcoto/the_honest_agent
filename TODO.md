@@ -32,10 +32,7 @@ teams to host the report.
    request/response) stop being published.
 4. **CSV formula injection** (security item 6 below).
 5. **30-day window** in `report`, counted back from the latest run.
-6. **Slack links that survive a sign-in:** `notify` links `?result=<id>`,
-   and the router turns it into `#/result/<id>`. Confirmed on Cloudflare
-   Access: `#/result/<id>` lands on the Overview after login.
-7. **Hidden files in the report folder** (`.gitignore`,
+6. **Hidden files in the report folder** (`.gitignore`,
    `.honest_agent_report`) get published by `wrangler pages deploy`
    (confirmed: both answered 200 on Pages). The marker lets `report` only
    overwrite folders it created; the `.gitignore` keeps the folder out of
