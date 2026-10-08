@@ -61,10 +61,18 @@ def test_alert_leaves_out_unchecked_provenance():
 def test_alert_links_each_failure_to_the_report():
     rows = [_row(result_id="r 1", eval_title=None)]
 
-    texts = _texts(alert_message(rows, failing_rows(rows), "https://example.com/report"))
+    texts = _texts(alert_message(rows, failing_rows(rows), "https://example.com/report/"))
 
-    assert texts[2].startswith("*<https://example.com/report#/result/r%201|q_revenue_1996>*")
-    assert texts[-1] == "<https://example.com/report|Open the report> · honest-agent"
+    assert texts[2].startswith("*<https://example.com/report/?result=r%201|q_revenue_1996>*")
+    assert texts[-1] == "<https://example.com/report/|Open the report> · honest-agent"
+
+
+def test_result_links_keep_an_existing_query_and_drop_a_fragment():
+    rows = [_row()]
+
+    text = _texts(alert_message(rows, failing_rows(rows), "https://host/evals/?team=data#/compare"))[2]
+
+    assert text.startswith("*<https://host/evals/?team=data&result=r1|Revenue in 1996>*")
 
 
 def test_alert_lists_at_most_20_failures():

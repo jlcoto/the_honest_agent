@@ -165,7 +165,10 @@ export function stripMarkdown(s: string): string {
 
 /** CSV text with every field quoted, so commas, quotes and newlines in answers survive. */
 export function toCsv(header: string[], rows: (string | number | null)[][]): string {
-  const cell = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  // Text starting with = + - @ (or a tab/CR) runs as a formula in a spreadsheet; agent
+  // answers and eval text are untrusted, so a leading ' keeps them plain text.
+  const safe = (v: string | number | null) => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? `'${v}` : v)
+  const cell = (v: string | number | null) => `"${String(safe(v) ?? '').replace(/"/g, '""')}"`
   return [header, ...rows].map((r) => r.map(cell).join(',')).join('\n')
 }
 

@@ -20,8 +20,23 @@ export function navigate(route: Route) {
   window.location.hash = href(route)
 }
 
+// Links from outside (the Slack alert) use ?result=<id>: a sign-in in front of a hosted
+// report redirects through its login and drops the #... part, but keeps the query.
+function adoptResultQuery() {
+  const params = new URLSearchParams(window.location.search)
+  const resultId = params.get('result')
+  if (!resultId) return
+  params.delete('result')
+  const query = params.toString()
+  const url = window.location.pathname + (query ? `?${query}` : '') + href({ name: 'result', resultId })
+  window.history.replaceState(null, '', url)
+}
+
 export function useRoute(): Route {
-  const [route, setRoute] = useState(() => parse(window.location.hash))
+  const [route, setRoute] = useState(() => {
+    adoptResultQuery()
+    return parse(window.location.hash)
+  })
   useEffect(() => {
     const onChange = () => {
       setRoute(parse(window.location.hash))

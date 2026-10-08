@@ -279,6 +279,21 @@ def _table_exists(con, table_name: str) -> bool:
     return bool(row and row[0] > 0)
 
 
+def _known_columns(con, table_name: str, names: list[str]) -> str:
+    """The `select` list for a derived table: the columns this version defines (`names`), in
+    that order, that the table has. Columns left behind by older versions (`tools_offered`,
+    `grading_exchange`, raw requests and responses) are never read, so they can't reach
+    the report or an export."""
+    present = {
+        row[0]
+        for row in con.execute(
+            "select column_name from information_schema.columns where table_schema = 'main' and table_name = ?",
+            [table_name],
+        ).fetchall()
+    }
+    return ", ".join(name for name in names if name in present)
+
+
 def write_derived(con, rows: list[dict[str, Any]]) -> None:
     """Writes derived rows (from derive.derive_result), replacing any rows those results
     already have, in one transaction -- so a rebuild never leaves a result half-written.
@@ -347,10 +362,11 @@ def write_run_results(results_path: str, run_id: str, rows: list[dict[str, Any]]
     return results_path
 
 
-def read_all_results(results_path: str) -> list[dict[str, Any]]:
-    """Reads every stored `results` row across every run. Returns [] if
-    nothing's been written yet, rather than raising -- a fresh project that
-    hasn't run an eval yet shouldn't error on `report`/`notify`.
+def read_all_results(results_path: str, since: str | None = None) -> list[dict[str, Any]]:
+    """Reads every stored `results` row across every run, or only those with a
+    run_timestamp at or after `since`. Returns [] if nothing's been written yet,
+    rather than raising -- a fresh project that hasn't run an eval yet shouldn't
+    error on `report`/`notify`.
     """
     if not results_exist(results_path):
         return []
@@ -359,9 +375,26 @@ def read_all_results(results_path: str) -> list[dict[str, Any]]:
     try:
         if not _table_exists(con, "results"):
             return []
-        cursor = con.execute("select * from results")
+        where_sql, params = (" where run_timestamp >= ?", [since]) if since is not None else ("", [])
+        cursor = con.execute(
+            f"select {_known_columns(con, 'results', _RESULTS_COLUMN_NAMES)} from results{where_sql}", params
+        )
         columns = [d[0] for d in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+    finally:
+        con.close()
+
+
+def latest_run_timestamp(results_path: str) -> str | None:
+    """When the most recent stored run started, or None if there's nothing stored."""
+    if not results_exist(results_path):
+        return None
+    con = _connect(results_path)
+    try:
+        if not _table_exists(con, "results"):
+            return None
+        row = con.execute("select max(run_timestamp) from results").fetchone()
+        return row[0] if row else None
     finally:
         con.close()
 
@@ -378,9 +411,12 @@ def read_latest_run_results(results_path: str, agent_name: str | None = None) ->
     return [r for r in all_rows if r["run_id"] == latest_run_id]
 
 
-def read_traces(results_path: str, run_id: str | None = None, eval_id: str | None = None) -> list[dict[str, Any]]:
+def read_traces(
+    results_path: str, run_id: str | None = None, eval_id: str | None = None, since: str | None = None
+) -> list[dict[str, Any]]:
     """Reads `traces` rows (the normalized conversation per result), optionally
-    filtered to one run and/or one eval. Returns [] if nothing's been written yet.
+    filtered to one run, one eval, and/or results from runs at or after `since`.
+    Returns [] if nothing's been written yet.
     """
     if not results_exist(results_path):
         return []
@@ -396,8 +432,13 @@ def read_traces(results_path: str, run_id: str | None = None, eval_id: str | Non
         if eval_id is not None:
             clauses.append("eval_id = ?")
             params.append(eval_id)
+        if since is not None:
+            clauses.append("result_id in (select result_id from results where run_timestamp >= ?)")
+            params.append(since)
         where_sql = f" where {' and '.join(clauses)}" if clauses else ""
-        cursor = con.execute(f"select * from traces{where_sql}", params)
+        cursor = con.execute(
+            f"select {_known_columns(con, 'traces', _TRACES_COLUMN_NAMES)} from traces{where_sql}", params
+        )
         columns = [d[0] for d in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
@@ -409,10 +450,11 @@ def read_tool_calls(
     run_id: str | None = None,
     eval_id: str | None = None,
     result_id: str | None = None,
+    since: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Reads `tool_calls` rows, optionally filtered by run/eval/result,
-    ordered so each eval's calls come back in the order they happened.
-    Returns [] if nothing's been written yet.
+    """Reads `tool_calls` rows, optionally filtered by run/eval/result or to
+    results from runs at or after `since`, ordered so each eval's calls come
+    back in the order they happened. Returns [] if nothing's been written yet.
     """
     if not results_exist(results_path):
         return []
@@ -431,8 +473,12 @@ def read_tool_calls(
         if result_id is not None:
             clauses.append("result_id = ?")
             params.append(result_id)
+        if since is not None:
+            clauses.append("result_id in (select result_id from results where run_timestamp >= ?)")
+            params.append(since)
         where_sql = f" where {' and '.join(clauses)}" if clauses else ""
-        cursor = con.execute(f"select * from tool_calls{where_sql} order by result_id, call_index", params)
+        columns = _known_columns(con, "tool_calls", _TOOL_CALLS_COLUMN_NAMES)
+        cursor = con.execute(f"select {columns} from tool_calls{where_sql} order by result_id, call_index", params)
         columns = [d[0] for d in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
@@ -468,11 +514,12 @@ def export_to_s3_parquet(results_path: str, s3_path: str, run_id: str | None = N
         # free-form user input, but it's escaped defensively regardless since
         # DuckDB's COPY target/source SQL is built as text, not bound parameters.
         s3_path_escaped = s3_path.replace("'", "''")
+        columns = _known_columns(con, "results", _RESULTS_COLUMN_NAMES)
         if run_id is not None:
             run_id_escaped = run_id.replace("'", "''")
-            select_sql = f"select * from results where run_id = '{run_id_escaped}'"
+            select_sql = f"select {columns} from results where run_id = '{run_id_escaped}'"
         else:
-            select_sql = "select * from results"
+            select_sql = f"select {columns} from results"
         con.execute(f"copy ({select_sql}) to '{s3_path_escaped}' (format parquet)")
     finally:
         con.close()
