@@ -27,9 +27,8 @@ teams to host the report.
    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'`
    plus `<meta name="referrer" content="no-referrer">`. Check in a browser
    that React's inline styles still work.
-3. **CSV formula injection** (security item 6 below).
-4. **30-day window** in `report`, counted back from the latest run.
-5. **Hidden files in the report folder** (`.gitignore`,
+3. **30-day window** in `report`, counted back from the latest run.
+4. **Hidden files in the report folder** (`.gitignore`,
    `.honest_agent_report`) get published by `wrangler pages deploy`
    (confirmed: both answered 200 on Pages). The marker lets `report` only
    overwrite folders it created; the `.gitignore` keeps the folder out of
@@ -146,11 +145,6 @@ Lower severity:
 5. **`honest-agent logs`** prints `agent_answer` and tool payloads raw, so
    model/tool output can inject terminal escape sequences (OSC 52 clipboard
    writes, disguised links). Strip control characters before printing.
-6. **CSV export** (`ui/src/data/derive.ts` `toCsv`) doesn't neutralise
-   cells starting with `= + - @`, so an answer can run as a spreadsheet
-   formula. Prefix those cells with `'`.
-7. **Slack:** `notify.py` puts eval ids into the message unescaped, so an
-   eval file can trigger `<!channel>` or disguise a link. Escape `< > &`.
 
 ## Cleanup (review of 2026-10-02)
 
