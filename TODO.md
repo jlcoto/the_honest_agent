@@ -484,8 +484,10 @@ command, like `dbt init`:
   its URL or command, and a target name, with defaults. `--no-input` writes
   the template without asking.
 - Never overwrites an existing file (skips it and says so), and never edits
-  `.gitignore`: in a git repository where `.env` isn't ignored, it prints a
-  warning with the line to add.
+  `.gitignore`: in a git repository where `.env` or `honest_agent_report/`
+  isn't ignored, it prints a warning with the lines to add. (Since
+  2026-10-08 the report folder holds only the website and no longer ignores
+  itself, so the project's `.gitignore` must.)
 - Since 2026-10-05 the bundled example commits `honest_agent_config.example.yml`
   and ignores the real file (like `.env.example`). `init` could offer the same
   split when the config names private account URLs.
