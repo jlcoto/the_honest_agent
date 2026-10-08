@@ -212,10 +212,23 @@ declares its own accuracy/provenance thresholds (`grading.min_score` /
 
 ## Running it for a team
 
-Locally, everything lives in your project folder. For a team, three pieces
-move out: the results go somewhere shared, the report goes behind a sign-in,
-and a scheduled job runs the evals. [`docs/hosting.md`](docs/hosting.md) is
-a tested recipe for all three (results in MotherDuck or S3, the report on
+Locally, everything lives in your project folder. For a team, two different
+things are shared, in two different places:
+
+| | The results database | The report |
+|---|---|---|
+| What it is | `results.duckdb`: every run, with what each call sent and received | A website (`honest_agent_report/`) built from the database by `honest-agent report` |
+| What it holds | All history | The last 30 days (`--days`) |
+| Who uses it | The job that runs the evals; people who query it with SQL | Your team, in the browser |
+| Where it goes | MotherDuck, or private storage such as an S3 bucket | A static host behind a sign-in |
+
+Keep them apart: viewers of the report never need the database, which holds
+more (all history, the raw records, run settings). Sharing the report doesn't
+share the database, and the database is never put on the report's host.
+
+A scheduled job ties them together: it runs the evals into the database,
+rebuilds the report and publishes it. [`docs/hosting.md`](docs/hosting.md) is
+a tested recipe for all of it (results in MotherDuck or S3, the report on
 Cloudflare Pages or CloudFront, GitHub Actions, Slack). Never host the report
 publicly: it holds what your agent's tools returned.
 
