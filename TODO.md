@@ -8,30 +8,20 @@ waiting on information we don't have yet.
 
 The user installed honest-agent from scratch in an empty folder, following
 only the README, then set up hosting and CI (recipe: `docs/hosting.md`).
-Fix these together, with `init` (section below):
+README fixes done 2026-10-08 (example eval, `--target`, sharing via
+`docs/hosting.md`, `export` auth). Left:
 
-1. **README's example eval** (`orders`, 2297) only works on the demo TPC-H
-   warehouse, and nothing says to replace its prompt, expected answer and
-   expected sources with the user's own.
-2. **Say that `--target` is optional** when `default_target` is set.
-3. **`init` should ask where results live:** a local file, MotherDuck
+1. **`init` should ask where results live:** a local file, MotherDuck
    (a separate results-only token, `HONEST_AGENT_RESULTS_TOKEN`), or a file
    in S3 (link to `docs/hosting.md`).
-4. **README presents `export` as "Sharing results with a team".** Sharing is
-   now the hosting recipe; `export` becomes a side feature for querying
-   scores from Snowflake/Athena.
-5. **`export` auth is documented wrongly:** it never creates a DuckDB
-   secret, so only `AWS_*` environment variables work, not profiles or SSO as
-   the README and `export_to_s3_parquet`'s docstring claim. Fix the docs;
-   add `credential_chain` only when a user asks.
-6. **`honest-agent run` always exits 0**, even when evals fall below
+2. **`honest-agent run` always exits 0**, even when evals fall below
    threshold, so a CI job never fails on a regression (only `notify`
    alerts). Decide whether to add an option that sets a failing exit code.
-7. **Ship the AWS setup as code**, after the recipe settles: a
+3. **Ship the AWS setup as code**, after the recipe settles: a
    CloudFormation template with a "Launch stack" link (bucket, minimal
    policy, GitHub OIDC role), a Terraform module when a team asks. It must
    cope with an existing GitHub OIDC provider (one per account).
-8. **Turn the tested recipe into a Claude Code skill** that asks for
+4. **Turn the tested recipe into a Claude Code skill** that asks for
    storage, host, CI and warehouse and generates the workflow, config and
    commands, pointing to `docs/hosting.md`. Never asks for tokens in chat,
    never suggests public hosting, confirms before creating resources.

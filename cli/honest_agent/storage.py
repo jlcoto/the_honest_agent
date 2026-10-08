@@ -491,11 +491,10 @@ def export_to_s3_parquet(results_path: str, s3_path: str, run_id: str | None = N
     separate S3 SDK needed).
 
     Exports every stored run by default; pass `run_id` to export just one.
-    Relies entirely on DuckDB's own S3 credential resolution (the standard
-    AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN /
-    AWS_REGION env vars, a shared ~/.aws/credentials profile, or any other
-    source DuckDB's credential_chain provider picks up) -- this module does
-    no credential handling of its own.
+    Credentials come from the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
+    AWS_SESSION_TOKEN / AWS_REGION env vars only: no DuckDB secret is created,
+    so profiles, SSO and roles aren't picked up. This module does no
+    credential handling of its own.
 
     Returns `s3_path`, for logging.
     """

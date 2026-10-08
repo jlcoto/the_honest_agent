@@ -589,8 +589,8 @@ def notify(
     "--s3-path",
     required=True,
     help="s3://bucket/prefix/results.parquet destination. Uses DuckDB's own httpfs extension "
-    "(installed automatically) and its standard AWS credential resolution -- no separate S3 "
-    "SDK or credential handling here.",
+    "(installed automatically); AWS credentials come from the AWS_ACCESS_KEY_ID/"
+    "AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN/AWS_REGION environment variables only.",
 )
 @click.option(
     "--run-id",
