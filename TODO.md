@@ -27,16 +27,6 @@ teams to host the report.
    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'`
    plus `<meta name="referrer" content="no-referrer">`. Check in a browser
    that React's inline styles still work.
-3. **Hidden files in the report folder** (`.gitignore`,
-   `.honest_agent_report`) get published by `wrangler pages deploy`
-   (confirmed: both answered 200 on Pages). The marker lets `report` only
-   overwrite folders it created; the `.gitignore` keeps the folder out of
-   git. Today `docs/hosting.md` deploys a copy made with
-   `rsync -a --exclude '.*'`. To decide: recognise the folder from a
-   `<meta name="generator" content="honest-agent">` in `index.html` instead
-   of a marker file, and either drop the folder's `.gitignore` (users, or
-   `init`, add `honest_agent_report/` to their own) or keep it and the
-   deploy exclude. Goal: the folder holds only the website.
 
 ## From the first-time setup walkthrough (2026-10-08)
 

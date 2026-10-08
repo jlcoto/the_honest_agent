@@ -65,8 +65,9 @@ ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY=...
 SNOWFLAKE_MCP_TOKEN=...      # the token for your MCP server
 ```
 
-Only secrets go here. If the project is in git, add `.env` to `.gitignore`.
-honest-agent's own results and report folders keep themselves out of git.
+Only secrets go here. If the project is in git, add `.env` and
+`honest_agent_report/` to `.gitignore`. The results folder keeps itself out of
+git; the report folder holds only the website, so it can be uploaded as is.
 
 ### 3. Describe your agent in `honest_agent_config.yml`
 

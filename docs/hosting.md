@@ -226,8 +226,7 @@ means the site is public: stop and fix Access first.
 
 ```bash
 honest-agent report
-rsync -a --exclude '.*' honest_agent_report/ site/      # leave out honest-agent's hidden helper files
-npx wrangler pages deploy site --project-name honest-agent-report --branch main
+npx wrangler pages deploy honest_agent_report --project-name honest-agent-report --branch main
 ```
 
 Open the address in a private window: you should get the sign-in page, then
@@ -297,13 +296,12 @@ refuse direct access (`403`).
 
 ```bash
 REPORT_BUCKET=s3://<bucket from the stack outputs>
-aws s3 sync honest_agent_report/ "$REPORT_BUCKET"/ --delete --exclude ".*" --exclude "index.html" --exclude "data/*"
+aws s3 sync honest_agent_report/ "$REPORT_BUCKET"/ --delete --exclude "index.html" --exclude "data/*"
 aws s3 cp honest_agent_report/index.html "$REPORT_BUCKET"/index.html --cache-control no-cache
 aws s3 cp honest_agent_report/data/ "$REPORT_BUCKET"/data/ --recursive --cache-control no-cache
 ```
 
-`--delete` removes the template's sample page and old report files;
-`--exclude ".*"` keeps honest-agent's hidden helper files out. `no-cache` on
+`--delete` removes the template's sample page and old report files. `no-cache` on
 the page and the data makes CloudFront fetch them fresh on every load, so a
 new report shows up immediately. The hashed files in `assets/` can be cached.
 
@@ -505,11 +503,8 @@ jobs:
       - name: Build report
         run: honest-agent report
 
-      # Publish a copy without honest-agent's hidden helper files.
       - name: Deploy report
-        run: |
-          rsync -a --exclude '.*' honest_agent_report/ site/
-          npx --yes wrangler pages deploy site --project-name "$CLOUDFLARE_PAGES_PROJECT" --branch main
+        run: npx --yes wrangler pages deploy honest_agent_report --project-name "$CLOUDFLARE_PAGES_PROJECT" --branch main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -521,9 +516,11 @@ jobs:
           HONEST_AGENT_REPORT_URL: ${{ vars.HONEST_AGENT_REPORT_URL }}
 ```
 
-This exact structure ran successfully (target `motherduck`, project
+This structure ran successfully (target `motherduck`, project
 `honest-agent-report`); replace the `<TARGET_TOKEN_ENV>` line with your
-target's real variable name. GitHub warns that these action versions run on
+target's real variable name. The tested runs deployed a copy of the report
+folder without honest-agent's hidden helper files; honest-agent no longer
+writes those, so the folder is now deployed as is. GitHub warns that these action versions run on
 Node 20; pin newer major versions when available.
 
 Run it with `gh workflow run honest-agent.yml -R <owner>/<repo>`; follow it
@@ -531,7 +528,7 @@ with `gh run watch <run-id> -R <owner>/<repo>` (the run ID is required when
 not interactive).
 
 Add `.env`, `*.duckdb`, `*.duckdb.gz`, `honest_agent_results/`,
-`honest_agent_report/`, `site/`, `.venv/` and `.wrangler/` to `.gitignore`.
+`honest_agent_report/`, `.venv/` and `.wrangler/` to `.gitignore`.
 
 What the test showed: each run appends to the history (6 results became 10
 after a second run, no duplicates); the deploy uploads exactly the 6 report
@@ -614,11 +611,9 @@ job's `env:`:
     steps:
       # ... checkout, install, AWS login, download, run, upload, build report as above ...
 
-      # A copy without hidden files; --delete removes old hashed assets.
+      # --delete removes old hashed assets.
       - name: Deploy report to S3
-        run: |
-          rsync -a --exclude '.*' honest_agent_report/ site/
-          aws s3 sync site/ "s3://$REPORT_S3_BUCKET/" --delete --region "$REPORT_S3_REGION"
+        run: aws s3 sync honest_agent_report/ "s3://$REPORT_S3_BUCKET/" --delete --region "$REPORT_S3_REGION"
 
       # Drop CloudFront's cached copy so the new report is served right away.
       - name: Invalidate CloudFront
@@ -640,9 +635,9 @@ may keep an old `index.html` or `report.json` for a while. Upload those two
 with `no-cache`, as in Part 2:
 
 ```bash
-aws s3 sync site/ "s3://$REPORT_S3_BUCKET/" --delete --region "$REPORT_S3_REGION" --exclude "index.html" --exclude "data/*"
-aws s3 cp site/index.html "s3://$REPORT_S3_BUCKET/index.html" --cache-control no-cache --region "$REPORT_S3_REGION"
-aws s3 cp site/data/ "s3://$REPORT_S3_BUCKET/data/" --recursive --cache-control no-cache --region "$REPORT_S3_REGION"
+aws s3 sync honest_agent_report/ "s3://$REPORT_S3_BUCKET/" --delete --region "$REPORT_S3_REGION" --exclude "index.html" --exclude "data/*"
+aws s3 cp honest_agent_report/index.html "s3://$REPORT_S3_BUCKET/index.html" --cache-control no-cache --region "$REPORT_S3_REGION"
+aws s3 cp honest_agent_report/data/ "s3://$REPORT_S3_BUCKET/data/" --recursive --cache-control no-cache --region "$REPORT_S3_REGION"
 ```
 
 With these, CloudFront also checks for a new version on every load, so the
@@ -651,9 +646,3 @@ invalidation becomes optional.
 **After the first run, check:** `curl -sI https://<id>.cloudfront.net/`
 answers 307 to `*.amazoncognito.com`; a direct S3 object URL answers 403;
 signing in shows the new run.
-
-## Known issues
-
-- **Hidden helper files.** The report folder holds `.gitignore` and
-  `.honest_agent_report`; `wrangler pages deploy` would publish them, hence
-  the `rsync --exclude '.*'` copy above. A fix in honest-agent is planned.

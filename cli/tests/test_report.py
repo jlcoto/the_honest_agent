@@ -33,7 +33,7 @@ def test_report_writes_ui_and_all_three_tables(tmp_path: Path):
     out = tmp_path / "report"  # a previous report, with an old bundle to clear
     (out / "assets").mkdir(parents=True)
     (out / "assets" / "stale-old-bundle.js").write_text("")
-    (out / ".honest_agent_report").write_text("")
+    (out / "index.html").write_text('<meta name="generator" content="honest-agent" />')
 
     result = CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(out)])
 
@@ -56,18 +56,15 @@ def test_report_with_no_results_yet(tmp_path: Path):
     assert data["results"] == data["agent_logs"] == data["tool_calls"] == []
 
 
-def test_a_report_folder_honest_agent_creates_ignores_itself_but_an_existing_one_is_left_alone(tmp_path: Path):
+def test_the_report_folder_holds_only_the_website(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [_row()])
-    existing = tmp_path / "site"
-    existing.mkdir()
+    out = tmp_path / "report"
 
-    CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(tmp_path / "new_report")])
-    CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(existing)])
+    CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(out)])
 
-    assert (tmp_path / "new_report" / ".gitignore").read_text().endswith("*\n")
-    assert (tmp_path / "new_report" / "index.html").exists()
-    assert not (existing / ".gitignore").exists()
+    assert sorted(p.name for p in out.iterdir() if p.name.startswith(".")) == []
+    assert '<meta name="generator" content="honest-agent"' in (out / "index.html").read_text()
 
 
 def test_report_refuses_a_folder_with_someone_elses_files(tmp_path: Path):
@@ -95,7 +92,20 @@ def test_report_rewrites_its_own_folder_and_accepts_an_empty_one(tmp_path: Path)
         assert result.exit_code == 0, result.output
 
     for out in (tmp_path / "new", empty):
-        assert (out / ".honest_agent_report").exists()
+        assert (out / "index.html").exists()
+
+
+def test_report_refuses_another_sites_folder(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [_row()])
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text("<html><title>My blog</title></html>")
+
+    result = CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(site)])
+
+    assert result.exit_code != 0
+    assert (site / "index.html").read_text() == "<html><title>My blog</title></html>"
 
 
 def _write_runs(db_path: str) -> None:
