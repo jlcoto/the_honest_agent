@@ -207,6 +207,15 @@ one, and `example_project/evals/example_eval.yml` for how each eval
 declares its own accuracy/provenance thresholds (`grading.min_score` /
 `provenance.min_score`).
 
+Results can also live in MotherDuck instead of a local file: set
+`results_path: md:honest_agent_results` and put a read/write token in
+`HONEST_AGENT_RESULTS_TOKEN`. The database is created on the first `run`, and
+CI jobs and teammates then share one store with nothing to download or upload.
+Use a token of a MotherDuck service account that holds only the results, never
+the motherduck target's `MOTHERDUCK_TOKEN`: the agent being evaluated must not
+be able to change its own results. honest-agent opens the results with
+`HONEST_AGENT_RESULTS_TOKEN` alone, even when `MOTHERDUCK_TOKEN` is also set.
+
 `honest-agent notify` alerts on one target's latest run: the default target,
 or another with `--target`, the same way `run` picks one. Use one webhook per
 environment (`notify --target snowflake_dev` to a dev channel), and give a dev

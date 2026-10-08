@@ -318,3 +318,44 @@ def test_queried_sources_roundtrip(tmp_path: Path):
 
     assert by_id["r1"]["queried_sources"] == sources
     assert by_id["r2"]["queried_sources"] == []
+
+
+def test_a_motherduck_store_opens_with_the_results_token_only(monkeypatch):
+    import duckdb
+
+    from honest_agent.storage import open_results
+
+    class FakeConnection:
+        def __init__(self):
+            self.statements = []
+
+        def execute(self, sql):
+            self.statements.append(sql)
+
+    con = FakeConnection()
+    calls = []
+    monkeypatch.setattr(duckdb, "connect", lambda path, **kwargs: calls.append((path, kwargs)) or con)
+    monkeypatch.setenv("MOTHERDUCK_TOKEN", "agent-read-only")
+    monkeypatch.setenv("HONEST_AGENT_RESULTS_TOKEN", "results-read-write")
+
+    open_results("md:honest_agent_results")
+
+    assert calls == [("md:", {"config": {"motherduck_token": "results-read-write"}})]
+    assert con.statements == ["create database if not exists honest_agent_results", "use honest_agent_results"]
+
+
+@pytest.mark.parametrize("path", ["md:", "md:my-db", "md:db; drop database x", "md:_share/x/y"])
+def test_a_motherduck_store_needs_a_plain_database_name(path):
+    from honest_agent.storage import motherduck_database
+
+    with pytest.raises(ValueError, match="use md:<name>"):
+        motherduck_database(path)
+
+
+def test_a_motherduck_store_without_the_results_token_fails(monkeypatch):
+    from honest_agent.storage import open_results
+
+    monkeypatch.delenv("HONEST_AGENT_RESULTS_TOKEN", raising=False)
+
+    with pytest.raises(RuntimeError, match="HONEST_AGENT_RESULTS_TOKEN is not set"):
+        open_results("md:honest_agent_results")

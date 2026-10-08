@@ -8,6 +8,7 @@
 #
 # A flag or environment variable still overrides any setting here, for one-off runs.
 
+# Or md:<name> to keep results in MotherDuck, opened with HONEST_AGENT_RESULTS_TOKEN (see README.md).
 results_path: ./honest_agent_results/results.duckdb
 
 default_target: demo

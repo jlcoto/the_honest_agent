@@ -28,11 +28,23 @@ from .eval_loader import EvalDefinition, filter_by_tags, load_evals
 from .grading import GRADING_MAX_TOKENS, grading_prompt
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
 from .raw import RunRecorder, read_records
-from .storage import connect, export_to_s3_parquet, read_all_results, write_derived
+from .storage import (
+    RESULTS_TOKEN_ENV,
+    connect,
+    export_to_s3_parquet,
+    is_motherduck,
+    motherduck_database,
+    read_all_results,
+    results_exist,
+    write_derived,
+)
 from .thresholds import failing_rows
 
 DEFAULT_RESULTS_PATH = "./honest_agent_results/results.duckdb"
-_RESULTS_PATH_HELP = "Local DuckDB file where results are stored (created on first `run`)."
+_RESULTS_PATH_HELP = (
+    "Local DuckDB file where results are stored (created on first `run`), or a MotherDuck "
+    f"database as md:<name>, opened with {RESULTS_TOKEN_ENV}."
+)
 DEFAULT_REPORT_DIR = "honest_agent_report"
 DEFAULT_MAX_TOOL_STEPS = 5
 _REPORT_DIR_HELP = "Report folder (web UI + data/report.json)."
@@ -76,10 +88,25 @@ def _config(ctx: click.Context) -> Config | None:
 
 def _results_path(ctx: click.Context, results_path: str | None) -> str:
     """--results-path, else the config file's results_path, else the default."""
-    if results_path is not None:
-        return results_path
-    config = _config(ctx)
-    return (config and config.results_path) or DEFAULT_RESULTS_PATH
+    if results_path is None:
+        config = _config(ctx)
+        results_path = (config and config.results_path) or DEFAULT_RESULTS_PATH
+    if is_motherduck(results_path):
+        if "token" in results_path.lower():
+            raise click.ClickException(
+                f"Don't put a token in results_path; set {RESULTS_TOKEN_ENV} in .env instead, "
+                "so it stays out of config files and shell history."
+            )
+        try:
+            motherduck_database(results_path)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if not os.environ.get(RESULTS_TOKEN_ENV):
+            raise click.ClickException(
+                f"{RESULTS_TOKEN_ENV} is not set. Results in MotherDuck ({results_path}) are opened with it: "
+                "a read/write token for a service account, not the motherduck target's MOTHERDUCK_TOKEN."
+            )
+    return results_path
 
 
 def _from_layers(ctx: click.Context, param: str, value, target: Target | None, key: str | None = None):
@@ -583,7 +610,7 @@ def rebuild(ctx: click.Context, results_path: str | None, run_id: str | None):
     from .raw import has_raw_layer
 
     results_path = _results_path(ctx, results_path)
-    if not Path(results_path).exists():
+    if not results_exist(results_path):
         raise click.ClickException(f"No results file at {results_path}.")
     con = connect(results_path)
     try:

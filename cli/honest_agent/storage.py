@@ -57,6 +57,8 @@ data volume here is trivial.
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -182,11 +184,66 @@ def make_output_dir(path: Path) -> None:
     (path / ".gitignore").write_text("# Created by honest-agent: keeps these generated files out of git.\n*\n")
 
 
-def _connect(results_path: str):
+# A MotherDuck service account's read/write token, kept apart from MOTHERDUCK_TOKEN: that
+# one belongs to the agent's MCP server, which must never be able to change its own results.
+RESULTS_TOKEN_ENV = "HONEST_AGENT_RESULTS_TOKEN"
+
+
+def is_motherduck(results_path: str) -> bool:
+    """Whether results are kept in a MotherDuck database (`md:<name>`) instead of a local file."""
+    return results_path.startswith("md:")
+
+
+def motherduck_database(results_path: str) -> str:
+    """The database name in `md:<name>`: letters, digits and underscores only, so it can go
+    into `create database`/`use` as is."""
+    name = results_path[len("md:") :]
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        raise ValueError(f"{results_path!r}: use md:<name>, with letters, digits and underscores only.")
+    return name
+
+
+def _motherduck() -> Any:
     import duckdb
 
-    make_output_dir(Path(results_path).parent)
-    return duckdb.connect(results_path)
+    token = os.environ.get(RESULTS_TOKEN_ENV)
+    if not token:
+        raise RuntimeError(f"{RESULTS_TOKEN_ENV} is not set; it's needed to open results in MotherDuck.")
+    return duckdb.connect("md:", config={"motherduck_token": token})
+
+
+def results_exist(results_path: str) -> bool:
+    """Whether there are stored results to read: the local file, or the MotherDuck database."""
+    if not is_motherduck(results_path):
+        return Path(results_path).exists()
+    con = _motherduck()
+    try:
+        databases = {row[0] for row in con.execute("select database_name from duckdb_databases()").fetchall()}
+    finally:
+        con.close()
+    return motherduck_database(results_path) in databases
+
+
+def open_results(results_path: str, read_only: bool = False):
+    """A DuckDB connection to the results store: a local file, created with its folder on
+    first write, or a MotherDuck database, created on first write and opened with
+    RESULTS_TOKEN_ENV only. Readers check `results_exist` first."""
+    import duckdb
+
+    if is_motherduck(results_path):
+        name = motherduck_database(results_path)
+        con = _motherduck()
+        if not read_only:
+            con.execute(f"create database if not exists {name}")
+        con.execute(f"use {name}")
+        return con
+    if not read_only:
+        make_output_dir(Path(results_path).parent)
+    return duckdb.connect(results_path, read_only=read_only)
+
+
+def _connect(results_path: str):
+    return open_results(results_path)
 
 
 def connect(results_path: str):
@@ -295,7 +352,7 @@ def read_all_results(results_path: str) -> list[dict[str, Any]]:
     nothing's been written yet, rather than raising -- a fresh project that
     hasn't run an eval yet shouldn't error on `report`/`notify`.
     """
-    if not Path(results_path).exists():
+    if not results_exist(results_path):
         return []
 
     con = _connect(results_path)
@@ -325,7 +382,7 @@ def read_traces(results_path: str, run_id: str | None = None, eval_id: str | Non
     """Reads `traces` rows (the normalized conversation per result), optionally
     filtered to one run and/or one eval. Returns [] if nothing's been written yet.
     """
-    if not Path(results_path).exists():
+    if not results_exist(results_path):
         return []
 
     con = _connect(results_path)
@@ -357,7 +414,7 @@ def read_tool_calls(
     ordered so each eval's calls come back in the order they happened.
     Returns [] if nothing's been written yet.
     """
-    if not Path(results_path).exists():
+    if not results_exist(results_path):
         return []
 
     con = _connect(results_path)
@@ -396,7 +453,7 @@ def export_to_s3_parquet(results_path: str, s3_path: str, run_id: str | None = N
 
     Returns `s3_path`, for logging.
     """
-    if not Path(results_path).exists():
+    if not results_exist(results_path):
         raise FileNotFoundError(f"No results database at {results_path} -- run `honest-agent run` first.")
 
     con = _connect(results_path)
