@@ -242,16 +242,16 @@ doesn't carry it yet:
 - every query appears twice (SQL calls card and Trace), and the SQL calls card
   doesn't show what each call returned.
 
-## Migrate S3 export from plain Parquet to DuckLake
+## DuckLake, if ever needed
 
-`honest-agent export` (`storage.py`'s `export_to_s3_parquet`) currently writes a
-plain Parquet snapshot to S3 via `COPY (...) TO 's3://...' (FORMAT PARQUET)`.
-The plan, discussed and spiked but never implemented, is to write a
-**DuckLake** table instead (Parquet data files + a small catalog) so the
-export becomes directly queryable by DuckDB-WASM in the browser -- the
-foundation for an eventual interactive HTML report (`honest-agent report`
+`honest-agent export` (a Parquet snapshot of `results` to S3) was removed on
+2026-10-08: nothing used it once hosting stored the whole results file
+(`docs/hosting.md`). The earlier plan was to make it write a **DuckLake**
+table instead (Parquet data files + a small catalog), queryable by
+DuckDB-WASM in the browser -- the foundation for an interactive report
 running live SQL client-side against S3 data, instead of today's static
-pre-rendered tables).
+pre-rendered tables. If that comes back, it would be a DuckLake results store
+or export, not a revived Parquet snapshot.
 
 A throwaway spike already confirmed this is technically feasible: DuckDB-WASM
 (`@duckdb/duckdb-wasm@1.32.0`+, bundling DuckDB core v1.4.3+) can genuinely
@@ -341,15 +341,14 @@ Two ways to share, snapshot vs. live:
 
 1. **Snapshot (the default, being built now).** `honest-agent report` bakes
    the data into JSON at generation time. View it locally with `honest-agent
-   serve`, or upload the folder as-is to any static host (S3 website
-   hosting, GitHub Pages, an internal host). Showing new runs means
-   regenerating and re-uploading, typically a CI step after each eval run.
-2. **Live (later, opt-in).** Host the UI once. `honest-agent export` keeps
-   pushing data to S3 (Parquet/DuckLake, see the section above), and the
-   UI queries the latest data with DuckDB-WASM whenever it's opened. The
-   query box comes with it. Needs: option B above, CORS/Range on the
-   bucket, and `export` including `agent_logs`/`tool_calls` (today it
-   exports `results` only, so live reports would have no traces or SQL).
+   serve`, or upload the folder as-is to a static host behind a sign-in
+   (`docs/hosting.md`; never public). Showing new runs means regenerating
+   and re-uploading, a CI step after each eval run.
+2. **Live (later, opt-in).** Host the UI once, keep the data in S3 as
+   DuckLake (see "DuckLake, if ever needed" above), and the UI queries the
+   latest data with DuckDB-WASM whenever it's opened. The query box comes
+   with it. Needs: option B above, CORS/Range on the bucket, and all three
+   tables (results, traces, tool calls) in the lake.
 
 Worth adding to the snapshot mode: a **single-file** output (data inlined
 into `index.html`, like dbt's `docs generate --static`) so a report can be

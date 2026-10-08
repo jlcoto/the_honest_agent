@@ -85,27 +85,11 @@ Re-running `honest-agent run` inserts another batch of rows under a new
 `run_id`, so history just accumulates in the same file — `honest-agent
 report`'s run-summary table picks up the trend automatically.
 
-### Querying scores from other tools (optional)
+### Sharing results with a team
 
-To share results with a team (a shared store, a hosted report, scheduled
-runs), see [`docs/hosting.md`](../docs/hosting.md). Separately, if you want
-the scores queryable by other tools, export a Parquet snapshot to S3 — built
-on DuckDB's own `httpfs` extension (installed automatically on first use, no
-separate S3 SDK dependency):
-
-```bash
-uv run honest-agent export --s3-path s3://your-bucket/honest_agent/results.parquet
-```
-
-It reads AWS credentials from the `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_REGION` environment
-variables only; profiles, SSO and roles aren't picked up. To use one, export
-it as those variables first: `eval "$(aws configure export-credentials --format env)"`. The resulting Parquet file is exactly what
-Snowflake/BigQuery/Athena would define an external table over, or what
-another DuckDB (anyone's laptop, a scheduled job) can query directly with
-`read_parquet('s3://...')`. This step is entirely optional — nothing else
-in this project requires it, and if you never run it nothing ever touches
-S3.
+See [`docs/hosting.md`](../docs/hosting.md): results in MotherDuck or a file
+in S3, the report behind a sign-in, and scheduled runs in CI. To query
+results from SQL, open the DuckDB file (or the MotherDuck database) directly.
 
 ## Writing evals
 

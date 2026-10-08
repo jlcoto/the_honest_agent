@@ -19,9 +19,7 @@ never a hand-rolled `venv`/`pip install`.
 - **`cli/`** — the `honest-agent` Python CLI. Owns every LLM call (running the
   eval, LLM-judge grading, provenance scoring), the threshold checks, and
   everything else (Slack notifications, the web report and `serve`). Results
-  storage is a local DuckDB file by default, or a MotherDuck database;
-  `honest-agent export` can also push a Parquet snapshot of the scores to S3
-  for querying from other tools, an explicit, optional step. `honest-agent run` calls
+  storage is a local DuckDB file by default, or a MotherDuck database. `honest-agent run` calls
   the model you choose, Claude or OpenAI (GPT), with tools sourced live from
   the MCP server a target in `honest_agent_config.yml` points to — this tests
   the actual tools employees connect to, not a locally reimplemented stand-in
@@ -158,8 +156,7 @@ the agent's tools returned: query results
 messages that can name accounts and roles, and the agent's answers. Access
 tokens are never stored. Keeping these files safe is up to you: treat them
 like the data your agent can query, and think before hosting or sharing the
-report. Keep both out of git (step 2); `honest-agent export` sends only the
-results table to S3, never the traces.
+report. Keep both out of git (step 2).
 
 ### Alternative: one `honest-agent` command for every project
 
@@ -238,13 +235,6 @@ target its own `agent_name`: two targets with the same `agent_name` file their
 runs, and alerts, as the same agent. Pass `--report-url` (or set
 `HONEST_AGENT_REPORT_URL`) to where the report is published, and the alert
 links each failing eval to its page.
-
-**Querying scores from other tools:** `honest-agent export --s3-path
-s3://bucket/prefix/results.parquet` writes the `results` table (scores, not
-traces) as Parquet to S3, for Snowflake, Athena or another DuckDB. It reads
-AWS credentials from the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`AWS_SESSION_TOKEN` and `AWS_REGION` environment variables only; to use a
-profile or SSO login, run `eval "$(aws configure export-credentials --format env)"` first.
 
 ## Developing the CLI
 

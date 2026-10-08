@@ -31,7 +31,6 @@ from .raw import RunRecorder, read_records
 from .storage import (
     RESULTS_TOKEN_ENV,
     connect,
-    export_to_s3_parquet,
     is_motherduck,
     motherduck_database,
     read_all_results,
@@ -581,28 +580,6 @@ def notify(
     # Without targets there's one agent to alert on: whichever ran last.
     agent_name = (chosen.settings.get("agent_name") or chosen.name) if chosen else None
     notify_mod.notify_on_failures(results_path, webhook_url, agent_name, report_url)
-
-
-@main.command()
-@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
-@click.option(
-    "--s3-path",
-    required=True,
-    help="s3://bucket/prefix/results.parquet destination. Uses DuckDB's own httpfs extension "
-    "(installed automatically); AWS credentials come from the AWS_ACCESS_KEY_ID/"
-    "AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN/AWS_REGION environment variables only.",
-)
-@click.option(
-    "--run-id",
-    default=None,
-    help="Export only this run instead of every stored run.",
-)
-@click.pass_context
-def export(ctx: click.Context, results_path: str | None, s3_path: str, run_id: str | None):
-    """Export stored results to S3 as Parquet -- entirely optional; nothing else requires this."""
-    results_path = _results_path(ctx, results_path)
-    written = export_to_s3_parquet(results_path, s3_path, run_id=run_id)
-    click.echo(f"Exported to {written}")
 
 
 @main.command()
