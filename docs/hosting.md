@@ -276,9 +276,12 @@ Parameters (`params.json`, a list of `{"Name": ..., "Value": ...}`):
 - `EmailAddress` = the first person's email: Cognito emails them a temporary
   password. Only an admin can add users; nobody can sign up themselves.
 - `HttpHeaders`: the template's default content security policy blocks the
-  report's fonts and icons (loaded from Google Fonts and unpkg until the
-  report bundles them). Pass your own, with
-  `font-src https://fonts.gstatic.com` and `img-src 'self' data: https://unpkg.com`.
+  report's bundled icons (`data:` images). Pass your own, matching the one the
+  report carries:
+  `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'`.
+  (Tested with an earlier version of the report that loaded fonts and icons
+  from Google Fonts and unpkg; the report no longer loads anything from
+  elsewhere.)
 
 It takes about 10 minutes; check the stack reaches `CREATE_COMPLETE`. Its
 outputs give the address (`WebsiteUrl`) and the bucket (`S3Bucket`).

@@ -6,7 +6,8 @@ Copied from the Claude Design project **The Honest Agent Design System**
 series palette (`--series-1…5`), `TrendChart` and the quiz → eval rename in
 `Heatmap` on 2026-10-05; `Badge`'s `size="sm"`, the dashboard kit's result
 page (`ui_kits/dashboard/Detail.jsx`, ported from `src/views/ResultDetail.tsx`)
-and the kit's quiz → eval rename on 2026-10-07. The project's `readme.md` holds the full guidelines
+and the kit's quiz → eval rename on 2026-10-07; bundled fonts (`tokens/fonts/`) and
+icons (`components/core/icons.js`, used by `Icon`) on 2026-10-08. The project's `readme.md` holds the full guidelines
 (palette roles, accuracy buckets, type, voice); follow it when building views.
 
 - `styles.css` + `tokens/`: tokens as CSS variables, imported once in `main.tsx`.
@@ -53,6 +54,9 @@ Not copied: the `ui_kits/dashboard` reference screens, guideline cards, and
 `assets/logo-mark.png` (`Logo` needs it; copy it into `public/` before using
 `Logo`).
 
-External requests at view time: fonts load from Google Fonts
-(`fonts.gstatic.com`) and icons from unpkg (`lucide-static@0.469.0`). Offline,
-text falls back to system fonts and icons don't render.
+No external requests at view time: the fonts (`tokens/fonts/`, SIL OFL 1.1) and
+the icons the report uses (`components/core/icons.js`, Lucide, ISC) are bundled,
+so the built report can ship a strict Content-Security-Policy (`vite.config.ts`).
+`Icon` falls back to unpkg (`lucide-static@0.469.0`) for any other name, which
+that policy blocks: add an icon to `icons.js` before using it in the report.
+The licences are copied to `public/licenses/`, so they ship with the report.

@@ -4,30 +4,6 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
-## Before recommending hosting: report hardening
-
-From the hosting research of 2026-10-07 and the hosting walkthrough of
-2026-10-08 (recipe draft: `docs/hosting.md`). Do these before the docs tell
-teams to host the report.
-
-1. **Serve fonts and icons ourselves.** The report loads fonts from Google
-   (`ui/src/ds/tokens/fonts.css`) and icons from unpkg
-   (`ui/src/ds/components/core/Icon.jsx`) at view time: every viewer's IP goes
-   to both, they break on locked-down networks, and a strict CSP is
-   impossible (CloudFront's auth template's default CSP blocks both). Bundle
-   the woff2 files and the Lucide SVGs. Fonts: Geist, Geist Mono and Space
-   Grotesk, one variable Latin `.woff2` each, all SIL OFL 1.1 (ship the
-   license). Decided 2026-10-08: commit the exact files Google serves next to
-   `fonts.css`, not Fontsource npm packages, so the design system works the
-   same in Claude Design and in our build. Do fonts, icons and the CSP (item
-   2) as one change. These files come from the Claude
-   Design system: change them there, or by a targeted write per
-   `ui/src/ds/README.md`, never only locally.
-2. **CSP `<meta>` in `ui/index.html`** once nothing loads from outside:
-   `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'`
-   plus `<meta name="referrer" content="no-referrer">`. Check in a browser
-   that React's inline styles still work.
-
 ## From the first-time setup walkthrough (2026-10-08)
 
 The user installed honest-agent from scratch in an empty folder, following
