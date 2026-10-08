@@ -279,6 +279,21 @@ def _table_exists(con, table_name: str) -> bool:
     return bool(row and row[0] > 0)
 
 
+def _known_columns(con, table_name: str, names: list[str]) -> str:
+    """The `select` list for a derived table: the columns this version defines (`names`), in
+    that order, that the table has. Columns left behind by older versions (`tools_offered`,
+    `grading_exchange`, raw requests and responses) are never read, so they can't reach
+    the report or an export."""
+    present = {
+        row[0]
+        for row in con.execute(
+            "select column_name from information_schema.columns where table_schema = 'main' and table_name = ?",
+            [table_name],
+        ).fetchall()
+    }
+    return ", ".join(name for name in names if name in present)
+
+
 def write_derived(con, rows: list[dict[str, Any]]) -> None:
     """Writes derived rows (from derive.derive_result), replacing any rows those results
     already have, in one transaction -- so a rebuild never leaves a result half-written.
@@ -359,7 +374,7 @@ def read_all_results(results_path: str) -> list[dict[str, Any]]:
     try:
         if not _table_exists(con, "results"):
             return []
-        cursor = con.execute("select * from results")
+        cursor = con.execute(f"select {_known_columns(con, 'results', _RESULTS_COLUMN_NAMES)} from results")
         columns = [d[0] for d in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
@@ -397,7 +412,9 @@ def read_traces(results_path: str, run_id: str | None = None, eval_id: str | Non
             clauses.append("eval_id = ?")
             params.append(eval_id)
         where_sql = f" where {' and '.join(clauses)}" if clauses else ""
-        cursor = con.execute(f"select * from traces{where_sql}", params)
+        cursor = con.execute(
+            f"select {_known_columns(con, 'traces', _TRACES_COLUMN_NAMES)} from traces{where_sql}", params
+        )
         columns = [d[0] for d in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
@@ -432,7 +449,8 @@ def read_tool_calls(
             clauses.append("result_id = ?")
             params.append(result_id)
         where_sql = f" where {' and '.join(clauses)}" if clauses else ""
-        cursor = con.execute(f"select * from tool_calls{where_sql} order by result_id, call_index", params)
+        columns = _known_columns(con, "tool_calls", _TOOL_CALLS_COLUMN_NAMES)
+        cursor = con.execute(f"select {columns} from tool_calls{where_sql} order by result_id, call_index", params)
         columns = [d[0] for d in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
@@ -468,11 +486,12 @@ def export_to_s3_parquet(results_path: str, s3_path: str, run_id: str | None = N
         # free-form user input, but it's escaped defensively regardless since
         # DuckDB's COPY target/source SQL is built as text, not bound parameters.
         s3_path_escaped = s3_path.replace("'", "''")
+        columns = _known_columns(con, "results", _RESULTS_COLUMN_NAMES)
         if run_id is not None:
             run_id_escaped = run_id.replace("'", "''")
-            select_sql = f"select * from results where run_id = '{run_id_escaped}'"
+            select_sql = f"select {columns} from results where run_id = '{run_id_escaped}'"
         else:
-            select_sql = "select * from results"
+            select_sql = f"select {columns} from results"
         con.execute(f"copy ({select_sql}) to '{s3_path_escaped}' (format parquet)")
     finally:
         con.close()

@@ -359,3 +359,18 @@ def test_a_motherduck_store_without_the_results_token_fails(monkeypatch):
 
     with pytest.raises(RuntimeError, match="HONEST_AGENT_RESULTS_TOKEN is not set"):
         open_results("md:honest_agent_results")
+
+
+def test_columns_left_by_older_versions_are_never_read(tmp_path: Path):
+    import duckdb
+
+    db_path = str(tmp_path / "results.duckdb")
+    write_run_results(db_path, "run_1", [ROW_1, ROW_2])
+    con = duckdb.connect(db_path)
+    for table in ("results", "traces", "tool_calls"):
+        con.execute(f"alter table {table} add column tools_offered varchar default 'old tool schemas'")
+    con.close()
+
+    rows = read_all_results(db_path) + read_traces(db_path) + read_tool_calls(db_path)
+
+    assert rows and all("tools_offered" not in row for row in rows)

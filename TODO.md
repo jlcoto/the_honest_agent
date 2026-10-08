@@ -27,12 +27,9 @@ teams to host the report.
    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'`
    plus `<meta name="referrer" content="no-referrer">`. Check in a browser
    that React's inline styles still work.
-3. **Publish only listed columns** in `build_report_data` instead of
-   `select *`, so old columns (`tools_offered`, `grading_exchange`, raw
-   request/response) stop being published.
-4. **CSV formula injection** (security item 6 below).
-5. **30-day window** in `report`, counted back from the latest run.
-6. **Hidden files in the report folder** (`.gitignore`,
+3. **CSV formula injection** (security item 6 below).
+4. **30-day window** in `report`, counted back from the latest run.
+5. **Hidden files in the report folder** (`.gitignore`,
    `.honest_agent_report`) get published by `wrangler pages deploy`
    (confirmed: both answered 200 on Pages). The marker lets `report` only
    overwrite folders it created; the `.gitignore` keeps the folder out of
