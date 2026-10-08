@@ -22,3 +22,6 @@ build/
 
 # Local project config: copy honest_agent_config.example.yml (holds your own URLs and accounts)
 example_project/honest_agent_config.yml
+
+# wrangler (Cloudflare) local cache: holds the account ID
+.wrangler/

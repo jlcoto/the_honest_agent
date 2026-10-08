@@ -1,5 +1,5 @@
-"""Reads and writes eval results in a local DuckDB file, with an optional
-Parquet export to S3 built on DuckDB's own `httpfs` extension.
+"""Reads and writes eval results in a DuckDB file: a local one, or a MotherDuck
+database (`md:<name>`).
 
 The file has two layers. The raw layer (`raw.runs`, `raw.evals`, `raw.events`,
 see raw.py) records what each run sent and received and is never rewritten.
@@ -36,17 +36,12 @@ Three derived tables, kept deliberately separate:
   Carries `run_id`/`eval_id` alongside `result_id` (denormalized on purpose,
   same reasoning as `traces`: convenience filtering without a join).
 
-The local .duckdb file is always the live, queryable store -- DuckDB (like
-SQLite) allows only one writer process at a time against a given file, so
-this is a good fit for `honest-agent run`'s occasional, sequential writes, but
-it is NOT a shared, concurrently-writable store on its own. For "a team
-wants to constantly analyze this together", `export_to_s3_parquet()` is the
-intended path: it writes a Parquet snapshot to S3 (via DuckDB's own httpfs
-extension -- no separate S3 SDK dependency needed), which Snowflake/
-BigQuery/Athena/another DuckDB can all read as an external table. Nothing
-calls that automatically; it's an explicit, optional step (`honest-agent
-export`). It exports `results` only -- `traces`/`tool_calls` and the raw layer can be
-large and are meant for local/ad-hoc exploration, not the shared dashboard.
+The DuckDB file is always the live, queryable store -- DuckDB (like SQLite)
+allows only one writer process at a time against a given file, so this is a
+good fit for `honest-agent run`'s occasional, sequential writes, but a local
+file is NOT a shared, concurrently-writable store on its own. For a team, keep
+the results in MotherDuck, or the file in private storage with one job at a
+time (docs/hosting.md).
 
 There's no separate "eval definitions" table: every result row carries its
 own copy of the eval fields it was graded against (prompt, expected_answer,
@@ -483,44 +478,3 @@ def read_tool_calls(
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
         con.close()
-
-
-def export_to_s3_parquet(results_path: str, s3_path: str, run_id: str | None = None) -> str:
-    """Exports stored `results` (not `traces`, `tool_calls` or the raw layer) to a Parquet file in S3,
-    via DuckDB's `httpfs` extension (installed/loaded at call time -- no
-    separate S3 SDK needed).
-
-    Exports every stored run by default; pass `run_id` to export just one.
-    Relies entirely on DuckDB's own S3 credential resolution (the standard
-    AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN /
-    AWS_REGION env vars, a shared ~/.aws/credentials profile, or any other
-    source DuckDB's credential_chain provider picks up) -- this module does
-    no credential handling of its own.
-
-    Returns `s3_path`, for logging.
-    """
-    if not results_exist(results_path):
-        raise FileNotFoundError(f"No results database at {results_path} -- run `honest-agent run` first.")
-
-    con = _connect(results_path)
-    try:
-        if not _table_exists(con, "results"):
-            raise RuntimeError(f"{results_path} has no results yet -- run `honest-agent run` first.")
-
-        con.execute("install httpfs")
-        con.execute("load httpfs")
-
-        # run_id is always a CLI-generated uuid.uuid4() string (see cli.py), never
-        # free-form user input, but it's escaped defensively regardless since
-        # DuckDB's COPY target/source SQL is built as text, not bound parameters.
-        s3_path_escaped = s3_path.replace("'", "''")
-        columns = _known_columns(con, "results", _RESULTS_COLUMN_NAMES)
-        if run_id is not None:
-            run_id_escaped = run_id.replace("'", "''")
-            select_sql = f"select {columns} from results where run_id = '{run_id_escaped}'"
-        else:
-            select_sql = f"select {columns} from results"
-        con.execute(f"copy ({select_sql}) to '{s3_path_escaped}' (format parquet)")
-    finally:
-        con.close()
-    return s3_path

@@ -6,9 +6,9 @@ each response:
 - **accuracy** — is the answer correct?
 - **provenance** — did the agent use the right sources/tools to derive it?
 
-Results are stored in a local DuckDB file, graded against per-eval
-thresholds, and can be visualized, alerted on, and (optionally) exported to
-S3 as Parquet for sharing with a team or other tools.
+Results are stored in a DuckDB file, graded against per-eval thresholds,
+shown in a web report you can host for your team, and alerted on in Slack.
+See [Running it for a team](#running-it-for-a-team).
 
 Python tooling is managed with [`uv`](https://docs.astral.sh/uv/) — the
 workflow in both `cli/` and `example_project/` is `uv sync` + `uv run ...`,
@@ -19,9 +19,7 @@ never a hand-rolled `venv`/`pip install`.
 - **`cli/`** — the `honest-agent` Python CLI. Owns every LLM call (running the
   eval, LLM-judge grading, provenance scoring), the threshold checks, and
   everything else (Slack notifications, the web report and `serve`). Results
-  storage is a local DuckDB file by default; `honest-agent export` can push a
-  Parquet snapshot to S3 (via DuckDB's own `httpfs` extension) for sharing
-  with a team, but that's an explicit, optional step. `honest-agent run` calls
+  storage is a local DuckDB file by default, or a MotherDuck database. `honest-agent run` calls
   the model you choose, Claude or OpenAI (GPT), with tools sourced live from
   the MCP server a target in `honest_agent_config.yml` points to — this tests
   the actual tools employees connect to, not a locally reimplemented stand-in
@@ -120,6 +118,11 @@ evals:
           expected_sources: [orders]
 ```
 
+This example fits the bundled demo warehouse (its TPC-H `orders` table).
+For your agent, replace the `prompt` with a question it should answer from
+your data, `expected_answer` with the answer you know is right, and
+`expected_sources` with the tables it should read.
+
 `expected_answer` checks accuracy; `expected_sources` checks provenance, i.e.
 that the SQL the agent ran actually read `orders`. See
 [Writing evals](example_project/README.md#writing-evals) and
@@ -133,7 +136,8 @@ uv run honest-agent report    # writes the report to honest_agent_report/
 uv run honest-agent serve     # opens it in your browser (Ctrl+C to stop)
 ```
 
-- `run --target motherduck` evaluates another target.
+- `run` uses `default_target`, so you only need `--target` for another one:
+  `run --target motherduck`.
 - To see why an eval failed, `uv run honest-agent logs --eval-id
   orders_placed_in_1996` prints what the agent sent and received, call by
   call: every model call, tool call and grading call, with its timing (`--json`
@@ -152,8 +156,7 @@ the agent's tools returned: query results
 messages that can name accounts and roles, and the agent's answers. Access
 tokens are never stored. Keeping these files safe is up to you: treat them
 like the data your agent can query, and think before hosting or sharing the
-report. Both are kept out of git by default; `honest-agent export` sends
-only the results table to S3, never the traces.
+report. Keep both out of git (step 2).
 
 ### Alternative: one `honest-agent` command for every project
 
@@ -200,15 +203,36 @@ motherduck` evaluates another one. The default target calls the model with the
 bundled demo MCP server (`mcp_server/server.py`), against a real seeded
 TPC-H warehouse — real SQL, real data, real provenance checking (does the
 agent's SQL actually hit the table we expect). By default results land in
-`./honest_agent_results/results.duckdb`. Run `honest-agent export --s3-path
-s3://...` afterward if you want a Parquet snapshot in S3 too — see
-`example_project/README.md` for details, including how to point at a real
+`./honest_agent_results/results.duckdb`. See `example_project/README.md` for
+details, including how to point at a real
 MCP server (MotherDuck, Snowflake, or your own) instead of the bundled demo
 one, and `example_project/evals/example_eval.yml` for how each eval
 declares its own accuracy/provenance thresholds (`grading.min_score` /
 `provenance.min_score`).
 
-Results can also live in MotherDuck instead of a local file: set
+## Running it for a team
+
+Locally, everything lives in your project folder. For a team, two different
+things are shared, in two different places:
+
+| | The results database | The report |
+|---|---|---|
+| What it is | `results.duckdb`: every run, with what each call sent and received | A website (`honest_agent_report/`) built from the database by `honest-agent report` |
+| What it holds | All history | The last 30 days (`--days`) |
+| Who uses it | The job that runs the evals; people who query it with SQL | Your team, in the browser |
+| Where it goes | MotherDuck, or private storage such as an S3 bucket | A static host behind a sign-in |
+
+Keep them apart: viewers of the report never need the database, which holds
+more (all history, the raw records, run settings). Sharing the report doesn't
+share the database, and the database is never put on the report's host.
+
+A scheduled job ties them together: it runs the evals into the database,
+rebuilds the report and publishes it. [`docs/hosting.md`](docs/hosting.md) is
+a tested recipe for all of it (results in MotherDuck or S3, the report on
+Cloudflare Pages or CloudFront, GitHub Actions, Slack). Never host the report
+publicly: it holds what your agent's tools returned.
+
+**Results in MotherDuck** instead of a local file: set
 `results_path: md:honest_agent_results` and put a read/write token in
 `HONEST_AGENT_RESULTS_TOKEN`. The database is created on the first `run`, and
 CI jobs and teammates then share one store with nothing to download or upload.
@@ -217,7 +241,7 @@ the motherduck target's `MOTHERDUCK_TOKEN`: the agent being evaluated must not
 be able to change its own results. honest-agent opens the results with
 `HONEST_AGENT_RESULTS_TOKEN` alone, even when `MOTHERDUCK_TOKEN` is also set.
 
-`honest-agent notify` alerts on one target's latest run: the default target,
+**Slack alerts:** `honest-agent notify` alerts on one target's latest run: the default target,
 or another with `--target`, the same way `run` picks one. Use one webhook per
 environment (`notify --target snowflake_dev` to a dev channel), and give a dev
 target its own `agent_name`: two targets with the same `agent_name` file their

@@ -8,30 +8,20 @@ waiting on information we don't have yet.
 
 The user installed honest-agent from scratch in an empty folder, following
 only the README, then set up hosting and CI (recipe: `docs/hosting.md`).
-Fix these together, with `init` (section below):
+README fixes done 2026-10-08 (example eval, `--target`, sharing via
+`docs/hosting.md`, `export` auth). Left:
 
-1. **README's example eval** (`orders`, 2297) only works on the demo TPC-H
-   warehouse, and nothing says to replace its prompt, expected answer and
-   expected sources with the user's own.
-2. **Say that `--target` is optional** when `default_target` is set.
-3. **`init` should ask where results live:** a local file, MotherDuck
+1. **`init` should ask where results live:** a local file, MotherDuck
    (a separate results-only token, `HONEST_AGENT_RESULTS_TOKEN`), or a file
    in S3 (link to `docs/hosting.md`).
-4. **README presents `export` as "Sharing results with a team".** Sharing is
-   now the hosting recipe; `export` becomes a side feature for querying
-   scores from Snowflake/Athena.
-5. **`export` auth is documented wrongly:** it never creates a DuckDB
-   secret, so only `AWS_*` environment variables work, not profiles or SSO as
-   the README and `export_to_s3_parquet`'s docstring claim. Fix the docs;
-   add `credential_chain` only when a user asks.
-6. **`honest-agent run` always exits 0**, even when evals fall below
+2. **`honest-agent run` always exits 0**, even when evals fall below
    threshold, so a CI job never fails on a regression (only `notify`
    alerts). Decide whether to add an option that sets a failing exit code.
-7. **Ship the AWS setup as code**, after the recipe settles: a
+3. **Ship the AWS setup as code**, after the recipe settles: a
    CloudFormation template with a "Launch stack" link (bucket, minimal
    policy, GitHub OIDC role), a Terraform module when a team asks. It must
    cope with an existing GitHub OIDC provider (one per account).
-8. **Turn the tested recipe into a Claude Code skill** that asks for
+4. **Turn the tested recipe into a Claude Code skill** that asks for
    storage, host, CI and warehouse and generates the workflow, config and
    commands, pointing to `docs/hosting.md`. Never asks for tokens in chat,
    never suggests public hosting, confirms before creating resources.
@@ -252,16 +242,16 @@ doesn't carry it yet:
 - every query appears twice (SQL calls card and Trace), and the SQL calls card
   doesn't show what each call returned.
 
-## Migrate S3 export from plain Parquet to DuckLake
+## DuckLake, if ever needed
 
-`honest-agent export` (`storage.py`'s `export_to_s3_parquet`) currently writes a
-plain Parquet snapshot to S3 via `COPY (...) TO 's3://...' (FORMAT PARQUET)`.
-The plan, discussed and spiked but never implemented, is to write a
-**DuckLake** table instead (Parquet data files + a small catalog) so the
-export becomes directly queryable by DuckDB-WASM in the browser -- the
-foundation for an eventual interactive HTML report (`honest-agent report`
+`honest-agent export` (a Parquet snapshot of `results` to S3) was removed on
+2026-10-08: nothing used it once hosting stored the whole results file
+(`docs/hosting.md`). The earlier plan was to make it write a **DuckLake**
+table instead (Parquet data files + a small catalog), queryable by
+DuckDB-WASM in the browser -- the foundation for an interactive report
 running live SQL client-side against S3 data, instead of today's static
-pre-rendered tables).
+pre-rendered tables. If that comes back, it would be a DuckLake results store
+or export, not a revived Parquet snapshot.
 
 A throwaway spike already confirmed this is technically feasible: DuckDB-WASM
 (`@duckdb/duckdb-wasm@1.32.0`+, bundling DuckDB core v1.4.3+) can genuinely
@@ -351,15 +341,14 @@ Two ways to share, snapshot vs. live:
 
 1. **Snapshot (the default, being built now).** `honest-agent report` bakes
    the data into JSON at generation time. View it locally with `honest-agent
-   serve`, or upload the folder as-is to any static host (S3 website
-   hosting, GitHub Pages, an internal host). Showing new runs means
-   regenerating and re-uploading, typically a CI step after each eval run.
-2. **Live (later, opt-in).** Host the UI once. `honest-agent export` keeps
-   pushing data to S3 (Parquet/DuckLake, see the section above), and the
-   UI queries the latest data with DuckDB-WASM whenever it's opened. The
-   query box comes with it. Needs: option B above, CORS/Range on the
-   bucket, and `export` including `agent_logs`/`tool_calls` (today it
-   exports `results` only, so live reports would have no traces or SQL).
+   serve`, or upload the folder as-is to a static host behind a sign-in
+   (`docs/hosting.md`; never public). Showing new runs means regenerating
+   and re-uploading, a CI step after each eval run.
+2. **Live (later, opt-in).** Host the UI once, keep the data in S3 as
+   DuckLake (see "DuckLake, if ever needed" above), and the UI queries the
+   latest data with DuckDB-WASM whenever it's opened. The query box comes
+   with it. Needs: option B above, CORS/Range on the bucket, and all three
+   tables (results, traces, tool calls) in the lake.
 
 Worth adding to the snapshot mode: a **single-file** output (data inlined
 into `index.html`, like dbt's `docs generate --static`) so a report can be

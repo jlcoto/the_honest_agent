@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 from honest_agent.storage import (
-    export_to_s3_parquet,
     read_all_results,
     read_latest_run_results,
     read_tool_calls,
@@ -205,45 +204,6 @@ def test_read_latest_run_results_only_returns_most_recent_run(tmp_path: Path):
 
 def test_read_latest_run_results_on_empty_store_returns_empty(tmp_path: Path):
     assert read_latest_run_results(str(tmp_path / "does_not_exist.duckdb")) == []
-
-
-def test_export_to_parquet_on_missing_db_raises(tmp_path: Path):
-    with pytest.raises(FileNotFoundError):
-        export_to_s3_parquet(str(tmp_path / "does_not_exist.duckdb"), str(tmp_path / "out.parquet"))
-
-
-def test_export_to_parquet_writes_readable_file(tmp_path: Path):
-    """Proxy for a true s3:// round trip, which needs real AWS credentials/a
-    bucket this environment doesn't have. `COPY ... TO '<path>' (FORMAT
-    PARQUET)` behaves identically for a local path and an s3:// one -- this
-    exercises the same query/escaping logic export_to_s3_parquet uses,
-    without exercising the httpfs/S3 network path itself.
-    """
-    db_path = str(tmp_path / "results.duckdb")
-    write_run_results(db_path, "run_1", [ROW_1, ROW_2])
-    write_run_results(db_path, "run_2", [ROW_3_LATER_RUN])
-    out_path = tmp_path / "export.parquet"
-
-    export_to_s3_parquet(db_path, str(out_path))
-
-    import duckdb
-
-    rows = duckdb.connect().execute(f"select result_id from read_parquet('{out_path}')").fetchall()
-    assert {r[0] for r in rows} == {"r1", "r2", "r3"}
-
-
-def test_export_to_parquet_filters_by_run_id(tmp_path: Path):
-    db_path = str(tmp_path / "results.duckdb")
-    write_run_results(db_path, "run_1", [ROW_1, ROW_2])
-    write_run_results(db_path, "run_2", [ROW_3_LATER_RUN])
-    out_path = tmp_path / "export.parquet"
-
-    export_to_s3_parquet(db_path, str(out_path), run_id="run_2")
-
-    import duckdb
-
-    rows = duckdb.connect().execute(f"select result_id from read_parquet('{out_path}')").fetchall()
-    assert {r[0] for r in rows} == {"r3"}
 
 
 def test_agent_name_column_is_added_to_an_existing_results_table(tmp_path: Path):
