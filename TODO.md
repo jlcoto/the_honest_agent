@@ -4,6 +4,128 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
+## Before recommending hosting: report hardening
+
+From the hosting research of 2026-10-07 and the hosting walkthrough of
+2026-10-08 (recipe draft: `docs/hosting.md`). Do these before the docs tell
+teams to host the report.
+
+1. **Serve fonts and icons ourselves.** The report loads fonts from Google
+   (`ui/src/ds/tokens/fonts.css`) and icons from unpkg
+   (`ui/src/ds/components/core/Icon.jsx`) at view time: every viewer's IP goes
+   to both, they break on locked-down networks, and a strict CSP is
+   impossible (CloudFront's auth template's default CSP blocks both). Bundle
+   the woff2 files and the Lucide SVGs. Fonts: Geist, Geist Mono and Space
+   Grotesk, one variable Latin `.woff2` each, all SIL OFL 1.1 (ship the
+   license). Decided 2026-10-08: commit the exact files Google serves next to
+   `fonts.css`, not Fontsource npm packages, so the design system works the
+   same in Claude Design and in our build. Do fonts, icons and the CSP (item
+   2) as one change. These files come from the Claude
+   Design system: change them there, or by a targeted write per
+   `ui/src/ds/README.md`, never only locally.
+2. **CSP `<meta>` in `ui/index.html`** once nothing loads from outside:
+   `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'`
+   plus `<meta name="referrer" content="no-referrer">`. Check in a browser
+   that React's inline styles still work.
+3. **Publish only listed columns** in `build_report_data` instead of
+   `select *`, so old columns (`tools_offered`, `grading_exchange`, raw
+   request/response) stop being published.
+4. **CSV formula injection** (security item 6 below).
+5. **30-day window** in `report`, counted back from the latest run.
+6. **Slack links that survive a sign-in:** `notify` links `?result=<id>`,
+   and the router turns it into `#/result/<id>`. Confirmed on Cloudflare
+   Access: `#/result/<id>` lands on the Overview after login.
+7. **Hidden files in the report folder** (`.gitignore`,
+   `.honest_agent_report`) get published by `wrangler pages deploy`
+   (confirmed: both answered 200 on Pages). The marker lets `report` only
+   overwrite folders it created; the `.gitignore` keeps the folder out of
+   git. Today `docs/hosting.md` deploys a copy made with
+   `rsync -a --exclude '.*'`. To decide: recognise the folder from a
+   `<meta name="generator" content="honest-agent">` in `index.html` instead
+   of a marker file, and either drop the folder's `.gitignore` (users, or
+   `init`, add `honest_agent_report/` to their own) or keep it and the
+   deploy exclude. Goal: the folder holds only the website.
+
+## From the first-time setup walkthrough (2026-10-08)
+
+The user installed honest-agent from scratch in an empty folder, following
+only the README, then set up hosting and CI (recipe: `docs/hosting.md`).
+Fix these together, with `init` (section below):
+
+1. **README's example eval** (`orders`, 2297) only works on the demo TPC-H
+   warehouse, and nothing says to replace its prompt, expected answer and
+   expected sources with the user's own.
+2. **Say that `--target` is optional** when `default_target` is set.
+3. **`init` should ask where results live:** a local file, MotherDuck
+   (a separate results-only token, `HONEST_AGENT_RESULTS_TOKEN`), or a file
+   in S3 (link to `docs/hosting.md`).
+4. **README presents `export` as "Sharing results with a team".** Sharing is
+   now the hosting recipe; `export` becomes a side feature for querying
+   scores from Snowflake/Athena.
+5. **`export` auth is documented wrongly:** it never creates a DuckDB
+   secret, so only `AWS_*` environment variables work, not profiles or SSO as
+   the README and `export_to_s3_parquet`'s docstring claim. Fix the docs;
+   add `credential_chain` only when a user asks.
+6. **`honest-agent run` always exits 0**, even when evals fall below
+   threshold, so a CI job never fails on a regression (only `notify`
+   alerts). Decide whether to add an option that sets a failing exit code.
+7. **Ship the AWS setup as code**, after the recipe settles: a
+   CloudFormation template with a "Launch stack" link (bucket, minimal
+   policy, GitHub OIDC role), a Terraform module when a team asks. It must
+   cope with an existing GitHub OIDC provider (one per account).
+8. **Turn the tested recipe into a Claude Code skill** that asks for
+   storage, host, CI and warehouse and generates the workflow, config and
+   commands, pointing to `docs/hosting.md`. Never asks for tokens in chat,
+   never suggests public hosting, confirms before creating resources.
+
+## First tester release (v0.1.0): versions and migrations
+
+Discussed 2026-10-07. The repo is already public and `cli/pyproject.toml` says
+0.1.0, but there are no tags or changelog, and old results files are updated
+by hand. Once testers have real history, that has to change. Do all of this
+when tagging v0.1.0, not before.
+
+**Releases:**
+
+- Call it **alpha**: an "Alpha: expect breaking changes between versions"
+  notice at the top of the README. Not beta: storage and the report format
+  are still changing.
+- **0.x semantic versions**: the minor version (0.1 -> 0.2) for breaking
+  changes, the patch version for fixes. No `0.1.0a1`-style suffix: pip and uv
+  skip pre-releases without `--pre`, which only adds friction for testers.
+  1.0 is when results files are promised to keep working.
+- An annotated **git tag** per release (`git tag -a v0.1.0`) and a **GitHub
+  Release** with short notes, breaking changes first. Testers install the tag:
+  `uv tool install "git+https://github.com/jlcoto/the_honest_agent@v0.1.0#subdirectory=cli"`.
+- A short **`CHANGELOG.md`**.
+- Later, **PyPI** via trusted publishing from a tag workflow (no stored
+  token). Check that `honest-agent` is free on PyPI before announcing.
+
+**Migrations (no Alembic):**
+
+- A `meta` table with `schema_version`, starting at 1 = the schema at release.
+- An ordered list of small Python migration functions (a few lowercase SQL
+  statements each), applied when the CLI opens a results store, each in a
+  transaction. Back up a local file first (`results.duckdb.bak-v<N>`).
+- Refuse a store whose version is newer than the CLI knows ("written by a
+  newer honest-agent; upgrade"), so an old CLI can't corrupt it.
+- What needs a migration:
+
+  | Change | Needed |
+  |---|---|
+  | New column in a derived table | Nothing (`_ensure_schema` adds it) |
+  | Different scoring or derivation | Nothing; release notes say to run `rebuild` |
+  | Rename or removal in a derived table | Recreate it, then `rebuild` |
+  | Any change to the raw layer | A numbered migration: it can't be regenerated |
+  | Report format | Nothing; `report` regenerates it |
+
+- Fix the gap first: `_ensure_schema` adds missing columns to `results` and
+  `tool_calls` but not to `traces`.
+- `honest_agent_config.yml` and eval YAML: a renamed key keeps working under
+  its old name for one minor version, with a warning, then goes.
+- Keep a `duckdb` version range in `pyproject.toml`: a newer DuckDB can write
+  files an older one can't read. Mention DuckDB upgrades in release notes.
+
 ## High priority: security fixes (review of 2026-10-02)
 
 Found by a security review of the CLI. No command injection, SQL injection,
@@ -218,6 +340,17 @@ DuckDB-WASM (option B in "Report frontend: querying and sharing" below). The
 frontend itself is being built on JSON, not WASM, so there's no consumer for
 DuckLake yet.
 
+**DuckLake is also the path for results in S3 (decided 2026-10-07).** Teams
+keep results in a local file, MotherDuck (`results_path: md:<name>`), or a
+file in a bucket that CI downloads and uploads around each job (no code; one
+job at a time, or runs are silently lost). A homemade "per-run Parquet in S3
+with views" store (the pattern from DuckDB's view-only catalog post,
+https://duckdb.org/2026/10/07/view-only-mode) was considered and rejected:
+it fixes the download and overlapping-job problems, but adds a third store to
+maintain, makes raw-layer migrations rewrite every old file, and needs its own
+"run complete" markers and compaction. If teams need S3 without downloading,
+move to DuckLake instead, which already solves those.
+
 ## Report frontend: querying and sharing
 
 The report frontend (a React app in `ui/`, built output shipped inside the
@@ -305,6 +438,49 @@ users can pick what fits their setup.
   and a presigning backend defeats the no-server point. Revoking access
   takes effect immediately, since no copy of the data is left behind.
 
+## "Investigate in Claude Code" button on the result page
+
+Discussed 2026-10-07, for later. A button on a failing result's page that
+opens Claude Code with an investigation prompt already typed, through a
+deep link: `claude-cli://open?repo=<owner/repo>&q=<prompt>`
+(https://code.claude.com/docs/en/deep-links). Build the prompt from ids only
+(eval id, target, run, and `honest-agent logs --run-id ... --eval-id ...`),
+never from warehouse data. Not in the Slack alert (ruled out). Open: `repo`
+vs `cwd`, and the person clicking needs that run's results locally. Claude
+Tag (Claude in Slack) can't be started by the webhook, so that idea was
+dropped.
+
+## `honest-agent prune`: delete old records
+
+`results.duckdb` keeps every run forever. That's a size issue in CI (the job
+downloads and uploads the whole file each run) and, more importantly, a
+retention issue: the raw layer, `traces` and `tool_calls` hold verbatim tool
+output, possibly customer data, and many companies don't allow keeping that
+indefinitely. Discussed 2026-10-07 with the hosting plan; not urgent, since
+real data is ~7-8 KB per result (roughly 500 MB a year at 200 evals a day).
+
+```bash
+honest-agent prune --older-than 90d          # lists what it would delete
+honest-agent prune --older-than 90d --yes    # deletes it
+```
+
+- **What it deletes.** By default the heavy, sensitive parts of old runs: the
+  raw layer, `traces` and `tool_calls`. Their `results` rows stay, so scores
+  remain for long-term trends in SQL. `--all` deletes whole runs, for strict
+  retention.
+- **Safety.** Without `--yes` it only lists. It never deletes a target's
+  latest run, so `notify` and the report always have something. It refuses an
+  age shorter than the report's window (30 days), so it can't empty the
+  report.
+- **Shrink the file.** Deleting rows doesn't make a DuckDB file smaller, so
+  prune ends by copying into a fresh file (`copy from database`) and swapping
+  it in, in one step so a crash can't leave a broken file. A fresh copy of the
+  example project's 5.8 MB file came out at 3.3 MB.
+- **In CI**, one line before the upload. No config key: the age lives where
+  the job is defined.
+- **Say in the output and docs** that `rebuild` and `logs` can't cover pruned
+  runs, since their raw records are gone.
+
 ## Move `sql_fields` into the config file's targets
 
 Which tool argument holds SQL is a fact about the MCP server, not about an eval,
@@ -340,6 +516,15 @@ command, like `dbt init`:
   user's tables. Exception: every MotherDuck account has a `sample_data`
   database, so the MotherDuck template could ship an eval that passes out of
   the box (pick the question and verify its answer first).
+- `init --example` (decided 2026-10-08): instead of setting up the user's
+  own server, creates its own folder (e.g. `honest-agent-example/`) with a
+  local example that passes out of the box: the demo MCP server and TPC-H
+  seed from `example_project`, shipped inside the package, plus its passing
+  evals. Its own folder so a demo target never ends up in a real project's
+  config. Seeds with DuckDB's `tpch` extension on first run (the extension
+  downloads once, so it needs the network; shipping sf=0.01 as Parquet,
+  ~2.1 MB, is the fallback if offline seeding ever matters). Still needs a
+  model API key, and passing still depends on the model.
 - "Getting started" in README.md then shrinks to install, `init`, fill in
   `.env`, run.
 
