@@ -27,8 +27,7 @@ teams to host the report.
    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'`
    plus `<meta name="referrer" content="no-referrer">`. Check in a browser
    that React's inline styles still work.
-3. **30-day window** in `report`, counted back from the latest run.
-4. **Hidden files in the report folder** (`.gitignore`,
+3. **Hidden files in the report folder** (`.gitignore`,
    `.honest_agent_report`) get published by `wrangler pages deploy`
    (confirmed: both answered 200 on Pages). The marker lets `report` only
    overwrite folders it created; the `.gitignore` keeps the folder out of

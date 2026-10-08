@@ -519,12 +519,19 @@ def run(
 @main.command()
 @click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
 @click.option("--out", default=DEFAULT_REPORT_DIR, type=click.Path(file_okay=False), help=_REPORT_DIR_HELP)
+@click.option(
+    "--days",
+    default=report_mod.DEFAULT_WINDOW_DAYS,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Include results from this many days before the latest run. Older results stay in the results file.",
+)
 @click.pass_context
-def report(ctx: click.Context, results_path: str | None, out: str):
-    """Write the report (web UI + data from all stored results) to a folder."""
+def report(ctx: click.Context, results_path: str | None, out: str, days: int):
+    """Write the report (web UI + recent results) to a folder."""
     results_path = _results_path(ctx, results_path)
     try:
-        report_mod.generate(results_path, Path(out))
+        report_mod.generate(results_path, Path(out), days)
     except (FileNotFoundError, report_mod.ReportFolderError) as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"Wrote {out}/. View it with `honest-agent serve --out {out}`.")

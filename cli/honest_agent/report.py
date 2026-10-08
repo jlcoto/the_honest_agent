@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .storage import make_output_dir, read_all_results, read_tool_calls, read_traces
+from .storage import latest_run_timestamp, make_output_dir, read_all_results, read_tool_calls, read_traces
 
 UI_DIR = Path(__file__).parent / "report_ui"
 # Marks a folder as honest-agent's report, which `report` may clear and rewrite.
@@ -25,18 +25,34 @@ class ReportFolderError(Exception):
     pass
 
 
-def build_report_data(results_path: str) -> dict:
-    results = sorted(read_all_results(results_path), key=lambda r: (r["run_timestamp"], r["eval_id"]))
+# The report shows recent history only: the browser loads report.json whole, so
+# a long history would make it slow. Older results stay in the results file.
+DEFAULT_WINDOW_DAYS = 30
+
+
+def window_start(latest_run: str | None, days: int) -> str | None:
+    """The run_timestamp `days` days before the latest run (not before today, so a
+    project that hasn't run for a while still shows its last month)."""
+    if latest_run is None:
+        return None
+    start = datetime.fromisoformat(latest_run) - timedelta(days=days)
+    return start.strftime("%Y-%m-%d %H:%M:%S")  # run_timestamp's own format (derive.py)
+
+
+def build_report_data(results_path: str, days: int = DEFAULT_WINDOW_DAYS) -> dict:
+    since = window_start(latest_run_timestamp(results_path), days)
+    results = sorted(read_all_results(results_path, since), key=lambda r: (r["run_timestamp"], r["eval_id"]))
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "window": {"days": days, "since": since},
         "results": results,
         # `traces` rows, under the key the report UI reads (ui/src/data/types.ts).
-        "agent_logs": read_traces(results_path),
-        "tool_calls": read_tool_calls(results_path),
+        "agent_logs": read_traces(results_path, since=since),
+        "tool_calls": read_tool_calls(results_path, since=since),
     }
 
 
-def generate(results_path: str, out_dir: Path) -> None:
+def generate(results_path: str, out_dir: Path, days: int = DEFAULT_WINDOW_DAYS) -> None:
     if not (UI_DIR / "index.html").exists():
         raise FileNotFoundError(f"Report UI not found at {UI_DIR}. Build it first: `cd ui && npm ci && npm run build`.")
 
@@ -48,7 +64,7 @@ def generate(results_path: str, out_dir: Path) -> None:
 
     data_dir = out_dir / "data"
     data_dir.mkdir(exist_ok=True)
-    (data_dir / "report.json").write_text(json.dumps(build_report_data(results_path)))
+    (data_dir / "report.json").write_text(json.dumps(build_report_data(results_path, days)))
 
 
 def _claim_report_dir(out_dir: Path) -> None:

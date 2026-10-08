@@ -6,6 +6,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from honest_agent.cli import main
+from honest_agent.report import build_report_data
 from honest_agent.storage import write_run_results
 
 
@@ -95,3 +96,33 @@ def test_report_rewrites_its_own_folder_and_accepts_an_empty_one(tmp_path: Path)
 
     for out in (tmp_path / "new", empty):
         assert (out / ".honest_agent_report").exists()
+
+
+def _write_runs(db_path: str) -> None:
+    """Runs on Jan 1, Feb 20 and Mar 1: the last two are within 30 days of the latest."""
+    for run, day in (("old", "2026-01-01"), ("recent", "2026-02-20"), ("latest", "2026-03-01")):
+        row = {**_row(), "result_id": f"r_{run}", "run_id": run, "run_timestamp": f"{day} 09:00:00"}
+        write_run_results(db_path, run, [row])
+
+
+def test_report_shows_the_30_days_before_the_latest_run(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    _write_runs(db_path)
+
+    data = build_report_data(db_path)
+
+    assert data["window"] == {"days": 30, "since": "2026-01-30 09:00:00"}
+    for table in ("results", "agent_logs", "tool_calls"):
+        assert {r["result_id"] for r in data[table]} == {"r_recent", "r_latest"}, table
+
+
+def test_report_days_widens_the_window(tmp_path: Path):
+    db_path = str(tmp_path / "results.duckdb")
+    _write_runs(db_path)
+    out = tmp_path / "report"
+
+    result = CliRunner().invoke(main, ["report", "--results-path", db_path, "--out", str(out), "--days", "90"])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads((out / "data" / "report.json").read_text())
+    assert {r["result_id"] for r in data["results"]} == {"r_old", "r_recent", "r_latest"}
