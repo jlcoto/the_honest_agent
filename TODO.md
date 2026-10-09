@@ -98,9 +98,19 @@ Lower severity:
    picks. Low priority unless an agent answers from free text written by
    outsiders (support tickets, reviews, CRM notes); `extract_match` compares
    in code and is less exposed.
-5. **`honest-agent logs`** prints `agent_answer` and tool payloads raw, so
-   model/tool output can inject terminal escape sequences (OSC 52 clipboard
-   writes, disguised links). Strip control characters before printing.
+5. **Terminal control characters from a remote MCP server** (checked
+   2026-10-09, low priority). Text from warehouse data and models can't reach
+   the terminal raw: `logs` prints requests and responses through `json.dumps`
+   and errors through `repr`, and `run`'s warnings use `repr` (a test keeps
+   `logs` that way). A local stdio server is a program the user started and
+   already shares the terminal's stderr. What's left are paths a remote
+   server controls, printed as is: its self-reported name used as the agent
+   name (`resolve_agent_name`), a handshake error (`describe_connection_error`
+   in `mcp_client.py`), a tool-call error that ends in a traceback, and the
+   MCP SDK's own "Tool ... not listed" log line. Such a server already
+   controls what the agent sees; control characters only add fake terminal
+   output or an OSC 52 clipboard write (many terminals block it). Fix all of
+   them together or none.
 
 ## Cleanup (review of 2026-10-02)
 
