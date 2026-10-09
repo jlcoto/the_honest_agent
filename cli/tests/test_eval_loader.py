@@ -6,8 +6,9 @@ from honest_agent.eval_loader import (
     DEFAULT_ACCURACY_MIN_SCORE,
     DEFAULT_PROVENANCE_MIN_SCORE,
     EvalDefinition,
-    filter_by_tags,
+    SelectorError,
     load_evals,
+    select_evals,
 )
 
 EVAL_YAML = """
@@ -135,11 +136,11 @@ def test_duplicate_eval_id_in_one_file_names_both_lines(tmp_path: Path):
     assert "Duplicate eval id 'q_dup' in a.yml (lines 2 and 5)" in str(exc.value)
 
 
-def _eval(eval_id: str, tags: list[str]) -> EvalDefinition:
+def _eval(eval_id: str, tags: list[str], category: str = "sales") -> EvalDefinition:
     return EvalDefinition(
         eval_id=eval_id,
         prompt="p",
-        category="c",
+        category=category,
         expected_answer="a",
         grading_method="contains",
         expected_sources=[],
@@ -150,44 +151,57 @@ def _eval(eval_id: str, tags: list[str]) -> EvalDefinition:
 _EVALS = [
     _eval("q_smoke", ["smoke"]),
     _eval("q_smoke_provenance", ["smoke", "provenance"]),
-    _eval("q_motherduck", ["motherduck"]),
-    _eval("q_untagged", []),
+    _eval("q_motherduck", ["motherduck"], category="customers"),
+    _eval("q_untagged", [], category="customers"),
 ]
 
 
-def test_filter_by_tags_no_selectors_returns_all():
-    assert [d.eval_id for d in filter_by_tags(_EVALS)] == [d.eval_id for d in _EVALS]
+def _ids(select: str | None = None, exclude: str | None = None) -> list[str]:
+    return [d.eval_id for d in select_evals(_EVALS, select=select, exclude=exclude)]
 
 
-def test_filter_by_tags_select_single_tag():
-    result = filter_by_tags(_EVALS, select="motherduck")
-    assert [d.eval_id for d in result] == ["q_motherduck"]
+def test_no_selector_picks_every_eval():
+    assert _ids() == [d.eval_id for d in _EVALS]
 
 
-def test_filter_by_tags_select_accepts_tag_prefix():
-    result = filter_by_tags(_EVALS, select="tag:motherduck")
-    assert [d.eval_id for d in result] == ["q_motherduck"]
+def test_a_bare_word_is_an_eval_id():
+    assert _ids("q_untagged") == ["q_untagged"]
 
 
-def test_filter_by_tags_select_space_is_union():
-    result = filter_by_tags(_EVALS, select="motherduck provenance")
-    assert {d.eval_id for d in result} == {"q_motherduck", "q_smoke_provenance"}
+def test_tags_and_categories_take_a_prefix():
+    assert _ids("tag:motherduck") == ["q_motherduck"]
+    assert _ids("category:customers") == ["q_motherduck", "q_untagged"]
 
 
-def test_filter_by_tags_select_comma_is_intersection():
-    result = filter_by_tags(_EVALS, select="smoke,provenance")
-    assert [d.eval_id for d in result] == ["q_smoke_provenance"]
+def test_space_is_or_and_comma_is_and():
+    assert _ids("tag:motherduck q_smoke") == ["q_smoke", "q_motherduck"]
+    assert _ids("tag:smoke,tag:provenance") == ["q_smoke_provenance"]
+    assert _ids("category:sales,tag:smoke q_untagged") == ["q_smoke", "q_smoke_provenance", "q_untagged"]
 
 
-def test_filter_by_tags_exclude_applied_after_select():
-    result = filter_by_tags(_EVALS, select="smoke", exclude="provenance")
-    assert [d.eval_id for d in result] == ["q_smoke"]
+def test_exclude_comes_after_select():
+    assert _ids("tag:smoke", exclude="tag:provenance") == ["q_smoke"]
+    assert _ids(exclude="category:customers") == ["q_smoke", "q_smoke_provenance"]
 
 
-def test_filter_by_tags_exclude_only():
-    result = filter_by_tags(_EVALS, exclude="motherduck")
-    assert "q_motherduck" not in {d.eval_id for d in result}
-    assert len(result) == 3
+def test_excluding_something_select_already_left_out_is_fine():
+    assert _ids("tag:smoke", exclude="tag:motherduck") == ["q_smoke", "q_smoke_provenance"]
+
+
+@pytest.mark.parametrize(
+    ("select", "message"),
+    [
+        ("q_typo", "No eval has id 'q_typo'"),
+        ("tag:nightly", "No eval is tagged 'nightly'"),
+        ("category:Sales", "No eval is in category 'Sales'"),
+        ("motherduck", "No eval has id 'motherduck'"),  # a bare word is an id, not a tag
+        ("path:evals/a.yml", "Unknown selector 'path:evals/a.yml'"),
+        ("tag:", "Unknown selector 'tag:'"),
+    ],
+)
+def test_a_selector_that_names_nothing_is_an_error_not_an_empty_run(select: str, message: str):
+    with pytest.raises(SelectorError, match=message):
+        select_evals(_EVALS, select=select)
 
 
 def test_load_evals_reads_optional_title(tmp_path: Path):

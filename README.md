@@ -139,6 +139,11 @@ uv run honest-agent serve     # opens it in your browser (Ctrl+C to stop)
 
 - `run` uses `default_target`, so you only need `--target` for another one:
   `run --target motherduck`.
+- To run only some evals, select them dbt-style: by id (`run --select
+  orders_placed_in_1996`), tag (`--select tag:smoke`) or category
+  (`--select category:sales`). Spaces mean OR, commas mean AND, and
+  `--exclude` leaves evals out. `honest-agent ls` takes the same options and
+  lists what would run, with each eval's id, category and tags.
 - To see why an eval failed, `uv run honest-agent logs --eval-id
   orders_placed_in_1996` prints what the agent sent and received, call by
   call: every model call, tool call and grading call, with its timing (`--json`

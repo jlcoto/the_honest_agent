@@ -17,7 +17,7 @@ version: 1
 # the check.
 #
 # Run with (target in ../honest_agent_config.yml):
-#   honest-agent run --target snowflake --select semantic_view
+#   honest-agent run --target snowflake --select tag:semantic_view
 
 evals:
   - category: finance

@@ -23,6 +23,7 @@ from .config_file import (
     missing_config_hint,
 )
 from .derive import derive_result
+from .eval_loader import load_evals, nothing_selected, select_evals
 from .llm import API_KEY_ENV, default_model, provider_for
 from .raw import read_records
 from .runner import RunError, run_evals
@@ -181,6 +182,37 @@ def _resolve_server(
     return file_command, file_url, os.environ[token_env]
 
 
+def _chosen_target(ctx: click.Context, target: str | None) -> tuple[Config | None, Target | None]:
+    """The config file and the target `--target` names (or its default_target); None
+    for either when there's no config file or it has no targets."""
+    config = _config(ctx)
+    if config is None and target is not None:
+        raise click.ClickException(
+            f"--target {target} needs a {CONFIG_FILE_NAME}, and none was found." + missing_config_hint(Path.cwd())
+        )
+    try:
+        return config, config.target(target) if config and config.targets else None
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _evals_dir(evals_dir: str | None, chosen: Target | None) -> str:
+    """--evals-dir, else the target's evals_dir, else ./evals; it must exist."""
+    evals_dir = evals_dir or (chosen and chosen.settings.get("evals_dir")) or "evals"
+    if not Path(evals_dir).is_dir():
+        raise click.ClickException(f"Evals folder {evals_dir} not found. Pass --evals-dir or set evals_dir.")
+    return evals_dir
+
+
+_SELECT_HELP = (
+    "Only these evals, dbt-`--select`-style: an eval id (e.g. top_segment), tag:<tag> or "
+    "category:<category>. Spaces mean OR, commas mean AND: "
+    "'--select \"category:sales,tag:smoke top_segment\"' picks the sales evals tagged smoke, "
+    "plus top_segment. `honest-agent ls` lists ids, categories and tags."
+)
+_EXCLUDE_HELP = "Leave out these evals (same syntax as --select), after --select."
+
+
 @main.command()
 @click.option(
     "--target",
@@ -256,20 +288,8 @@ def _resolve_server(
     "so reports can filter by agent. Defaults to the target's agent_name or name, else the name the "
     "MCP server reports about itself.",
 )
-@click.option(
-    "--select",
-    "-s",
-    default=None,
-    help="Only run evals matching this tag selector, dbt-`--select`-style: space-separated "
-    "groups are OR'd, comma-separated tags within a group are AND'd, e.g. "
-    "'--select \"smoke,provenance motherduck\"' runs evals tagged both smoke AND "
-    "provenance, OR tagged motherduck. A `tag:` prefix (e.g. `tag:smoke`) is accepted but optional.",
-)
-@click.option(
-    "--exclude",
-    default=None,
-    help="Skip evals matching this tag selector (same syntax as --select), applied after --select.",
-)
+@click.option("--select", "-s", default=None, help=_SELECT_HELP)
+@click.option("--exclude", default=None, help=_EXCLUDE_HELP)
 @click.pass_context
 def run(
     ctx: click.Context,
@@ -288,15 +308,7 @@ def run(
     exclude: str | None,
 ):
     """Run every eval, grade the answers, and write results to storage."""
-    config = _config(ctx)
-    if config is None and target is not None:
-        raise click.ClickException(
-            f"--target {target} needs a {CONFIG_FILE_NAME}, and none was found." + missing_config_hint(Path.cwd())
-        )
-    try:
-        chosen = config.target(target) if config and config.targets else None
-    except ConfigError as exc:
-        raise click.ClickException(str(exc)) from exc
+    config, chosen = _chosen_target(ctx, target)
     if chosen:
         click.echo(f"Target: {chosen.name} ({config.path})")
 
@@ -305,9 +317,7 @@ def run(
     model = _from_layers(ctx, "model", model, layer)
     judge_model = _from_layers(ctx, "judge_model", judge_model, layer)
     max_tool_steps = _from_layers(ctx, "max_tool_steps", max_tool_steps, layer)
-    evals_dir = evals_dir or (chosen and chosen.settings.get("evals_dir")) or "evals"
-    if not Path(evals_dir).is_dir():
-        raise click.ClickException(f"Evals folder {evals_dir} not found. Pass --evals-dir or set evals_dir.")
+    evals_dir = _evals_dir(evals_dir, chosen)
     if chosen:
         # A target names the agent: its agent_name, else the target's own name.
         named = Target(chosen.name, {"agent_name": chosen.settings.get("agent_name") or chosen.name})
@@ -364,6 +374,34 @@ def run(
         )
     except RunError as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+@main.command("ls")
+@click.option("--target", "-t", default=None, help=f"Target from {CONFIG_FILE_NAME} whose evals to list.")
+@click.option(
+    "--evals-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory of eval YAML files. Defaults to the target's evals_dir, else ./evals.",
+)
+@click.option("--select", "-s", default=None, help=_SELECT_HELP)
+@click.option("--exclude", default=None, help=_EXCLUDE_HELP)
+@click.pass_context
+def ls(ctx: click.Context, target: str | None, evals_dir: str | None, select: str | None, exclude: str | None):
+    """List the evals a run would pick, with their id, category and tags, like `dbt ls`.
+    Reads only the eval files: no model or MCP server."""
+    _, chosen = _chosen_target(ctx, target)
+    evals_dir = _evals_dir(evals_dir, chosen)
+    try:
+        definitions = select_evals(load_evals(Path(evals_dir)), select=select, exclude=exclude)
+    except ValueError as exc:  # a bad eval file, or a SelectorError
+        raise click.ClickException(str(exc)) from exc
+    if not definitions:
+        raise click.ClickException(nothing_selected(select, exclude))
+    id_width = max(len(d.eval_id) for d in definitions)
+    category_width = max(len(d.category) for d in definitions)
+    for d in definitions:
+        click.echo(f"{d.eval_id:<{id_width}}  {d.category:<{category_width}}  {', '.join(d.tags)}".rstrip())
 
 
 @main.command()

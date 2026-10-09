@@ -294,3 +294,48 @@ def test_an_eval_that_fails_is_recorded_before_the_run_stops(tmp_path: Path):
     (rec,) = read_records(path)
     assert [e["kind"] for e in rec["events"]] == ["model_call", "grading_call", "eval_error"]
     assert read_all_results(path) == []
+
+
+_LS_EVALS = """
+evals:
+  - category: sales
+    tags: [smoke]
+    tests:
+      - {id: revenue_1997, prompt: p, expected_answer: "1"}
+      - {title: Average order total, prompt: p, expected_answer: "2", tags: [smoke, slow]}
+  - category: customers
+    tests:
+      - {id: top_segment, prompt: p, expected_answer: BUILDING}
+"""
+
+
+def test_ls_lists_ids_categories_and_tags(tmp_path: Path):
+    (tmp_path / "evals.yml").write_text(_LS_EVALS)
+
+    result = CliRunner().invoke(main, ["ls", "--evals-dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [
+        "revenue_1997         sales      smoke",
+        "average_order_total  sales      smoke, slow",  # the id made from the title
+        "top_segment          customers",
+    ]
+
+
+def test_ls_takes_the_same_selectors_as_run(tmp_path: Path):
+    (tmp_path / "evals.yml").write_text(_LS_EVALS)
+
+    result = CliRunner().invoke(
+        main, ["ls", "--evals-dir", str(tmp_path), "--select", "tag:smoke top_segment", "--exclude", "tag:slow"]
+    )
+
+    assert [line.split()[0] for line in result.output.splitlines()] == ["revenue_1997", "top_segment"]
+
+
+def test_ls_names_a_selector_that_matches_nothing(tmp_path: Path):
+    (tmp_path / "evals.yml").write_text(_LS_EVALS)
+
+    result = CliRunner().invoke(main, ["ls", "--evals-dir", str(tmp_path), "--select", "revenue_1996"])
+
+    assert result.exit_code != 0
+    assert "No eval has id 'revenue_1996'" in result.output
