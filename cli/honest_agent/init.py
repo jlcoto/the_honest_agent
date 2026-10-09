@@ -34,7 +34,7 @@ SERVERS = {
     "motherduck": ("MotherDuck", "motherduck", "https://api.motherduck.com/mcp", None),
     "url": ("another URL", "agent", None, "https://..."),
 }
-PROVIDERS = {"claude": ("Claude", "ANTHROPIC_API_KEY"), "openai": ("OpenAI", "OPENAI_API_KEY")}
+PROVIDERS = {"anthropic": ("Claude", "ANTHROPIC_API_KEY"), "openai": ("OpenAI", "OPENAI_API_KEY")}
 RESULTS = {"local": "here, a local file", "motherduck": "MotherDuck", "s3": "a file in S3"}
 RESULTS_TOKEN_ENV = "HONEST_AGENT_RESULTS_TOKEN"
 
@@ -216,7 +216,7 @@ def example_config_text(provider: str) -> str:
 
     from .llm import DEFAULT_MODELS
 
-    model = DEFAULT_MODELS["openai" if provider == "openai" else "anthropic"]
+    model = DEFAULT_MODELS[provider]
     command = f"{shlex.quote(sys.executable)} -m honest_agent.demo_server warehouse.duckdb"
     return (
         "\n".join(
@@ -292,7 +292,7 @@ def _ask(question: str, given: str | None, default: str | None, no_input: bool, 
 
 def prompt_example(model_provider: str | None, no_input: bool) -> None:
     providers = {key: label for key, (label, _var) in PROVIDERS.items()}
-    provider = _choose("Which model runs the agent?", providers, model_provider, "claude", no_input)
+    provider = _choose("Which model runs the agent?", providers, model_provider, "anthropic", no_input)
     folder = Path.cwd() / EXAMPLE_FOLDER
     click.echo(f"Creating {EXAMPLE_FOLDER}/ and seeding DuckDB's TPC-H sample data...")
     try:
@@ -338,7 +338,7 @@ def prompt_project(
         mcp_url = _ask(prompt, mcp_url, known_url, no_input, "--mcp-url")
     target = target_name or (default_target if no_input else click.prompt("Target name", default=default_target))
     providers = {key: label for key, (label, _var) in PROVIDERS.items()}
-    provider = _choose("Which model runs the agent?", providers, model_provider, "claude", no_input)
+    provider = _choose("Which model runs the agent?", providers, model_provider, "anthropic", no_input)
     results = _choose("Where should results live?", RESULTS, results, "local", no_input)
     if results == "motherduck":
         results_db = _ask("MotherDuck database for results", results_db, "honest_agent_results", no_input, "")
