@@ -194,6 +194,33 @@ def _render_value(value: Any, where: str) -> Any:
     return rendered
 
 
+def required_env_vars(path: Path, target: str | None) -> list[str]:
+    """Every variable the file's top level and the chosen target read with env_var() and no
+    default, set or not, so `honest-agent debug` can name them all (loading the file stops
+    at the first unset one). Read from the file as written, so it works when loading fails;
+    empty when the file can't be read at all."""
+    try:
+        doc = yaml.safe_load(path.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return []
+    if not isinstance(doc, dict):
+        return []
+    targets = doc.get("targets") if isinstance(doc.get("targets"), dict) else {}
+    name = target or doc.get("default_target") or (next(iter(targets)) if len(targets) == 1 else None)
+    top_level = {key: value for key, value in doc.items() if key != "targets"}
+    return list(dict.fromkeys(_env_var_names(top_level) + _env_var_names(targets.get(name) or {})))
+
+
+def _env_var_names(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        return [name for item in value.values() for name in _env_var_names(item)]
+    if isinstance(value, list):
+        return [name for item in value for name in _env_var_names(item)]
+    if not isinstance(value, str):
+        return []
+    return [match.group(2) for match in _ENV_VAR.finditer(value) if match.group(4) is None]
+
+
 def _check_keys(settings: dict, allowed: set[str], where: str) -> None:
     unknown = sorted(set(settings) - allowed)
     if unknown:

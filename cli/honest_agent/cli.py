@@ -9,6 +9,7 @@ import click
 from click.core import ParameterSource
 from dotenv import find_dotenv, load_dotenv
 
+from . import debug as debug_mod
 from . import init as init_mod
 from . import notify as notify_mod
 from . import report as report_mod
@@ -21,6 +22,7 @@ from .config_file import (
     find_config_file,
     load_config,
     missing_config_hint,
+    required_env_vars,
 )
 from .derive import derive_result
 from .eval_loader import load_evals, nothing_selected, select_evals
@@ -71,6 +73,14 @@ def main(ctx: click.Context, env_file: str | None, config_file: str | None):
     # otherwise a tool or editable install would find some other project's .env, or none.
     load_dotenv(env_file or find_dotenv(usecwd=True))
     ctx.obj = Path(config_file) if config_file else find_config_file(Path.cwd())
+
+
+class UnsetVariables(click.ClickException):
+    """Variables the chosen settings need that aren't set; `debug` lists them by name."""
+
+    def __init__(self, names: list[str], message: str):
+        super().__init__(message)
+        self.names = names
 
 
 def _config(ctx: click.Context) -> Config | None:
@@ -175,9 +185,10 @@ def _resolve_server(
     if token_env is None:
         return file_command, file_url, None
     if not os.environ.get(token_env):
-        raise click.ClickException(
+        raise UnsetVariables(
+            [token_env],
             f"{token_env} is not set. Target {target.name!r} reads its bearer token from it (bearer_token_env). "
-            "Add it to .env or export it."
+            "Add it to .env or export it.",
         )
     return file_command, file_url, os.environ[token_env]
 
@@ -194,6 +205,23 @@ def _chosen_target(ctx: click.Context, target: str | None) -> tuple[Config | Non
         return config, config.target(target) if config and config.targets else None
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+def _mcp_launch(
+    config: Config | None, chosen: Target | None, mcp_command: str | None, mcp_env: tuple[str, ...]
+) -> tuple[str | None, list[str]]:
+    """The folder a stdio MCP server starts in and the variables it gets. A target's
+    mcp_command runs from the config file's folder, wherever `run` is started, and like its
+    token, a target's mcp_env belongs to its own server. Every variable must be set."""
+    from_target = chosen is not None and mcp_command is not None and mcp_command == chosen.settings.get("mcp_command")
+    mcp_cwd = str(config.path.parent) if from_target else None
+    env_names = list(mcp_env) or (chosen.settings.get("mcp_env", []) if from_target else [])
+    unset = [name for name in env_names if name not in os.environ]
+    if unset:
+        raise UnsetVariables(
+            unset, f"{', '.join(unset)} not set, but the MCP server needs it (mcp_env). Add it to .env or export it."
+        )
+    return mcp_cwd, env_names
 
 
 def _evals_dir(evals_dir: str | None, chosen: Target | None) -> str:
@@ -213,6 +241,69 @@ _SELECT_HELP = (
 _EXCLUDE_HELP = "Leave out these evals (same syntax as --select), after --select."
 
 
+def _options(*options):
+    """Several click options as one decorator, so `run` and `debug` share them."""
+
+    def decorate(command):
+        for option in reversed(options):
+            command = option(command)
+        return command
+
+    return decorate
+
+
+_results_path_option = click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
+_model_options = _options(
+    click.option(
+        "--model",
+        envvar="HONEST_AGENT_MODEL",
+        default=None,
+        help="Model to evaluate (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
+        "Only the API key for its provider is needed. Defaults to claude-haiku-4-5 if ANTHROPIC_API_KEY is set, "
+        "else gpt-5.4-mini if OPENAI_API_KEY is set.",
+    ),
+    click.option(
+        "--judge-model",
+        envvar="HONEST_AGENT_JUDGE_MODEL",
+        default=None,
+        help="Model that grades extract_match/llm_judge evals. Defaults to --model. A fixed judge across "
+        "runs keeps comparisons between agent models fair.",
+    ),
+)
+_mcp_options = _options(
+    click.option(
+        "--mcp-command",
+        envvar="MCP_COMMAND",
+        default=None,
+        help="Shell command launching a local MCP server over stdio, "
+        'e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url; when given on the '
+        "command line, it overrides an MCP_URL set in the environment.",
+    ),
+    click.option(
+        "--mcp-url",
+        envvar="MCP_URL",
+        default=None,
+        help="URL of a remote MCP server's streamable-HTTP endpoint. Mutually exclusive with "
+        "--mcp-command; when given on the command line, it overrides an MCP_COMMAND set in the "
+        "environment.",
+    ),
+    click.option(
+        "--mcp-bearer-token",
+        envvar="MCP_BEARER_TOKEN",
+        default=None,
+        help="[--mcp-url only] Bearer token sent as the Authorization header.",
+    ),
+    click.option(
+        "--mcp-env",
+        multiple=True,
+        metavar="NAME",
+        help="[--mcp-command only] Environment variable the local MCP server needs, e.g. MOTHERDUCK_TOKEN. "
+        "Repeat for several. The server gets only these plus a minimal environment (PATH, HOME, ...), "
+        "never the rest of .env. Defaults to the target's mcp_env.",
+    ),
+)
+
+
 @main.command()
 @click.option(
     "--target",
@@ -226,22 +317,8 @@ _EXCLUDE_HELP = "Leave out these evals (same syntax as --select), after --select
     type=click.Path(exists=True, file_okay=False),
     help="Directory of eval YAML files. Defaults to the target's evals_dir, else ./evals.",
 )
-@click.option("--results-path", default=None, help=_RESULTS_PATH_HELP)
-@click.option(
-    "--model",
-    envvar="HONEST_AGENT_MODEL",
-    default=None,
-    help="Model to evaluate (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
-    "Only the API key for its provider is needed. Defaults to claude-haiku-4-5 if ANTHROPIC_API_KEY is set, "
-    "else gpt-5.4-mini if OPENAI_API_KEY is set.",
-)
-@click.option(
-    "--judge-model",
-    envvar="HONEST_AGENT_JUDGE_MODEL",
-    default=None,
-    help="Model that grades extract_match/llm_judge evals. Defaults to --model. A fixed judge across "
-    "runs keeps comparisons between agent models fair.",
-)
+@_results_path_option
+@_model_options
 @click.option(
     "--max-tool-steps",
     type=click.IntRange(min=1),
@@ -250,36 +327,7 @@ _EXCLUDE_HELP = "Leave out these evals (same syntax as --select), after --select
     "If Claude is still requesting tools when this is hit, that eval fails with a clear error "
     "instead of silently returning an empty answer.",
 )
-@click.option(
-    "--mcp-command",
-    envvar="MCP_COMMAND",
-    default=None,
-    help="Shell command launching a local MCP server over stdio, "
-    'e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url; when given on the '
-    "command line, it overrides an MCP_URL set in the environment.",
-)
-@click.option(
-    "--mcp-url",
-    envvar="MCP_URL",
-    default=None,
-    help="URL of a remote MCP server's streamable-HTTP endpoint. Mutually exclusive with "
-    "--mcp-command; when given on the command line, it overrides an MCP_COMMAND set in the "
-    "environment.",
-)
-@click.option(
-    "--mcp-bearer-token",
-    envvar="MCP_BEARER_TOKEN",
-    default=None,
-    help="[--mcp-url only] Bearer token sent as the Authorization header.",
-)
-@click.option(
-    "--mcp-env",
-    multiple=True,
-    metavar="NAME",
-    help="[--mcp-command only] Environment variable the local MCP server needs, e.g. MOTHERDUCK_TOKEN. "
-    "Repeat for several. The server gets only these plus a minimal environment (PATH, HOME, ...), "
-    "never the rest of .env. Defaults to the target's mcp_env.",
-)
+@_mcp_options
 @click.option(
     "--agent-name",
     envvar="HONEST_AGENT_AGENT_NAME",
@@ -339,16 +387,7 @@ def run(
             f"--model ({model}) and --judge-model ({judge_model}). Export it or add it to .env."
         )
     mcp_command, mcp_url, mcp_bearer_token = _resolve_server(ctx, mcp_command, mcp_url, mcp_bearer_token, chosen)
-    # A target's mcp_command runs from the config file's folder, wherever `run` is started.
-    from_target = chosen is not None and mcp_command is not None and mcp_command == chosen.settings.get("mcp_command")
-    mcp_cwd = str(config.path.parent) if from_target else None
-    # Like its token, a target's mcp_env belongs to its own server.
-    env_names = list(mcp_env) or (chosen.settings.get("mcp_env", []) if from_target else [])
-    unset = [name for name in env_names if name not in os.environ]
-    if unset:
-        raise click.ClickException(
-            f"{', '.join(unset)} not set, but the MCP server needs it (mcp_env). Add it to .env or export it."
-        )
+    mcp_cwd, env_names = _mcp_launch(config, chosen, mcp_command, mcp_env)
 
     try:
         asyncio.run(
@@ -402,6 +441,140 @@ def ls(ctx: click.Context, target: str | None, evals_dir: str | None, select: st
     category_width = max(len(d.category) for d in definitions)
     for d in definitions:
         click.echo(f"{d.eval_id:<{id_width}}  {d.category:<{category_width}}  {', '.join(d.tags)}".rstrip())
+
+
+@main.command()
+@click.option(
+    "--target",
+    "-t",
+    default=None,
+    help=f"Target (agent) from {CONFIG_FILE_NAME} to check. Defaults to its default_target.",
+)
+@click.option(
+    "--evals-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory of eval YAML files. Defaults to the target's evals_dir, else ./evals.",
+)
+@_results_path_option
+@_model_options
+@_mcp_options
+@click.pass_context
+def debug(
+    ctx: click.Context,
+    target: str | None,
+    evals_dir: str | None,
+    results_path: str | None,
+    model: str | None,
+    judge_model: str | None,
+    mcp_command: str | None,
+    mcp_url: str | None,
+    mcp_bearer_token: str | None,
+    mcp_env: tuple[str, ...],
+):
+    """Check a project's setup, like `dbt debug`: the config file and target, the variables
+    they need, the evals, the MCP server and the results store. Calls no model and runs no
+    query: it lists the server's tools without calling one. Exits non-zero if a check fails."""
+    from .mcp_client import describe_connection_error
+
+    report = debug_mod.Report()
+    config_path = ctx.find_root().obj
+    # Variables are named, never shown. Loading the file stops at the first unset env_var(),
+    # so they're all read from the file as written.
+    needed = required_env_vars(config_path, target) if config_path else []
+    missing = [name for name in needed if name not in os.environ]
+
+    try:
+        config, chosen = _chosen_target(ctx, target)
+    except click.ClickException as exc:
+        report.failed("Config", exc.message)
+        if missing:
+            report.failed("Variables", _not_set(missing))
+        else:
+            report.skipped("Variables", "the config file didn't load")
+        for check in ("Evals", "MCP server", "Results store"):
+            report.skipped(check, "the config file didn't load")
+        _finish(ctx, report)
+        return
+    if config is None:
+        report.ok("Config", f"no {CONFIG_FILE_NAME}; settings come from flags and environment variables")
+    else:
+        report.ok("Config", f"{debug_mod.shown(config.path)}, " + (f"target {chosen.name}" if chosen else "no targets"))
+
+    # The API keys for the model and judge, as `run` picks them.
+    layer = chosen or (Target("config", config.shared) if config else None)
+    model = _from_layers(ctx, "model", model, layer) or default_model(os.environ)
+    judge_model = _from_layers(ctx, "judge_model", judge_model, layer) or model
+    if model is None:
+        missing.append(f"{API_KEY_ENV['anthropic']} or {API_KEY_ENV['openai']}")
+    else:
+        keys = [API_KEY_ENV[p] for p in sorted({provider_for(model), provider_for(judge_model)})]
+        needed += keys
+        missing += [key for key in keys if not os.environ.get(key)]
+    # And what the MCP server needs: its bearer token, or its mcp_env.
+    server_unset, server_error = [], None
+    try:
+        mcp_command, mcp_url, mcp_bearer_token = _resolve_server(ctx, mcp_command, mcp_url, mcp_bearer_token, chosen)
+        mcp_cwd, env_names = _mcp_launch(config, chosen, mcp_command, mcp_env)
+    except UnsetVariables as exc:
+        server_unset = exc.names
+        missing += exc.names
+    except click.ClickException as exc:
+        server_error = exc.message
+    else:
+        token_env = chosen.settings.get("bearer_token_env") if chosen else None
+        if token_env and mcp_bearer_token is not None and mcp_bearer_token == os.environ.get(token_env):
+            needed.append(token_env)
+        needed += env_names
+    if missing:
+        report.failed("Variables", _not_set(missing))
+    else:
+        report.ok("Variables", f"{', '.join(dict.fromkeys(needed))} set; model {model}, judge {judge_model}")
+
+    try:
+        evals_dir = _evals_dir(evals_dir, chosen)
+        count = len(load_evals(Path(evals_dir)))
+    except click.ClickException as exc:
+        report.failed("Evals", exc.message)
+    except Exception as exc:  # a bad eval file: the loader's message, or the YAML parser's
+        report.failed("Evals", str(exc))
+    else:
+        if count:
+            report.ok("Evals", f"{count} eval{'' if count == 1 else 's'} in {debug_mod.shown(evals_dir)}")
+        else:
+            report.failed("Evals", f"No evals found in {debug_mod.shown(evals_dir)}")
+
+    if server_unset:
+        report.skipped("MCP server", f"needs {', '.join(server_unset)}")
+    elif server_error:
+        report.failed("MCP server", server_error)
+    else:
+        try:
+            name, tools = asyncio.run(debug_mod.mcp_server(mcp_command, mcp_url, mcp_bearer_token, mcp_cwd, env_names))
+        except Exception as exc:
+            report.failed("MCP server", describe_connection_error(exc))
+        else:
+            # The transport, not the command or URL: those can come from env_var().
+            how = "stdio" if mcp_command else "HTTP"
+            report.ok("MCP server", f"{name} over {how}, {tools} tool{'' if tools == 1 else 's'}")
+
+    try:
+        report.ok("Results store", debug_mod.results_store(_results_path(ctx, results_path)))
+    except click.ClickException as exc:
+        report.failed("Results store", exc.message)
+    except Exception as exc:
+        report.failed("Results store", str(exc))
+    _finish(ctx, report)
+
+
+def _not_set(names: list[str]) -> str:
+    return f"not set: {', '.join(dict.fromkeys(names))} (add to .env or export)"
+
+
+def _finish(ctx: click.Context, report: debug_mod.Report) -> None:
+    click.echo(report.summary())
+    if debug_mod.FAILED in report.statuses:
+        ctx.exit(1)
 
 
 @main.command()

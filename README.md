@@ -139,6 +139,9 @@ uv run honest-agent serve     # opens it in your browser (Ctrl+C to stop)
 
 - `run` uses `default_target`, so you only need `--target` for another one:
   `run --target motherduck`.
+- `uv run honest-agent debug` checks the setup first, like `dbt debug`: config,
+  variables, evals, the MCP server and the results store, without calling a
+  model or running a query.
 - To run only some evals, select them dbt-style: by id (`run --select
   orders_placed_in_1996`), tag (`--select tag:smoke`) or category
   (`--select category:sales`). Spaces mean OR, commas mean AND, and
@@ -176,6 +179,8 @@ with `uv tool upgrade honest-agent`. The tradeoff: every project uses the
 same version, instead of the one pinned in its `uv.lock`.
 
 ### If something goes wrong
+
+Run `honest-agent debug` first: it checks each part of the setup and says what's wrong.
 
 | You see | What to do |
 |---|---|
