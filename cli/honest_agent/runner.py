@@ -86,6 +86,8 @@ async def run_evals(
     agent_name: str | None,
     target: str | None,
     ignore_tools: list[str],
+    default_database: str | None,
+    default_schema: str | None,
     mcp_cwd: str | None,
     mcp_env: list[str],
     judge_model: str,
@@ -144,6 +146,8 @@ async def run_evals(
                 "max_tokens": None if openai_agent else MAX_TOKENS,
                 "mcp": {"url": mcp_url} if mcp_url else {"command": mcp_command},
                 "ignore_tools": ignore_tools,
+                "default_database": default_database,
+                "default_schema": default_schema,
             },
             tools_offered=tools,
         )

@@ -232,6 +232,10 @@ def example_config_text(provider: str) -> str:
                 "    # honest-agent's demo MCP server, started with honest-agent's own Python. Demo only:",
                 "    # not for real data. After reinstalling honest-agent, run `init --example` again.",
                 f"    mcp_command: {json.dumps(command)}",
+                "    # Where a bare table name like `orders` runs: DuckDB names the database after",
+                "    # the file and starts in schema main. Lets provenance check where tables live.",
+                "    default_database: warehouse",
+                "    default_schema: main",
                 "    evals_dir: evals",
             ]
         )

@@ -183,6 +183,8 @@ def derive_result(con, result_id: str) -> Derived:
         definition.expected_sources,
         definition.expected_database,
         definition.expected_schema,
+        settings.get("default_database"),
+        settings.get("default_schema"),
     )
 
     agent_tokens = [

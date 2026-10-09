@@ -355,6 +355,8 @@ def run(
                 agent_name=agent_name,
                 target=chosen.name if chosen else None,
                 ignore_tools=chosen.settings.get("ignore_tools", []) if chosen else [],
+                default_database=chosen.settings.get("default_database") if chosen else None,
+                default_schema=chosen.settings.get("default_schema") if chosen else None,
                 mcp_cwd=mcp_cwd,
                 mcp_env=env_names,
                 judge_model=judge_model,

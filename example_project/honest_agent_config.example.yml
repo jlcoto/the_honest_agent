@@ -17,6 +17,8 @@ targets:
   # The bundled demo server: no account needed.
   demo:
     mcp_command: uv run python -m honest_agent.demo_server warehouse.duckdb
+    default_database: warehouse   # where bare table names run: DuckDB names it after the file
+    default_schema: main
     evals_dir: evals
 
   # MotherDuck's hosted MCP server. Use a read-only token: the server also offers tools

@@ -273,3 +273,50 @@ def test_sql_that_does_not_parse_is_reported_and_reads_nothing():
     )
     assert provenance.unparsed == ["select from where fct_orders (("]
     assert provenance.score == 1.0
+
+
+def _defaults(sql: str, **expected):
+    return check_provenance(sql_statements=[sql], default_database="warehouse", default_schema="main", **expected)
+
+
+def test_declared_defaults_locate_a_bare_name():
+    provenance = _defaults(
+        "select count(*) from orders",
+        expected_sources=["orders"],
+        expected_database="warehouse",
+        expected_schema="main",
+    )
+    assert provenance.queried_sources == [Source("warehouse", "main", "orders")]
+    assert provenance.score == 1.0
+
+
+def test_what_the_sql_says_beats_the_defaults():
+    assert _defaults("select * from analytics.sales.orders").queried_sources == [Source("analytics", "sales", "orders")]
+    assert _defaults("select * from staging.orders").queried_sources == [Source("warehouse", "staging", "orders")]
+    assert check_provenance(
+        sql_statements=["use database other", "select * from orders"], default_database="warehouse"
+    ).queried_sources == [Source("other", None, "orders")]
+
+
+def test_a_qualifier_naming_the_default_database_reads_as_database_table():
+    """DuckDB reads `warehouse.orders` as the database's default schema when there's no
+    schema `warehouse`."""
+    assert _defaults("select * from warehouse.orders").queried_sources == [Source("warehouse", "main", "orders")]
+
+
+def test_a_qualifier_that_is_also_the_default_schema_stays_a_schema():
+    provenance = check_provenance(
+        sql_statements=["select * from main.orders"], default_database="main", default_schema="main"
+    )
+    assert provenance.queried_sources == [Source("main", "main", "orders")]
+
+
+def test_only_a_default_schema_leaves_the_database_unknown():
+    provenance = check_provenance(
+        sql_statements=["select * from orders"],
+        expected_sources=["orders"],
+        expected_database="warehouse",
+        default_schema="main",
+    )
+    assert provenance.queried_sources == [Source(None, "main", "orders")]
+    assert provenance.score == 0.0

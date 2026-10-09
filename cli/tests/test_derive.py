@@ -234,3 +234,25 @@ def test_an_eval_stopped_by_an_error_has_nothing_to_derive(tmp_path: Path):
             derive_result(con, "r1")
     finally:
         con.close()
+
+
+def test_rebuild_locates_bare_names_with_the_defaults_the_run_had(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    sql = "select count(*) from orders"
+    record(
+        path,
+        [
+            model_call(claude_reply(tool_use("t1", "query_warehouse", {"sql": sql}))),
+            tool_call("t1", "query_warehouse", {"sql": sql}, mcp_result("2297")),
+            model_call(claude_reply(text("2297"))),
+        ],
+        eval_definition=definition(
+            expected_answer="2297", expected_sources=["orders"], expected_database="warehouse", expected_schema="main"
+        ),
+        settings={"max_tool_steps": 5, "mcp": {}, "default_database": "warehouse", "default_schema": "main"},
+    )
+
+    row = _derive(path)
+
+    assert row["provenance_score"] == 1.0
+    assert [tuple(s.values()) for s in row["queried_sources"]] == [("warehouse", "main", "orders")]

@@ -115,6 +115,7 @@ def test_example_creates_its_own_folder_with_evals_that_load(in_tmp_dir: Path, m
     assert "-m honest_agent.demo_server warehouse.duckdb" in target.settings["mcp_command"]
     assert target.settings["model"] == "claude-haiku-4-5"
     assert target.settings["max_tool_steps"] == 8
+    assert (target.settings["default_database"], target.settings["default_schema"]) == ("warehouse", "main")
     evals = load_evals(folder / "evals")
     assert len(evals) == 6 and {e.grading_method for e in evals} == {"contains", "extract_match", "llm_judge"}
     assert (folder / ".env").read_text().endswith("ANTHROPIC_API_KEY=\n")
