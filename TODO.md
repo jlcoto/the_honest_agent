@@ -296,13 +296,13 @@ left open on purpose (a fourth was added on 2026-10-09):
      similar) the way `show`/`describe` are skipped, so "Agent queried" means
      data the answer could come from. Keep the list of system schemas per
      dialect right.
-   - **Peeks (to decide):** provenance counts every successful `select`
-     during an eval, not only the query behind the answer, so a peek like
-     `select * from lineitem limit 5` satisfies an expected `lineitem` even
-     if the answer came from another table (it would make the example's
-     deliberate provenance failure pass). Options: leave it, or skip
-     obvious peeks (`select *` with a small `limit` and nothing else), a
-     heuristic with its own errors.
+   - **Peeks (decided 2026-10-09: leave as they are):** provenance counts
+     every successful `select` during an eval, not only the query behind the
+     answer, so a peek like `select * from lineitem limit 5` satisfies an
+     expected `lineitem` even if the answer came from another table. Telling
+     a peek from real use is too tricky to do reliably, so it stays a
+     documented limitation (it can make the example's deliberate provenance
+     failure pass; its README says so).
    - Both matter more if honest-agent ever judges extra reads (question 2,
      or "forbidden sources"): exploration would count against the agent.
 
