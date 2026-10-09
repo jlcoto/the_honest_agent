@@ -117,6 +117,10 @@ def grading_prompt(method: str, answer: str, expected_answer: str, prompt: str) 
     raise ValueError(f"Unknown grading method: {method!r}")
 
 
+# The start of the rationale recorded when the grading model's reply can't be read.
+UNREADABLE_REPLY = "Not graded: the grading model's reply wasn't the JSON it was asked for"
+
+
 def _reply_json(reply: str) -> dict:
     match = re.search(r"\{.*\}", reply, re.DOTALL)
     if not match:
@@ -144,11 +148,16 @@ def score(
     """
     if method == "contains":
         return Grade(grade_contains(answer, expected_answer), None, None)
-    payload = _reply_json(reply or "")
-    if method == "extract_match":
-        extracted = str(payload["extracted_answer"])
-        matched = _values_match(extracted, expected_answer, tolerance, tolerance_percent)
-        return Grade(1.0 if matched else 0.0, None, extracted)
-    if method == "llm_judge":
+    if method not in ("extract_match", "llm_judge"):
+        raise ValueError(f"Unknown grading method: {method!r}")
+    # A reply that isn't the JSON asked for fails this eval, with the reason, rather than
+    # stopping the whole run. (Until grading uses structured output, see TODO.md.)
+    try:
+        payload = _reply_json(reply or "")
+        if method == "extract_match":
+            extracted = str(payload["extracted_answer"])
+            matched = _values_match(extracted, expected_answer, tolerance, tolerance_percent)
+            return Grade(1.0 if matched else 0.0, None, extracted)
         return Grade(float(payload["score"]), str(payload.get("rationale", "")), None)
-    raise ValueError(f"Unknown grading method: {method!r}")
+    except (ValueError, KeyError, TypeError) as exc:
+        return Grade(0.0, f"{UNREADABLE_REPLY} ({exc})", None)

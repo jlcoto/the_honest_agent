@@ -26,7 +26,7 @@ from .config_file import (
 )
 from .derive import derive_result, recorded_answer
 from .eval_loader import EvalDefinition, filter_by_tags, load_evals
-from .grading import GRADING_MAX_TOKENS, grading_prompt
+from .grading import GRADING_MAX_TOKENS, UNREADABLE_REPLY, grading_prompt
 from .llm import API_KEY_ENV, OPENAI, Judge, default_model, make_judge, provider_for
 from .raw import RunRecorder, read_records
 from .storage import (
@@ -167,6 +167,8 @@ async def _eval_loop(
             record.eval_error(exc)
             raise
         write_derived(con, [derived.row])
+        if (derived.row.get("accuracy_rationale") or "").startswith(UNREADABLE_REPLY):
+            click.echo(f"    WARNING: {definition.eval_id}: {derived.row['accuracy_rationale']}")
         for sql in derived.unparsed:
             click.echo(f"    WARNING: couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
         rows.append(derived.row)
