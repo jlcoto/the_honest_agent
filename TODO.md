@@ -466,6 +466,34 @@ users can pick what fits their setup.
   and a presigning backend defeats the no-server point. Revoking access
   takes effect immediately, since no copy of the data is left behind.
 
+## Improvement suggestions from a model (future)
+
+Idea from 2026-10-09: hand a run's results (answers, scores, rationales, the
+agent's SQL and trace) to a model and ask what to improve. Trying the
+`init --example` evals showed the kind of findings it could surface, which
+were found by reading traces by hand:
+
+- **The evals:** an ambiguous prompt ("average order value", "last year"),
+  an expectation that's too strict (provenance expecting a table the
+  question doesn't need) or too loose, a tolerance that hides a real error,
+  an eval that flips between runs.
+- **The agent:** tool descriptions that steer it wrong (the old demo server
+  pointing at a table that didn't exist), wasted exploration steps, a missing
+  semantic layer or documentation the agent keeps rebuilding by hand.
+
+Open points:
+- **Where it lives:** a command (e.g. `honest-agent suggest --run-id ...`)
+  that prints suggestions, or part of the planned project-setup skill, which
+  already runs in a coding agent with the repo and results at hand. The
+  skill may be the cheaper home: no new command, and it can edit the eval
+  files directly once the user agrees.
+- **Data:** traces hold warehouse data, so sending them to a model provider
+  needs the same care as hosting the report; say so, and let users choose
+  what's included (scores and SQL only, or full traces).
+- **Never automatic:** suggestions only; changing evals or thresholds stays
+  a human decision, or the evals stop measuring anything.
+- Cost: one model call per run (or per failing eval), on top of the run.
+
 ## "Investigate in Claude Code" button on the result page
 
 Discussed 2026-10-07, for later. A button on a failing result's page that
