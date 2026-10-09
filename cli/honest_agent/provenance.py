@@ -12,7 +12,10 @@ statements, or else the session's defaults when the target declares them
 
 Only statements that read data (`select`, including `with ... select` and
 `union`) count. `describe`, `show` and the like are exploration: an agent
-that describes the right table but queries another one hasn't used it.
+that describes the right table but queries another one hasn't used it. The
+same goes for a `select` on a system catalog (`information_schema`,
+`pg_catalog`, DuckDB's `duckdb_*` views, Snowflake's `snowflake` database):
+it reads metadata, not data an answer comes from, unless the eval expects one.
 The caller (see cli.py) leaves out calls that returned an error, since a
 query that failed read nothing, and SQL a tool generated in its response
 (e.g. Cortex Analyst's `statement`), since generating SQL isn't running it:
@@ -33,6 +36,30 @@ logging.getLogger("sqlglot").setLevel(logging.ERROR)
 
 # Tried in order. Snowflake's dialect also reads the DuckDB/MotherDuck SQL seen so far.
 _DIALECTS = ("snowflake", "duckdb")
+
+
+# Where warehouses keep metadata about their own tables. Reading these is exploration.
+_SYSTEM_SCHEMAS = {"information_schema", "pg_catalog"}
+# Snowflake's own database: account metadata (account_usage, organization_usage, ...).
+_SYSTEM_DATABASES = {"snowflake"}
+# DuckDB's internal views, readable by bare name (`select * from duckdb_tables`). The
+# `duckdb_tables()` function form is no table reference, so it never counts anyway.
+_DUCKDB_CATALOG_VIEWS = {
+    *("duckdb_columns", "duckdb_constraints", "duckdb_databases", "duckdb_indexes", "duckdb_logs"),
+    *("duckdb_schemas", "duckdb_tables", "duckdb_types", "duckdb_views", "pragma_database_list"),
+    *("sqlite_master", "sqlite_schema", "sqlite_temp_master", "sqlite_temp_schema"),
+    *("pg_am", "pg_attrdef", "pg_attribute", "pg_class", "pg_collation", "pg_constraint"),
+    *("pg_database", "pg_depend", "pg_description", "pg_enum", "pg_index", "pg_indexes"),
+    *("pg_namespace", "pg_prepared_statements", "pg_proc", "pg_sequence", "pg_sequences"),
+    *("pg_settings", "pg_tables", "pg_tablespace", "pg_type", "pg_views"),
+}
+
+
+def _is_system_catalog(database: str | None, schema: str | None, name: str) -> bool:
+    """Whether a table reference, as written, names a system catalog."""
+    if (schema or "").lower() in _SYSTEM_SCHEMAS or (database or "").lower() in _SYSTEM_DATABASES:
+        return True
+    return not database and not schema and name.lower() in _DUCKDB_CATALOG_VIEWS
 
 
 class Source(NamedTuple):
@@ -79,7 +106,11 @@ def _apply_use(statement: exp.Use, database: str | None, schema: str | None) -> 
 
 
 def _sources_read(
-    statement: exp.Query, database: str | None, schema: str | None, defaults: tuple[str | None, str | None]
+    statement: exp.Query,
+    database: str | None,
+    schema: str | None,
+    defaults: tuple[str | None, str | None],
+    include_catalogs: bool,
 ) -> list[Source]:
     cte_names = {cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE)}
     default_database, default_schema = defaults
@@ -88,6 +119,8 @@ def _sources_read(
         if not table.name:
             continue  # a table function, e.g. semantic_view(...) itself
         if not table.catalog and not table.db and table.name.lower() in cte_names:
+            continue
+        if not include_catalogs and _is_system_catalog(table.catalog, table.db, table.name):
             continue
         if not table.catalog and _names_default_database(table.db, default_database, default_schema):
             # DuckDB reads `warehouse.orders` as database.table when there's no schema
@@ -108,13 +141,16 @@ def _names_default_database(qualifier: str, default_database: str | None, defaul
 
 
 def queried_sources(
-    sql_statements: list[str], default_database: str | None = None, default_schema: str | None = None
+    sql_statements: list[str],
+    default_database: str | None = None,
+    default_schema: str | None = None,
+    include_catalogs: bool = False,
 ) -> tuple[list[Source], list[str]]:
     """Walks the SQL in the order it ran, tracking `use` statements as session
     state (they carry across tool calls), and returns the sources every read
     statement referenced, plus the SQL that couldn't be parsed. The session
     starts in the declared defaults, if any: where a bare table name runs when
-    the SQL doesn't say."""
+    the SQL doesn't say. System catalogs are left out unless `include_catalogs`."""
     database: str | None = default_database
     schema: str | None = default_schema
     seen: dict[tuple, Source] = {}
@@ -128,7 +164,8 @@ def queried_sources(
             if isinstance(statement, exp.Use):
                 database, schema = _apply_use(statement, database, schema)
             elif isinstance(statement, exp.Query):
-                for source in _sources_read(statement, database, schema, (default_database, default_schema)):
+                defaults = (default_database, default_schema)
+                for source in _sources_read(statement, database, schema, defaults, include_catalogs):
                     key = tuple((part or "").lower() for part in source)
                     seen.setdefault(key, source)
     return list(seen.values()), unparsed
@@ -175,8 +212,10 @@ def check_provenance(
     (e.g. {"metric": "revenue"}) isn't detected -- see TODO.md's
     "Semantic-layer provenance checking".
     """
-    queried, unparsed = queried_sources(sql_statements or [], default_database, default_schema)
     expected = [_expected(entry, expected_database, expected_schema) for entry in expected_sources or []]
+    # An eval about the metadata itself ("how many tables are there?") expects a catalog.
+    include_catalogs = any(_is_system_catalog(*source) for source in expected)
+    queried, unparsed = queried_sources(sql_statements or [], default_database, default_schema, include_catalogs)
     if not expected:
         return Provenance(None, queried, unparsed)
     hits = sum(1 for want in expected if any(_matches(got, want) for got in queried))
