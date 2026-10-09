@@ -16,7 +16,7 @@ def fake_run(monkeypatch) -> dict:
     async def fake_run_async(**settings):
         captured.update(settings)
 
-    monkeypatch.setattr(cli_mod, "_run_async", fake_run_async)
+    monkeypatch.setattr(cli_mod, "run_evals", fake_run_async)
     return captured
 
 

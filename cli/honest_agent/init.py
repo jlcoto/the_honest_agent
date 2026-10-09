@@ -15,6 +15,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import click
+
 REPO = "https://github.com/jlcoto/the_honest_agent/blob/main"
 CONFIG_DOCS = f"{REPO}/example_project/README.md#the-config-file"
 EVAL_DOCS = f"{REPO}/example_project/README.md#writing-evals"
@@ -256,3 +258,114 @@ def write_example(folder: Path, provider: str) -> None:
     (folder / "honest_agent_config.yml").write_text(example_config_text(provider))
     label, key_var = PROVIDERS[provider]
     (folder / ".env").write_text(f"# The model's API key ({label}). Keep this file out of git.\n{key_var}=\n")
+
+
+# The questions and messages of `honest-agent init` (the CLI command only passes its flags).
+
+
+def _choose(question: str, options: dict[str, str], given: str | None, default: str, no_input: bool) -> str:
+    """A numbered menu, e.g. `1) Claude  2) OpenAI  [1]:`; a flag's value or --no-input skips it."""
+    if given is not None:
+        return given
+    if no_input:
+        return default
+    keys = list(options)
+    menu = "  ".join(f"{i}) {options[key]}" for i, key in enumerate(keys, 1))
+    pick = click.prompt(f"{question}\n  {menu}", type=click.IntRange(1, len(keys)), default=keys.index(default) + 1)
+    return keys[pick - 1]
+
+
+def _ask(question: str, given: str | None, default: str | None, no_input: bool, flag: str) -> str:
+    """Free text the user knows best (a URL, a command); required unless it has a default."""
+    if given:
+        return given
+    if no_input:
+        if default:
+            return default
+        raise click.ClickException(f"{flag} is required with --no-input.")
+    return click.prompt(question, default=default)
+
+
+def prompt_example(model_provider: str | None, no_input: bool) -> None:
+    providers = {key: label for key, (label, _var) in PROVIDERS.items()}
+    provider = _choose("Which model runs the agent?", providers, model_provider, "claude", no_input)
+    folder = Path.cwd() / EXAMPLE_FOLDER
+    click.echo(f"Creating {EXAMPLE_FOLDER}/ and seeding DuckDB's TPC-H sample data...")
+    try:
+        write_example(folder, provider)
+    except FileExistsError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except Exception as exc:
+        raise click.ClickException(
+            f"Couldn't seed the sample data ({exc}). DuckDB downloads its tpch extension the first "
+            "time, so this needs the network."
+        ) from exc
+    key_var = PROVIDERS[provider][1]
+    click.echo(
+        f"\nCreated {EXAMPLE_FOLDER}/: a demo agent over sample data, and six evals.\n"
+        "The demo MCP server is for trying honest-agent only, not for real data.\n"
+        f"\nNext:\n  1. cd {EXAMPLE_FOLDER}\n"
+        f"  2. Add your API key to .env: {key_var}\n"
+        "  3. honest-agent run      (a few cents)\n"
+        "  4. honest-agent report, then honest-agent serve\n"
+        "README.md there says what each eval shows, and which ones are meant to fail."
+    )
+
+
+def prompt_project(
+    *,
+    server: str | None,
+    mcp_command: str | None,
+    mcp_url: str | None,
+    target_name: str | None,
+    model_provider: str | None,
+    results: str | None,
+    results_db: str | None,
+    no_input: bool,
+) -> None:
+    """`honest-agent init`: asks what isn't given by a flag, writes the files, says what's next."""
+    servers = {key: label for key, (label, *_rest) in SERVERS.items()}
+    server = _choose("Which MCP server does your agent use?", servers, server, "local", no_input)
+    _label, default_target, known_url, url_hint = SERVERS[server]
+    if server == "local":
+        mcp_command = _ask("Command that starts the MCP server", mcp_command, None, no_input, "--mcp-command")
+    else:
+        prompt = "MCP server URL" + (f" ({url_hint})" if url_hint and not known_url else "")
+        mcp_url = _ask(prompt, mcp_url, known_url, no_input, "--mcp-url")
+    target = target_name or (default_target if no_input else click.prompt("Target name", default=default_target))
+    providers = {key: label for key, (label, _var) in PROVIDERS.items()}
+    provider = _choose("Which model runs the agent?", providers, model_provider, "claude", no_input)
+    results = _choose("Where should results live?", RESULTS, results, "local", no_input)
+    if results == "motherduck":
+        results_db = _ask("MotherDuck database for results", results_db, "honest_agent_results", no_input, "")
+
+    answers = Answers(
+        server=server,
+        target=target,
+        provider=provider,
+        results=results,
+        mcp_command=mcp_command,
+        mcp_url=mcp_url,
+        results_db=results_db or "honest_agent_results",
+    )
+    folder = Path.cwd()
+    written = write_project(folder, answers)
+    click.echo("")
+    if written.created:
+        click.echo(f"Created {', '.join(written.created)}")
+    for name in written.skipped:
+        click.echo(f"Skipped {name}: it already exists, so it was left as it is.")
+    if ".env" in written.skipped:
+        names = ", ".join(name for _, name, _value in env_entries(answers))
+        click.echo(f"  Make sure .env has: {names}")
+    missing = missing_ignores(folder)
+    if missing:
+        click.echo("Add to .gitignore:\n" + "\n".join(f"  {path}" for path in missing))
+    if results == "s3":
+        click.echo("\n" + s3_note())
+    steps = []
+    if written.env_to_fill:
+        steps.append(f"Fill in .env: {', '.join(written.env_to_fill)}")
+    steps.append("Edit evals/first_eval.yml: your question, its answer, the tables it reads")
+    steps.append("honest-agent run")
+    click.echo("\nNext:\n" + "\n".join(f"  {i}. {step}" for i, step in enumerate(steps, 1)))

@@ -1,5 +1,5 @@
 """honest_agent_config.yml: targets, and the precedence flag > env var > file > default.
-`_run_async` is replaced by a stub that records what `run` resolved, so nothing connects
+`run_evals` is replaced by a stub that records what `run` resolved, so nothing connects
 to an MCP server or a model."""
 
 from __future__ import annotations
