@@ -22,9 +22,13 @@ on your machine: no account or server needed, only a model API key.
 | `top_segment` | `contains`: the answer must name BUILDING | reads `customer` | pass |
 | `revenue_1997` | `extract_match` with an absolute `tolerance` | reads `lineitem` and `orders` | pass |
 | `avg_order_total_1996` | `extract_match` with `tolerance_percent` | reads `orders` | pass |
-| `order_total_1995` | `extract_match` | expects `orders` **and** `lineitem` | **fails provenance** with a correct answer: `orders` alone answers it, so the expectation is too strict on purpose |
+| `order_total_1995` | `extract_match`, exact (no tolerance) | expects `orders` **and** `lineitem` | **fails provenance** with a correct answer: `orders` alone answers it, so the expectation is too strict on purpose |
 | `top_ship_mode_1995` | `llm_judge`, which gives partial credit | not checked | TRUCK and MAIL are tied: **passes** when the agent spots the tie, **partial credit** (about 0.5, below the minimum) when it names only one |
-| `top_nations_last_year` | `llm_judge` | reads `orders`, `customer`, `nation` | **fails accuracy**: "last year" is ambiguous, and the agent tends to pick 1998, the latest year in the data, instead of 1997, the last full one |
+| `top_nations_last_year` | `llm_judge`, overriding its group's `contains` | reads `orders`, `customer`, `nation` | **fails accuracy**: "last year" is ambiguous, and the agent tends to pick 1998, the latest year in the data, instead of 1997, the last full one |
+
+The evals are grouped by subject (customers, sales, operations), not by
+grading method: a group's settings apply to its tests, and a test can override
+any of them, as `top_nations_last_year` does with its grading method.
 
 Results vary a little from run to run: the agent is a model. Two things to
 know when reading them:

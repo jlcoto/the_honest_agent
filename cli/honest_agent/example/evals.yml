@@ -5,6 +5,8 @@ version: 1
 # way: see README.md. Every expected answer was checked against the seeded data.
 
 evals:
+  # Settings on a group (grading, provenance, ...) apply to all of its tests, and
+  # a test can override any of them, key by key: see top_nations_last_year.
   - category: customers
     grading:
       method: contains          # the expected answer must appear in the agent's answer
@@ -17,6 +19,20 @@ evals:
         expected_answer: BUILDING
         provenance:
           expected_sources: [customer]
+
+      # Meant to fail accuracy: "last year" is ambiguous. The data ends in August
+      # 1998, so the agent may pick 1998 (or today's last year, with no data),
+      # while the expected answer is 1997, the last full year.
+      - id: top_nations_last_year
+        title: Nations with the most orders last year
+        prompt: Which 5 nations placed the most orders last year?
+        expected_answer: "CANADA, INDONESIA, EGYPT, IRAN and JAPAN (orders placed in 1997, the last full year in the data)."
+        grading:
+          # Overrides the group's `contains`: a list in any wording needs a judge.
+          method: llm_judge     # a model scores the answer from 0 to 1, with a reason
+          min_score: 0.8
+        provenance:
+          expected_sources: [orders, customer, nation]
 
   - category: sales
     grading:
@@ -43,6 +59,7 @@ evals:
         provenance:
           expected_sources: [orders]
 
+      # No tolerance: the value must match exactly.
       # Meant to fail provenance: orders alone answers this, so a correct answer
       # still scores 1 of 2 expected sources (50% < 70%). It passes if the agent
       # happens to run a select on lineitem along the way.
@@ -50,17 +67,13 @@ evals:
         title: Total price of the orders placed in 1995
         prompt: What was the total price of all the orders placed in 1995?
         expected_answer: "316087761.96"
-        grading:
-          tolerance: 0.01
         provenance:
           expected_sources: [orders, lineitem]
 
   - category: operations
     grading:
-      method: llm_judge         # a model scores the answer from 0 to 1, with a reason
+      method: llm_judge
       min_score: 0.8
-    provenance:
-      min_score: 0.7
     tests:
       # TRUCK and MAIL are tied. Spotting the tie passes; naming only one gets
       # partial credit (about 0.5), below the 0.8 minimum. No expected sources:
@@ -69,13 +82,3 @@ evals:
         title: Ship mode with the most line items in 1995
         prompt: Which ship mode had the most line items with a ship date in 1995?
         expected_answer: "TRUCK and MAIL are tied, with 1307 line items each."
-
-      # Meant to fail accuracy: "last year" is ambiguous. The data ends in August
-      # 1998, so the agent may pick 1998 (or today's last year, with no data),
-      # while the expected answer is 1997, the last full year.
-      - id: top_nations_last_year
-        title: Nations with the most orders last year
-        prompt: Which 5 nations placed the most orders last year?
-        expected_answer: "CANADA, INDONESIA, EGYPT, IRAN and JAPAN (orders placed in 1997, the last full year in the data)."
-        provenance:
-          expected_sources: [orders, customer, nation]
