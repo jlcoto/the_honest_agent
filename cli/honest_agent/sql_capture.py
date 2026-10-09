@@ -156,6 +156,20 @@ def single_value(text: str) -> tuple[str, str] | None:
     return None
 
 
+def sent_sql(
+    tool_name: str,
+    tool_input: Any,
+    sql_fields: dict[str, str] | None = None,
+    ignore_tools: list[str] | None = None,
+) -> str | None:
+    """The SQL a tool call sends in its input, found the way `extract_sql_calls` finds it,
+    or None (no SQL field, or a tool known not to take SQL). Used to check SQL before it runs."""
+    sql_fields = sql_fields or {}
+    if tool_name in _NON_SQL_TOOLS.union(ignore_tools or []) and tool_name not in sql_fields:
+        return None
+    return _find_field(tool_input, sql_fields.get(tool_name))
+
+
 def extract_sql_calls(
     trace: list[dict[str, Any]],
     sql_fields: dict[str, str] | None = None,

@@ -16,6 +16,7 @@ from .eval_loader import EvalDefinition, filter_by_tags, load_evals
 from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, UNREADABLE_REPLY, grading_prompt
 from .llm import OPENAI, Judge, make_judge, provider_for
 from .raw import RunRecorder
+from .sql_guard import ReadOnlySQL
 from .storage import connect, write_derived
 from .thresholds import failing_rows
 
@@ -152,12 +153,15 @@ async def run_evals(
             },
             tools_offered=tools,
         )
+        # SQL that isn't a read never reaches the server (sql_guard.py).
+        sql_fields = {tool: field for d in definitions for tool, field in d.sql_fields.items()}
+        tool_caller = ReadOnlySQL(connected, sql_fields, ignore_tools)
         if openai_agent:
             from .openai_agent_runner import OpenAIMCPAgentClient
 
-            agent = OpenAIMCPAgentClient(connected, model=model, tools=tools, max_tool_steps=max_tool_steps)
+            agent = OpenAIMCPAgentClient(tool_caller, model=model, tools=tools, max_tool_steps=max_tool_steps)
         else:
-            agent = AnthropicMCPAgentClient(connected, model=model, tools=tools, max_tool_steps=max_tool_steps)
+            agent = AnthropicMCPAgentClient(tool_caller, model=model, tools=tools, max_tool_steps=max_tool_steps)
         click.echo(f"Model: {model} · judge model: {judge_model}")
         rows = await eval_loop(agent, definitions, judge, judge_model, run_id, recorder, con)
     finally:
