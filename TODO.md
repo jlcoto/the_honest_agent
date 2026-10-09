@@ -13,7 +13,12 @@ README fixes done 2026-10-08 (example eval, `--target`, sharing via
 
 1. **`honest-agent run` always exits 0**, even when evals fall below
    threshold, so a CI job never fails on a regression (only `notify`
-   alerts). Decide whether to add an option that sets a failing exit code.
+   alerts). It exits 1 only when the run itself fails (config, no evals,
+   MCP or model API errors). Left open on 2026-10-09: wait for a tester to
+   ask. For reference, dbt fails `dbt test` on any failing test by default,
+   with `severity: warn` per test and `--warn-error` to tighten; that suits
+   deterministic tests, while a model's answers can flip between runs. If
+   asked for: an opt-in flag on `run`, or a dbt-style severity per eval.
 2. **Ship the AWS setup as code**, after the recipe settles: a
    CloudFormation template with a "Launch stack" link (bucket, minimal
    policy, GitHub OIDC role), a Terraform module when a team asks. It must
@@ -233,11 +238,10 @@ left open on purpose (a fourth was added on 2026-10-09):
    schema `information_schema`. No score changes (extra reads are ignored),
    but the result page's Provenance card lists it under "Agent queried" (one
    expected source) or "Also read" (several), as if the answer came from it.
-   - **System catalogs (decided: exclude them):** skip `information_schema.*`,
-     `pg_catalog.*` and DuckDB's catalog functions (`duckdb_tables()` and
-     similar) the way `show`/`describe` are skipped, so "Agent queried" means
-     data the answer could come from. Keep the list of system schemas per
-     dialect right.
+   - **System catalogs: done 2026-10-09.** `select`s on `information_schema`,
+     `pg_catalog`, DuckDB's bare `duckdb_*`/`sqlite_*`/`pg_*` views and
+     Snowflake's `snowflake` database are skipped like `show`/`describe`,
+     unless the eval itself expects a catalog source.
    - **Peeks (decided 2026-10-09: leave as they are):** provenance counts
      every successful `select` during an eval, not only the query behind the
      answer, so a peek like `select * from lineitem limit 5` satisfies an

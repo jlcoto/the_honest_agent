@@ -320,3 +320,38 @@ def test_only_a_default_schema_leaves_the_database_unknown():
     )
     assert provenance.queried_sources == [Source(None, "main", "orders")]
     assert provenance.score == 0.0
+
+
+def test_a_select_on_a_system_catalog_is_exploration_not_a_source():
+    """Like `show tables`: metadata, not data an answer comes from, so it isn't
+    listed as queried. Catalog functions (`duckdb_tables()`) never were tables."""
+    provenance = check_provenance(
+        sql_statements=[
+            "select * from information_schema.tables limit 10",
+            "select * from warehouse.INFORMATION_SCHEMA.COLUMNS",
+            "select * from pg_catalog.pg_tables",
+            "select * from duckdb_tables",
+            "select * from duckdb_tables()",
+            "select * from snowflake.account_usage.query_history",
+            "select count(*) from orders",
+        ],
+        expected_sources=["orders"],
+    )
+    assert provenance.score == 1.0
+    assert provenance.queried_sources == [Source(None, None, "orders")]
+
+
+def test_a_catalog_name_in_a_user_schema_is_still_a_source():
+    """Only a bare name is DuckDB's internal view; `sales.pg_tables` is a user table."""
+    provenance = check_provenance(sql_statements=["select * from sales.pg_tables"])
+    assert provenance.queried_sources == [Source(None, "sales", "pg_tables")]
+
+
+def test_an_eval_that_expects_a_catalog_counts_catalog_reads():
+    """An eval about the metadata itself ("how many tables are there?") can still pass."""
+    provenance = check_provenance(
+        sql_statements=["select count(*) from information_schema.tables"],
+        expected_sources=["information_schema.tables"],
+    )
+    assert provenance.score == 1.0
+    assert provenance.queried_sources == [Source(None, "information_schema", "tables")]

@@ -39,8 +39,9 @@ in the report. Two more things to know when reading results:
 - Provenance counts every table the agent selected from while working, not
   only the query behind its answer. If it peeks at `lineitem` along the way,
   `order_total_1995` passes provenance.
-- `show tables` and `describe` don't count as reading a table; a `select`
-  does.
+- `show tables`, `describe` and `select`s on the system catalogs
+  (`information_schema`, `duckdb_tables()`, ...) don't count as reading a
+  table; a `select` on the data does.
 
 ## What's in this folder
 

@@ -33,6 +33,24 @@ def test_failures_raise_so_mcp_flags_them_as_errors(database: Path, sql: str):
         run_query(database, sql)
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "select content from read_text('{secret}')",
+        "select * from read_csv('{secret}')",
+        "set enable_external_access = true",
+        "install httpfs",
+    ],
+)
+def test_sql_cannot_reach_files_urls_or_extensions(database: Path, sql: str):
+    """A misled agent can't read the `.env` next to the database, or anything else."""
+    secret = database.parent / ".env"
+    secret.write_text("ANTHROPIC_API_KEY=not-a-real-key\n")
+
+    with pytest.raises(ToolError, match="error running query"):
+        run_query(database, sql.format(secret=secret))
+
+
 def test_a_missing_database_raises(tmp_path: Path):
     with pytest.raises(ToolError, match="not found"):
         run_query(tmp_path / "nope.duckdb", "select 1")
