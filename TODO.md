@@ -83,7 +83,9 @@ unsafe YAML loading or XSS was found; these are trust-boundary issues.
 
 Items 1 and 2 were fixed on 2026-10-03: local MCP servers get only the
 variables in their target's `mcp_env`, and `report` only writes into a new or
-empty folder or one it wrote before (`.honest_agent_report` marker).
+empty folder or one it wrote before (its generator tag in `index.html`). Item
+4 was fixed on 2026-10-09: `serve` checks the Host header, lists no folders,
+serves no dotfiles and only serves a folder `report` wrote.
 
 Lower severity:
 
@@ -96,10 +98,6 @@ Lower severity:
    picks. Low priority unless an agent answers from free text written by
    outsiders (support tickets, reviews, CRM notes); `extract_match` compares
    in code and is less exposed.
-4. **`serve`** has no Host-header check (DNS rebinding can read
-   `report.json`) and lists directories; `serve --out .` would expose
-   `.env`. Check Host, disable listings, refuse folders without the report
-   marker (`.honest_agent_report`, see `report.py`).
 5. **`honest-agent logs`** prints `agent_answer` and tool payloads raw, so
    model/tool output can inject terminal escape sequences (OSC 52 clipboard
    writes, disguised links). Strip control characters before printing.
