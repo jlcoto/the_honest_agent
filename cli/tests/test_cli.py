@@ -11,9 +11,10 @@ from pathlib import Path
 from click.testing import CliRunner
 from recorded import claude_reply, definition, model_call, record, text, tool_call, tool_use
 
-from honest_agent.cli import _eval_loop, main
+from honest_agent.cli import main
 from honest_agent.grading import UNREADABLE_REPLY
 from honest_agent.raw import RunRecorder, read_records
+from honest_agent.runner import eval_loop, resolve_agent_name
 from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
 
 SQL = "select count(*) from agent_quiz_demo.public.orders"
@@ -97,11 +98,9 @@ def test_rebuild_leaves_results_without_a_raw_record_alone(tmp_path: Path):
 def test_agent_name_defaults_to_the_mcp_server_name():
     from types import SimpleNamespace
 
-    from honest_agent.cli import _resolve_agent_name
-
     connected = SimpleNamespace(server_info=SimpleNamespace(name="mcp-server-motherduck"))
-    assert _resolve_agent_name(None, connected) == "mcp-server-motherduck"
-    assert _resolve_agent_name("motherduck", connected) == "motherduck"
+    assert resolve_agent_name(None, connected) == "mcp-server-motherduck"
+    assert resolve_agent_name("motherduck", connected) == "motherduck"
 
 
 def _run_capturing_mcp_target(fake_run, args: list[str], env: dict[str, str]):
@@ -223,7 +222,7 @@ def _run_loop(path: str, agent, judge, definitions) -> list[dict]:
             settings={"max_tool_steps": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": []},
             tools_offered=[],
         )
-        return asyncio.run(_eval_loop(agent, definitions, judge, "claude-judge", "run_1", recorder, con))
+        return asyncio.run(eval_loop(agent, definitions, judge, "claude-judge", "run_1", recorder, con))
     finally:
         con.close()
 
