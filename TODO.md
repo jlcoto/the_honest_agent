@@ -4,6 +4,21 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
+## Next, first: split cli.py
+
+Decided 2026-10-09, to do right after PR #14 merges and before the two items
+below (both touch the run path). `cli.py` is 803 lines, about half of it the
+orchestration of a run rather than CLI.
+
+- **`runner.py`:** `_eval_loop`, `_run_async`, `_resolve_server`,
+  `_resolve_agent_name` as plain functions with no click, so a run can be
+  driven without the CLI (a future `suggest`, a skill).
+- **`init.py`** takes its prompts (`_choose`, `_ask`, `_init_example`).
+- **`cli.py`** keeps `main`, the shared helpers (`_config`, `_results_path`,
+  `_from_layers`) and thin commands; about 300 lines.
+- A pure move in its own PR: no behaviour change, the same tests (only the
+  ones patching `honest_agent.cli._run_async` follow it).
+
 ## Next: structured output for grading
 
 Found on 2026-10-09 while trying the `init --example` evals with Claude Haiku:
