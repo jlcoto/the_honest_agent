@@ -23,10 +23,11 @@ def provider_for(model: str) -> str:
 
 
 class Judge(Protocol):
-    """A single prompt-in call, which is all grading needs. Returns the provider's
-    response object as-is: the run records it raw, and derive.py reads it back."""
+    """A single prompt-in call, which is all grading needs, with the reply constrained to
+    `schema` (a JSON schema). Returns the provider's response object as-is: the run
+    records it raw, and derive.py reads the reply's text back."""
 
-    async def complete(self, prompt: str, model: str, max_tokens: int) -> Any: ...
+    async def complete(self, prompt: str, model: str, max_tokens: int, schema: dict) -> Any: ...
 
 
 class AnthropicJudge:
@@ -37,9 +38,13 @@ class AnthropicJudge:
             client = anthropic.AsyncAnthropic()
         self._client = client
 
-    async def complete(self, prompt: str, model: str, max_tokens: int) -> Any:
+    async def complete(self, prompt: str, model: str, max_tokens: int, schema: dict) -> Any:
+        # Structured output: the reply is a text block holding JSON that matches `schema`.
         return await self._client.messages.create(
-            model=model, max_tokens=max_tokens, messages=[{"role": "user", "content": prompt}]
+            model=model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+            output_config={"format": {"type": "json_schema", "schema": schema}},
         )
 
 
@@ -47,11 +52,15 @@ class OpenAIJudge:
     def __init__(self, client: Any = None):
         self._client = client or openai_client()
 
-    async def complete(self, prompt: str, model: str, max_tokens: int) -> Any:
+    async def complete(self, prompt: str, model: str, max_tokens: int, schema: dict) -> Any:
         # No output cap here: on reasoning models (gpt-5.x, o-series) the cap also
         # counts hidden reasoning tokens, so a small one can leave the answer empty.
         # Grading prompts ask for a one-line JSON object, so the output stays short.
-        return await self._client.chat.completions.create(model=model, messages=[{"role": "user", "content": prompt}])
+        return await self._client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_schema", "json_schema": {"name": "grade", "strict": True, "schema": schema}},
+        )
 
 
 def response_text(provider: str, response: dict) -> str:

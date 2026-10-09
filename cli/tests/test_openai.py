@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 from honest_agent.agent_runner import to_jsonable
 from honest_agent.cli import main
+from honest_agent.grading import GRADING_SCHEMAS
 from honest_agent.llm import ANTHROPIC, OPENAI, OpenAIJudge, provider_for, response_text, response_tokens
 from honest_agent.openai_agent_runner import OpenAIMCPAgentClient
 
@@ -44,8 +45,16 @@ def _fake_openai(*responses):
 def test_the_openai_judge_returns_the_response_as_is_and_it_reads_back():
     client = _fake_openai(_completion('{"score": 1.0}', prompt_tokens=30, completion_tokens=8))
 
-    response = asyncio.run(OpenAIJudge(client).complete("grade this", model="gpt-5.4-mini", max_tokens=200))
+    schema = GRADING_SCHEMAS["llm_judge"]
+    judge = OpenAIJudge(client)
+    response = asyncio.run(judge.complete("grade this", model="gpt-5.4-mini", max_tokens=200, schema=schema))
     recorded = to_jsonable(response)
+
+    (call,) = client.chat.completions.calls
+    assert call["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "grade", "strict": True, "schema": schema},
+    }
 
     assert response_text(OPENAI, recorded) == '{"score": 1.0}'
     assert response_tokens(OPENAI, recorded) == (30, 8)

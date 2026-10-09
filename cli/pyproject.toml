@@ -14,7 +14,7 @@ dependencies = [
     # 2.x is needed for its `Client` class.
     "mcp>=2.0",
     # Model SDKs: both installed, each imported only when one of its models is used.
-    "anthropic>=0.40.0",
+    "anthropic>=1.5.0",
     "openai>=1.40",
     "sqlglot>=30.21.0",
 ]

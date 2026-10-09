@@ -201,7 +201,7 @@ class _ScriptedJudge:
     def __init__(self, reply: str):
         self._reply = reply
 
-    async def complete(self, prompt, model, max_tokens):
+    async def complete(self, prompt, model, max_tokens, schema):
         return claude_reply(text(self._reply))
 
 
@@ -244,7 +244,9 @@ def test_a_run_records_every_call_and_derives_its_results(tmp_path: Path):
     assert [r["accuracy_score"] for r in read_all_results(path)] == [1.0]  # written as the eval ended
     (rec,) = read_records(path)
     assert [e["kind"] for e in rec["events"]] == ["model_call", "tool_call", "model_call", "grading_call"]
-    assert "There were 2,297 orders." in json.loads(rec["events"][3]["request"])["prompt"]
+    grading_request = json.loads(rec["events"][3]["request"])
+    assert "There were 2,297 orders." in grading_request["prompt"]
+    assert grading_request["schema"]["required"] == ["extracted_answer"]
 
 
 def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):
@@ -261,7 +263,7 @@ def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):
 
 
 class _FailingJudge:
-    async def complete(self, prompt, model, max_tokens):
+    async def complete(self, prompt, model, max_tokens, schema):
         raise RuntimeError("the grading API is down")
 
 

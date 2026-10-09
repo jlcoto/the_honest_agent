@@ -4,32 +4,6 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
-## Next: structured output for grading
-
-Found on 2026-10-09 while trying the `init --example` evals with Claude Haiku:
-an `llm_judge` reply came back as `{"score": 0.0, "rationale": "...instead).""}`
-(a stray quote), and the whole `run` stopped with a JSONDecodeError. The
-grading prompts only *ask* for JSON, and `grading.py` (`_reply_json`) grabs
-`\{.*\}` with a regex and `json.loads` it.
-
-Stopgap since then: a reply that can't be read scores that eval 0, with
-"Not graded: the grading model's reply wasn't the JSON it was asked for (...)"
-as its rationale and a warning in the output; the run continues.
-
-The fix: **structured output**, so the model API constrains the reply to a
-schema and invalid JSON can't happen.
-
-- Claude: tool use with one forced tool whose input schema is the reply
-  (`{"score": number, "rationale": string}` for `llm_judge`,
-  `{"extracted_answer": string}` for `extract_match`), or the API's
-  structured-output option if the models we use support it. OpenAI:
-  `response_format` with a JSON schema.
-- Both judges, Claude and OpenAI; keep the stopgap for anything that still
-  fails (a refusal, a cut-off reply).
-- Check that grades don't shift: re-grade the example project's stored runs
-  with `honest-agent rebuild` before and after and compare.
-- Closes the open half of security item 3 below.
-
 ## From the first-time setup walkthrough (2026-10-08)
 
 The user installed honest-agent from scratch in an empty folder, following
@@ -111,11 +85,12 @@ Lower severity:
 3. **Prompt injection can change `llm_judge` scores.** Half fixed on
    2026-10-03: the agent's answer now goes into the judge and extraction
    prompts inside `<answer>` tags, with a note that it's data, not
-   instructions. Still open: `grading.py` reads the judge's score with a
-   greedy `\{.*\}` regex; use structured output instead: now planned in
-   "Next: structured output for grading" above. Low priority unless an
-   agent answers from free text written by outsiders (support tickets,
-   reviews, CRM notes); `extract_match` compares in code and is less exposed.
+   instructions. Since 2026-10-09 the grading call uses structured output, so
+   the reply's shape is fixed by the provider, not by the prompt. What's left
+   is inherent to a model judge: injected text could still sway the score it
+   picks. Low priority unless an agent answers from free text written by
+   outsiders (support tickets, reviews, CRM notes); `extract_match` compares
+   in code and is less exposed.
 4. **`serve`** has no Host-header check (DNS rebinding can read
    `report.json`) and lists directories; `serve --out .` would expose
    `.env`. Check Host, disable listings, refuse folders without the report

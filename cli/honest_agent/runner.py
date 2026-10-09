@@ -13,7 +13,7 @@ import click
 from .agent_runner import AgentClient
 from .derive import derive_result, recorded_answer
 from .eval_loader import EvalDefinition, filter_by_tags, load_evals
-from .grading import GRADING_MAX_TOKENS, UNREADABLE_REPLY, grading_prompt
+from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, UNREADABLE_REPLY, grading_prompt
 from .llm import OPENAI, Judge, make_judge, provider_for
 from .raw import RunRecorder
 from .storage import connect, write_derived
@@ -47,12 +47,13 @@ async def eval_loop(
                 click.echo(f"    WARNING: {definition.eval_id} hit the step limit without a final answer.")
             prompt = grading_prompt(definition.grading_method, answer, definition.expected_answer, definition.prompt)
             if prompt is not None:
-                request = {"model": judge_model, "max_tokens": GRADING_MAX_TOKENS, "prompt": prompt}
+                schema = GRADING_SCHEMAS[definition.grading_method]
+                request = {"model": judge_model, "max_tokens": GRADING_MAX_TOKENS, "prompt": prompt, "schema": schema}
                 await record.call(
                     "grading_call",
                     provider_for(judge_model),
                     request,
-                    judge.complete(prompt, model=judge_model, max_tokens=GRADING_MAX_TOKENS),
+                    judge.complete(prompt, model=judge_model, max_tokens=GRADING_MAX_TOKENS, schema=schema),
                 )
             derived = derive_result(con, result_id)
         except Exception as exc:
