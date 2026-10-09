@@ -181,3 +181,16 @@ def test_debug_needs_the_token_for_motherduck_results(demo_project):
 
     assert result.exit_code == 1
     assert _lines(result.output)["Results store"].startswith("FAILED   HONEST_AGENT_RESULTS_TOKEN is not set.")
+
+
+def test_a_refused_motherduck_token_shows_motherducks_reason():
+    from honest_agent.debug import motherduck_reason
+
+    raw = (
+        'Invalid Input Error: Initialization function "motherduck_duckdb_cpp_init" from file '
+        '"/x/motherduck.duckdb_extension" threw an exception: "Invalid Error: Request failed: Your request '
+        "is not authenticated. Please check your MotherDuck token. (Jwt is not in the form of "
+        "Header.Payload.Signature, request id: 'abc')\""
+    )
+    assert motherduck_reason(raw) == "Your request is not authenticated. Please check your MotherDuck token."
+    assert motherduck_reason("something else") == "something else"

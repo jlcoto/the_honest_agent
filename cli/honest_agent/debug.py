@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from pathlib import Path
 
 import click
@@ -78,13 +79,24 @@ async def mcp_server(
         raise RuntimeError(f"No answer from the server within {timeout:g}s.") from None
 
 
+def motherduck_reason(message: str) -> str:
+    """MotherDuck's own words from a failed connection ("Your request is not authenticated.
+    ..."), without the DuckDB extension wrapper and request details around them."""
+    found = re.search(r"Request failed: (.*?)(?: \(|\"|$)", message)
+    return found.group(1) if found else message
+
+
 def results_store(results_path: str) -> str:
     """Checks that results can be stored at `results_path` without creating or changing
     anything: an existing local file opens read-only, a new one's folder is writable,
     and a MotherDuck database (md:<name>) opens with RESULTS_TOKEN_ENV."""
     if is_motherduck(results_path):
         # Connects and lists the account's databases; creates nothing.
-        if results_exist(results_path):
+        try:
+            exists = results_exist(results_path)
+        except Exception as exc:  # duckdb.Error, when MotherDuck refuses the connection
+            raise ValueError(f"MotherDuck refused {RESULTS_TOKEN_ENV}: {motherduck_reason(str(exc))}") from exc
+        if exists:
             return f"{results_path} (MotherDuck, opened with {RESULTS_TOKEN_ENV})"
         return f"{results_path} (MotherDuck, connected with {RESULTS_TOKEN_ENV}; created on the first run)"
 
