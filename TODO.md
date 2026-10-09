@@ -472,7 +472,41 @@ command, like `dbt init`:
 - "Getting started" in README.md then shrinks to install, `init`, fill in
   `.env`, run.
 
-Open question for the user: prompts like `dbt init`, or flags only.
+**Decided 2026-10-09** (plan with the full discussion:
+https://claude.ai/code/artifact/46742cb1-ce7b-4ad5-9255-0bbc9f36b6d0):
+
+1. Prompts with numbered options and defaults (Enter accepts), free text only
+   for the user's own values (URL, command); every answer is also a flag, and
+   `--no-input` makes it scriptable.
+2. Servers: local command (the default), Snowflake managed MCP, MotherDuck,
+   another URL; Snowflake and MotherDuck prefill the URL shape and token
+   variable.
+3. Model: Claude (default) or OpenAI; only that key goes in `.env`.
+4. Results: local file (default), MotherDuck (`results_path` +
+   `HONEST_AGENT_RESULTS_TOKEN`, written under a "# MotherDuck only" comment;
+   the name stays generic for other backends), or a file in S3 (prints the two
+   `aws s3 cp` lines with a plain note that honest-agent won't copy to S3
+   itself, and links `docs/hosting.md`).
+5. Plain `init` always writes a placeholder eval; a passing MotherDuck
+   `sample_data` eval belongs in `init --example`, if ever.
+6. **Env vars in the config, dbt style:** any value can be
+   `{{ env_var('VAR') }}`, with an optional default as the second argument.
+   For every URL target, `init` writes the URL into `.env` and the config reads
+   it, so accounts stay out of git with one committed file. A local command
+   stays inline. Needs `env_var()` support in the config loader (a small
+   pattern match, no Jinja).
+7. `.gitignore`: print the lines to add, never edit it.
+8. Target name: the server's name (`local`, `snowflake`, `motherduck`),
+   changeable at the prompt; more targets (e.g. `snowflake_dev`) by hand.
+9. `init --example`: its own folder, 5-6 evals on the demo warehouse, some
+   failing on purpose, covering every accuracy method and every provenance
+   check, on a cheap model (e.g. Claude Haiku); its README says which cases
+   are meant to fail; it ends with a warning to add the provider's API key.
+
+Later: two skills (project setup, e.g. drafting evals from the user's
+schema; hosting and CI), in the Agent Skills format so they work in Claude
+Code and Codex; `init` could add them behind an opt-in flag (`--with-skill`).
+
 
 ## Evaluate Snowflake's business chat (Snowflake Intelligence / Cortex Agents)
 
