@@ -270,7 +270,7 @@ left open on purpose (a fourth was added on 2026-10-09):
    (recall). An eval can't say "the mart *or* the semantic view". In the
    Snowflake results, four answers that came from
    `agent_quiz_demo.public.tpch_semantic_view` scored 0 because the evals
-   expect `fct_revenue_by_year` / `orders`. Decide whether the semantic view
+   expect specific tables. Decide whether the semantic view
    is an acceptable source there (then list it, or add an any-of form to the
    YAML) or a real miss.
 2. **Extra sources.** Recall ignores tables the agent read beyond the
@@ -515,9 +515,9 @@ in the evals for now: no current server needs it, since honest-agent finds
 
 ## `honest-agent init`: starter files for a new project
 
-**Status (2026-10-09):** `env_var()` in the config and plain `init` are built
-(decisions 1-8 below). Left: `init --example` (decision 9), which needs its 5-6
-evals designed first.
+**Status (2026-10-09):** built: `env_var()` in the config, `init`, and
+`init --example` (six evals over TPC-H only, tried end to end with Claude Haiku;
+the demo server now ships in honest-agent as `honest_agent/demo_server.py`).
 
 Found during the first-time setup dry runs (2026-10-02): after `uv add`, a
 new user starts from an empty folder and has to write

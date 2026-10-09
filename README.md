@@ -44,6 +44,11 @@ You need:
 - The MCP server your agent uses: its URL and a token, or the command that
   starts it locally.
 
+To see it work before connecting your own agent, run
+`uv run honest-agent init --example` after step 1: it creates
+`honest-agent-example/`, a demo agent over DuckDB's sample data with six evals
+(some fail on purpose), runnable with only a model API key.
+
 ### 1. Create a project and install
 
 ```bash
@@ -191,7 +196,7 @@ uv run honest-agent notify --webhook-url ...                   # Slack alert if 
 per agent being evaluated, like the targets in a dbt profile: `honest-agent run --target
 motherduck` evaluates another one. The default target calls the model with the
 `query_warehouse` tool sourced live from the
-bundled demo MCP server (`mcp_server/server.py`), against a real seeded
+bundled demo MCP server (`python -m honest_agent.demo_server`), against a real seeded
 TPC-H warehouse — real SQL, real data, real provenance checking (does the
 agent's SQL actually hit the table we expect). By default results land in
 `./honest_agent_results/results.duckdb`. See `example_project/README.md` for

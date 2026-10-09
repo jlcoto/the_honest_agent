@@ -188,3 +188,71 @@ def s3_note(results_path: str = "honest_agent_results/results.duckdb") -> str:
         f"  gzip -c {results_path} | aws s3 cp - s3://<bucket>/results/results.duckdb.gz\n"
         f"The bucket, its permissions and CI: {HOSTING_DOCS}"
     )
+
+
+EXAMPLE_FOLDER = "honest-agent-example"
+EXAMPLE_FILES = Path(__file__).parent / "example"
+
+
+def seed_tpch(path: Path) -> None:
+    """DuckDB's TPC-H sample data at scale 0.01 (15,000 orders), written to `path`. The
+    `tpch` extension downloads once, so the first time needs the network."""
+    import duckdb
+
+    con = duckdb.connect(str(path))
+    try:
+        con.execute("install tpch")
+        con.execute("load tpch")
+        con.execute("call dbgen(sf = 0.01)")
+    finally:
+        con.close()
+
+
+def example_config_text(provider: str) -> str:
+    import shlex
+    import sys
+
+    from .llm import DEFAULT_MODELS
+
+    model = DEFAULT_MODELS["openai" if provider == "openai" else "anthropic"]
+    command = f"{shlex.quote(sys.executable)} -m honest_agent.demo_server warehouse.duckdb"
+    return (
+        "\n".join(
+            [
+                "# The honest-agent example: a demo agent over DuckDB's TPC-H sample data. See README.md.",
+                "",
+                "default_target: demo",
+                f"model: {model}   # a cheap model keeps a run at a few cents",
+                "max_tool_steps: 8   # the agent explores the tables before it queries",
+                "",
+                "targets:",
+                "  demo:",
+                "    # honest-agent's demo MCP server, started with honest-agent's own Python. Demo only:",
+                "    # not for real data. After reinstalling honest-agent, run `init --example` again.",
+                f"    mcp_command: {json.dumps(command)}",
+                "    evals_dir: evals",
+            ]
+        )
+        + "\n"
+    )
+
+
+def write_example(folder: Path, provider: str) -> None:
+    """Creates `folder` with the example: config, evals, README, .env and a seeded warehouse.
+    Refuses an existing folder, so a demo target never lands in a real project."""
+    import shutil
+
+    if folder.exists():
+        raise FileExistsError(f"{folder} already exists. Remove it or run `init --example` elsewhere.")
+    folder.mkdir(parents=True)
+    try:
+        seed_tpch(folder / "warehouse.duckdb")
+    except Exception:
+        shutil.rmtree(folder)
+        raise
+    (folder / "evals").mkdir()
+    shutil.copy(EXAMPLE_FILES / "evals.yml", folder / "evals" / "example_evals.yml")
+    shutil.copy(EXAMPLE_FILES / "README.md", folder / "README.md")
+    (folder / "honest_agent_config.yml").write_text(example_config_text(provider))
+    label, key_var = PROVIDERS[provider]
+    (folder / ".env").write_text(f"# The model's API key ({label}). Keep this file out of git.\n{key_var}=\n")

@@ -97,3 +97,48 @@ def test_in_git_it_lists_what_to_ignore_without_editing_gitignore(in_tmp_dir: Pa
 
     assert "Add to .gitignore:\n  honest_agent_report/\n" in result.output
     assert (in_tmp_dir / ".gitignore").read_text() == ".env\n"
+
+
+def test_example_creates_its_own_folder_with_evals_that_load(in_tmp_dir: Path, monkeypatch):
+    import honest_agent.init as init_mod
+
+    seeded = []
+    monkeypatch.setattr(init_mod, "seed_tpch", lambda path: seeded.append(path) or path.write_text(""))
+
+    result = _init("--example", "--no-input")
+
+    assert result.exit_code == 0, result.output
+    folder = in_tmp_dir / "honest-agent-example"
+    assert seeded == [folder / "warehouse.duckdb"]
+    target = load_config(folder / "honest_agent_config.yml").target(None)
+    assert target.name == "demo"
+    assert "-m honest_agent.demo_server warehouse.duckdb" in target.settings["mcp_command"]
+    assert target.settings["model"] == "claude-haiku-4-5"
+    assert target.settings["max_tool_steps"] == 8
+    evals = load_evals(folder / "evals")
+    assert len(evals) == 6 and {e.grading_method for e in evals} == {"contains", "extract_match", "llm_judge"}
+    assert (folder / ".env").read_text().endswith("ANTHROPIC_API_KEY=\n")
+    assert "fails provenance" in (folder / "README.md").read_text()
+    assert "not for real data" in result.output
+
+
+def test_example_never_writes_into_an_existing_folder(in_tmp_dir: Path):
+    (in_tmp_dir / "honest-agent-example").mkdir()
+
+    result = _init("--example", "--no-input")
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+
+
+def test_example_with_openai_uses_its_cheap_model(in_tmp_dir: Path, monkeypatch):
+    import honest_agent.init as init_mod
+
+    monkeypatch.setattr(init_mod, "seed_tpch", lambda path: path.write_text(""))
+
+    result = _init("--example", "--no-input", "--model-provider", "openai")
+
+    assert result.exit_code == 0, result.output
+    folder = in_tmp_dir / "honest-agent-example"
+    assert load_config(folder / "honest_agent_config.yml").shared["model"] == "gpt-5.4-mini"
+    assert "OPENAI_API_KEY=" in (folder / ".env").read_text()

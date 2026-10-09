@@ -608,6 +608,32 @@ def _ask(question: str, given: str | None, default: str | None, no_input: bool, 
     return click.prompt(question, default=default)
 
 
+def _init_example(model_provider: str | None, no_input: bool) -> None:
+    providers = {key: label for key, (label, _var) in init_mod.PROVIDERS.items()}
+    provider = _choose("Which model runs the agent?", providers, model_provider, "claude", no_input)
+    folder = Path.cwd() / init_mod.EXAMPLE_FOLDER
+    click.echo(f"Creating {init_mod.EXAMPLE_FOLDER}/ and seeding DuckDB's TPC-H sample data...")
+    try:
+        init_mod.write_example(folder, provider)
+    except FileExistsError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except Exception as exc:
+        raise click.ClickException(
+            f"Couldn't seed the sample data ({exc}). DuckDB downloads its tpch extension the first "
+            "time, so this needs the network."
+        ) from exc
+    key_var = init_mod.PROVIDERS[provider][1]
+    click.echo(
+        f"\nCreated {init_mod.EXAMPLE_FOLDER}/: a demo agent over sample data, and six evals.\n"
+        "The demo MCP server is for trying honest-agent only, not for real data.\n"
+        f"\nNext:\n  1. cd {init_mod.EXAMPLE_FOLDER}\n"
+        f"  2. Add your API key to .env: {key_var}\n"
+        "  3. honest-agent run      (a few cents)\n"
+        "  4. honest-agent report, then honest-agent serve\n"
+        "README.md there says what each eval shows, and which ones are meant to fail."
+    )
+
+
 @main.command()
 @click.option("--server", type=click.Choice(list(init_mod.SERVERS)), help="The MCP server your agent uses.")
 @click.option("--mcp-command", default=None, help="The command that starts a local MCP server (--server local).")
@@ -617,6 +643,11 @@ def _ask(question: str, given: str | None, default: str | None, no_input: bool, 
 @click.option("--results", type=click.Choice(list(init_mod.RESULTS)), help="Where results live.")
 @click.option("--results-db", default=None, help="The MotherDuck database for results (--results motherduck).")
 @click.option("--no-input", is_flag=True, help="Ask nothing: use the flags given and the defaults.")
+@click.option(
+    "--example",
+    is_flag=True,
+    help=f"Instead, create {init_mod.EXAMPLE_FOLDER}/: a demo agent over sample data with six evals.",
+)
 def init(
     server: str | None,
     mcp_command: str | None,
@@ -626,8 +657,12 @@ def init(
     results: str | None,
     results_db: str | None,
     no_input: bool,
+    example: bool,
 ):
     """Write a new project's starter files: config, a first eval and .env."""
+    if example:
+        _init_example(model_provider, no_input)
+        return
     servers = {key: label for key, (label, *_rest) in init_mod.SERVERS.items()}
     server = _choose("Which MCP server does your agent use?", servers, server, "local", no_input)
     _label, default_target, known_url, url_hint = init_mod.SERVERS[server]
