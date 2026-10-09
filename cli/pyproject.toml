@@ -6,23 +6,25 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
-    "click>=8.1",
-    "pyyaml>=6.0",
-    "duckdb>=0.10.0",
-    "python-dotenv>=1.0",
+    # Each range starts at the version tested and stops before the next major one (the next
+    # minor for 0.x tools like ruff), so installs never get an untested major release.
+    "click>=8.5,<9",
+    "pyyaml>=6.0,<7",
+    "duckdb>=1.5,<2",
+    "python-dotenv>=1.2,<2",
     # The MCP SDK (open Model Context Protocol), used by `run` to reach the agent's tools.
     # 2.x is needed for its `Client` class.
-    "mcp>=2.0",
+    "mcp>=2.2,<3",
     # Model SDKs: both installed, each imported only when one of its models is used.
-    "anthropic>=1.5.0",
-    "openai>=1.40",
-    "sqlglot>=30.21.0",
+    "anthropic>=1.5,<2",
+    "openai>=3.23,<4",
+    "sqlglot>=30.21,<31",
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7.0"]
+test = ["pytest>=9.1,<10"]
 lint = [
-    "ruff>=0.16.7",
+    "ruff>=0.16.7,<0.17",
 ]
 
 [project.scripts]

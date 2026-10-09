@@ -263,6 +263,8 @@ def _ensure_schema(con) -> None:
         con.execute(f"alter table results add column if not exists {name} {type_}")
     traces_cols_sql = ", ".join(f"{name} {type_}" for name, type_ in _TRACES_COLUMNS)
     con.execute(f"create table if not exists traces ({traces_cols_sql})")
+    for name, type_ in _TRACES_COLUMNS:
+        con.execute(f"alter table traces add column if not exists {name} {type_}")
     tool_calls_cols_sql = ", ".join(f"{name} {type_}" for name, type_ in _TOOL_CALLS_COLUMNS)
     con.execute(f"create table if not exists tool_calls ({tool_calls_cols_sql})")
     for name, type_ in _TOOL_CALLS_COLUMNS:

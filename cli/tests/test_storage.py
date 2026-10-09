@@ -222,6 +222,24 @@ def test_agent_name_column_is_added_to_an_existing_results_table(tmp_path: Path)
     assert by_id["r1"]["agent_name"] == "snowflake"
 
 
+def test_a_column_added_to_traces_reaches_an_existing_file(tmp_path: Path):
+    """Like `results` and `tool_calls`: a file written before a traces column existed
+    (here `step_details`) gets the column, so writing the new version's rows works."""
+    import duckdb
+
+    db_path = str(tmp_path / "results.duckdb")
+    con = duckdb.connect(db_path)
+    con.execute("create table traces (result_id varchar, run_id varchar, eval_id varchar, agent_trace varchar)")
+    con.execute("insert into traces values ('old', 'run_0', 'q0', '[]')")
+    con.close()
+
+    write_run_results(db_path, "run_1", [_row(step_details=json.dumps([{"step": 1}]))])
+
+    by_id = {t["result_id"]: t for t in read_traces(db_path)}
+    assert by_id["old"]["step_details"] is None
+    assert json.loads(by_id["r1"]["step_details"]) == [{"step": 1}]
+
+
 def test_grading_model_roundtrips(tmp_path: Path):
     db_path = str(tmp_path / "results.duckdb")
     write_run_results(db_path, "run_1", [_row(grading_model="claude-haiku-4-5"), _row(result_id="r2")])
