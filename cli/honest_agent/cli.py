@@ -10,6 +10,7 @@ import click
 from click.core import ParameterSource
 from dotenv import find_dotenv, load_dotenv
 
+from . import init as init_mod
 from . import notify as notify_mod
 from . import report as report_mod
 from . import serve as serve_mod
@@ -580,6 +581,96 @@ def notify(
     # Without targets there's one agent to alert on: whichever ran last.
     agent_name = (chosen.settings.get("agent_name") or chosen.name) if chosen else None
     notify_mod.notify_on_failures(results_path, webhook_url, agent_name, report_url)
+
+
+def _choose(question: str, options: dict[str, str], given: str | None, default: str, no_input: bool) -> str:
+    """A numbered menu, e.g. `1) Claude  2) OpenAI  [1]:`; a flag's value or --no-input skips it."""
+    if given is not None:
+        return given
+    if no_input:
+        return default
+    keys = list(options)
+    menu = "  ".join(f"{i}) {options[key]}" for i, key in enumerate(keys, 1))
+    pick = click.prompt(f"{question}\n  {menu}", type=click.IntRange(1, len(keys)), default=keys.index(default) + 1)
+    return keys[pick - 1]
+
+
+def _ask(question: str, given: str | None, default: str | None, no_input: bool, flag: str) -> str:
+    """Free text the user knows best (a URL, a command); required unless it has a default."""
+    if given:
+        return given
+    if no_input:
+        if default:
+            return default
+        raise click.ClickException(f"{flag} is required with --no-input.")
+    return click.prompt(question, default=default)
+
+
+@main.command()
+@click.option("--server", type=click.Choice(list(init_mod.SERVERS)), help="The MCP server your agent uses.")
+@click.option("--mcp-command", default=None, help="The command that starts a local MCP server (--server local).")
+@click.option("--mcp-url", default=None, help="The MCP server's URL (any other --server); it goes into .env.")
+@click.option("--target-name", default=None, help="The target's name. Defaults to the server's name.")
+@click.option("--model-provider", type=click.Choice(list(init_mod.PROVIDERS)), help="Claude or OpenAI.")
+@click.option("--results", type=click.Choice(list(init_mod.RESULTS)), help="Where results live.")
+@click.option("--results-db", default=None, help="The MotherDuck database for results (--results motherduck).")
+@click.option("--no-input", is_flag=True, help="Ask nothing: use the flags given and the defaults.")
+def init(
+    server: str | None,
+    mcp_command: str | None,
+    mcp_url: str | None,
+    target_name: str | None,
+    model_provider: str | None,
+    results: str | None,
+    results_db: str | None,
+    no_input: bool,
+):
+    """Write a new project's starter files: config, a first eval and .env."""
+    servers = {key: label for key, (label, *_rest) in init_mod.SERVERS.items()}
+    server = _choose("Which MCP server does your agent use?", servers, server, "local", no_input)
+    _label, default_target, known_url, url_hint = init_mod.SERVERS[server]
+    if server == "local":
+        mcp_command = _ask("Command that starts the MCP server", mcp_command, None, no_input, "--mcp-command")
+    else:
+        prompt = "MCP server URL" + (f" ({url_hint})" if url_hint and not known_url else "")
+        mcp_url = _ask(prompt, mcp_url, known_url, no_input, "--mcp-url")
+    target = target_name or (default_target if no_input else click.prompt("Target name", default=default_target))
+    providers = {key: label for key, (label, _var) in init_mod.PROVIDERS.items()}
+    provider = _choose("Which model runs the agent?", providers, model_provider, "claude", no_input)
+    results = _choose("Where should results live?", init_mod.RESULTS, results, "local", no_input)
+    if results == "motherduck":
+        results_db = _ask("MotherDuck database for results", results_db, "honest_agent_results", no_input, "")
+
+    answers = init_mod.Answers(
+        server=server,
+        target=target,
+        provider=provider,
+        results=results,
+        mcp_command=mcp_command,
+        mcp_url=mcp_url,
+        results_db=results_db or "honest_agent_results",
+    )
+    folder = Path.cwd()
+    written = init_mod.write_project(folder, answers)
+    click.echo("")
+    if written.created:
+        click.echo(f"Created {', '.join(written.created)}")
+    for name in written.skipped:
+        click.echo(f"Skipped {name}: it already exists, so it was left as it is.")
+    if ".env" in written.skipped:
+        names = ", ".join(name for _, name, _value in init_mod.env_entries(answers))
+        click.echo(f"  Make sure .env has: {names}")
+    missing = init_mod.missing_ignores(folder)
+    if missing:
+        click.echo("Add to .gitignore:\n" + "\n".join(f"  {path}" for path in missing))
+    if results == "s3":
+        click.echo("\n" + init_mod.s3_note())
+    steps = []
+    if written.env_to_fill:
+        steps.append(f"Fill in .env: {', '.join(written.env_to_fill)}")
+    steps.append("Edit evals/first_eval.yml: your question, its answer, the tables it reads")
+    steps.append("honest-agent run")
+    click.echo("\nNext:\n" + "\n".join(f"  {i}. {step}" for i, step in enumerate(steps, 1)))
 
 
 @main.command()

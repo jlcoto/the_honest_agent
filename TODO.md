@@ -9,19 +9,16 @@ waiting on information we don't have yet.
 The user installed honest-agent from scratch in an empty folder, following
 only the README, then set up hosting and CI (recipe: `docs/hosting.md`).
 README fixes done 2026-10-08 (example eval, `--target`, sharing via
-`docs/hosting.md`, `export` auth). Left:
+`docs/hosting.md`, `export` auth); `init` built 2026-10-09. Left:
 
-1. **`init` should ask where results live:** a local file, MotherDuck
-   (a separate results-only token, `HONEST_AGENT_RESULTS_TOKEN`), or a file
-   in S3 (link to `docs/hosting.md`).
-2. **`honest-agent run` always exits 0**, even when evals fall below
+1. **`honest-agent run` always exits 0**, even when evals fall below
    threshold, so a CI job never fails on a regression (only `notify`
    alerts). Decide whether to add an option that sets a failing exit code.
-3. **Ship the AWS setup as code**, after the recipe settles: a
+2. **Ship the AWS setup as code**, after the recipe settles: a
    CloudFormation template with a "Launch stack" link (bucket, minimal
    policy, GitHub OIDC role), a Terraform module when a team asks. It must
    cope with an existing GitHub OIDC provider (one per account).
-4. **Turn the tested recipe into a Claude Code skill** that asks for
+3. **Turn the tested recipe into a Claude Code skill** that asks for
    storage, host, CI and warehouse and generates the workflow, config and
    commands, pointing to `docs/hosting.md`. Never asks for tokens in chat,
    never suggests public hosting, confirms before creating resources.
@@ -432,6 +429,10 @@ in the evals for now: no current server needs it, since honest-agent finds
 `sql`/`query`/`statement` arguments by itself. Move it when a real server does.
 
 ## `honest-agent init`: starter files for a new project
+
+**Status (2026-10-09):** `env_var()` in the config and plain `init` are built
+(decisions 1-8 below). Left: `init --example` (decision 9), which needs its 5-6
+evals designed first.
 
 Found during the first-time setup dry runs (2026-10-02): after `uv add`, a
 new user starts from an empty folder and has to write
