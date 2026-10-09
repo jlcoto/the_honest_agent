@@ -4,6 +4,15 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
+## Next: rename `--model-provider claude` to `anthropic`
+
+`init --model-provider` takes `claude` or `openai`: a model name next to a
+company name. Everything else says `anthropic` (`ANTHROPIC_API_KEY`, the
+provider names in `llm.py` and in the recorded calls), so `anthropic` is what
+people type. Rename the key in `init.py`'s `PROVIDERS` and its two defaults;
+the interactive menu keeps showing "Claude". No alias for `claude` (no users
+yet). Its own branch, after `deps-and-traces`.
+
 ## From the first-time setup walkthrough (2026-10-08)
 
 The user installed honest-agent from scratch in an empty folder, following
@@ -53,7 +62,18 @@ when tagging v0.1.0, not before.
 
 **Migrations (no Alembic):**
 
-- A `meta` table with `schema_version`, starting at 1 = the schema at release.
+Decided 2026-10-09: build the version and the migration mechanism with the
+first breaking storage change, not at v0.1.0. A results file with no `meta`
+table counts as version 1, so files written before then can still be told
+apart, and the mechanism is written once there's a real migration to run.
+Done before v0.1.0: the `traces` gap (`_ensure_schema` now adds new columns
+to all three derived tables) and bounded ranges for every dependency in
+`pyproject.toml` (tested version up to the next major, the next minor for
+ruff).
+
+With the first breaking storage change:
+
+- A `meta` table with `schema_version`; no table = version 1.
 - An ordered list of small Python migration functions (a few lowercase SQL
   statements each), applied when the CLI opens a results store, each in a
   transaction. Back up a local file first (`results.duckdb.bak-v<N>`).
@@ -69,12 +89,10 @@ when tagging v0.1.0, not before.
   | Any change to the raw layer | A numbered migration: it can't be regenerated |
   | Report format | Nothing; `report` regenerates it |
 
-- Fix the gap first: `_ensure_schema` adds missing columns to `results` and
-  `tool_calls` but not to `traces`.
 - `honest_agent_config.yml` and eval YAML: a renamed key keeps working under
   its old name for one minor version, with a warning, then goes.
-- Keep a `duckdb` version range in `pyproject.toml`: a newer DuckDB can write
-  files an older one can't read. Mention DuckDB upgrades in release notes.
+- Mention DuckDB upgrades in release notes (moving its range is a deliberate,
+  tested change).
 
 ## High priority: security fixes (review of 2026-10-02)
 
