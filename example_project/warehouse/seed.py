@@ -4,14 +4,6 @@ part/partsupp/supplier/nation/region, with actual foreign-key relationships)
 instead of a hand-rolled flat table, so provenance checking has genuine
 joins/aggregation to get right or wrong, not just "which single table."
 
-One derived table on top of the raw TPC-H tables, so provenance's
-expected_sources check still has something real to distinguish:
-  - `fct_revenue_by_year`: pre-aggregated annual revenue (sum of
-    `l_extendedprice * (1 - l_discount)` per order year, TPC-H's standard
-    revenue formula) -- the "correct" table for a revenue question, instead
-    of joining orders+lineitem and recomputing that formula by hand every
-    time a question comes in.
-
 Deterministic: `dbgen(sf=...)` is itself fully deterministic for a given
 scale factor (that's the whole point of a benchmark generator -- no random
 seed needed here, unlike a hand-rolled generator). TPC-H's own order dates
@@ -44,25 +36,16 @@ def main() -> None:
         con.execute("load tpch")
         con.execute(f"call dbgen(sf={SCALE_FACTOR})")
 
-        con.execute(
-            """
-            create table fct_revenue_by_year as
-            select extract(year from o_orderdate)::integer as year,
-                   sum(l_extendedprice * (1 - l_discount)) as revenue
-            from orders
-            join lineitem on o_orderkey = l_orderkey
-            group by 1
-            order by 1
-            """
-        )
-
         print(f"Seeded {DB_PATH} from TPC-H dbgen(sf={SCALE_FACTOR}).")
         print("Tables:")
         for (name,) in con.execute("show tables").fetchall():
             count = con.execute(f"select count(*) from {name}").fetchone()[0]
             print(f"  - {name} ({count} rows)")
 
-        revenue_1996 = con.execute("select round(revenue, 2) from fct_revenue_by_year where year = 1996").fetchone()[0]
+        revenue_1996 = con.execute(
+            "select round(sum(l_extendedprice * (1 - l_discount)), 2) from orders "
+            "join lineitem on o_orderkey = l_orderkey where extract(year from o_orderdate) = 1996"
+        ).fetchone()[0]
         order_count_1996 = con.execute(
             "select count(*) from orders where extract(year from o_orderdate) = 1996"
         ).fetchone()[0]

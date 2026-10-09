@@ -217,7 +217,7 @@ evals:
       - title: Total revenue in 1996
         prompt: What was revenue in 1996?
         expected_answer: "311928357.78"
-        provenance: {expected_sources: [fct_revenue_by_year]}
+        provenance: {expected_sources: [lineitem]}
         tags: [smoke]
       - title: Orders placed in 1996
         id: q_order_count_1996
@@ -238,7 +238,7 @@ def test_group_settings_are_inherited_and_most_specific_wins(tmp_path: Path):
     assert (revenue.category, revenue.grading_method, revenue.accuracy_min_score) == ("finance", "extract_match", 0.8)
     assert revenue.sql_fields == {"execute_query": "sql"}
     assert revenue.provenance_min_score == 0.7
-    assert revenue.expected_sources == ["fct_revenue_by_year"]
+    assert revenue.expected_sources == ["lineitem"]
     assert revenue.tags == ["motherduck", "smoke"]
     assert (orders.grading_method, orders.accuracy_min_score) == ("extract_match", 0.9)
     assert orders.tags == ["motherduck"]
@@ -281,7 +281,7 @@ def test_an_eval_without_an_expected_answer_is_an_error(tmp_path: Path, answer_l
     (tmp_path / "a.yml").write_text(
         "evals:\n  - id: q_sources_only\n    prompt: Which table holds revenue?\n"
         + answer_line
-        + "    provenance: {expected_sources: [fct_revenue_by_year]}\n"
+        + "    provenance: {expected_sources: [lineitem]}\n"
     )
 
     with pytest.raises(ValueError, match="Eval 'q_sources_only' in a.yml has no expected_answer"):
