@@ -340,7 +340,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.40.0" },
+    { name = "anthropic", specifier = ">=1.5.0" },
     { name = "click", specifier = ">=8.1" },
     { name = "duckdb", specifier = ">=0.10.0" },
     { name = "mcp", specifier = ">=2.0" },

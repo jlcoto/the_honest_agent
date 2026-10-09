@@ -80,6 +80,18 @@ def _as_data(answer: str) -> str:
 GRADING_MAX_TOKENS = 200
 
 
+def _object(**properties: dict) -> dict:
+    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
+
+
+# The JSON each method's reply must be. The grading call sends it as structured output,
+# so the provider constrains the reply to it instead of trusting the prompt alone.
+GRADING_SCHEMAS = {
+    "extract_match": _object(extracted_answer={"type": "string"}),
+    "llm_judge": _object(score={"type": "number"}, rationale={"type": "string"}),
+}
+
+
 def grading_prompt(method: str, answer: str, expected_answer: str, prompt: str) -> str | None:
     """What a run asks the grading model for this answer; None for `contains`, which uses
     no model. The reply comes back to `score` (via the raw record), so grading can be
@@ -151,7 +163,8 @@ def score(
     if method not in ("extract_match", "llm_judge"):
         raise ValueError(f"Unknown grading method: {method!r}")
     # A reply that isn't the JSON asked for fails this eval, with the reason, rather than
-    # stopping the whole run. (Until grading uses structured output, see TODO.md.)
+    # stopping the whole run. Structured output makes that rare, but a refusal or a reply
+    # cut off at GRADING_MAX_TOKENS can still break the schema.
     try:
         payload = _reply_json(reply or "")
         if method == "extract_match":
