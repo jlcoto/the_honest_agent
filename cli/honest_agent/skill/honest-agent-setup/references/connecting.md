@@ -20,7 +20,7 @@ honest-agent's guides live in the repository's `example_project/README.md`
   `mcp_url: "{{ env_var('<TARGET>_MCP_URL') }}"` and `bearer_token_env:
   <TARGET>_MCP_TOKEN` (e.g. `SNOWFLAKE_MCP_URL`, `SNOWFLAKE_MCP_TOKEN`), and puts both
   names in `.env`. The user fills in the values; `.env` stays out of git.
-- **Check with `honest-agent debug`**: its "MCP server" line connects and lists the
+- **Check with `honest-agent debug`**: its "MCP server" line connects and counts the
   server's tools without calling any.
 
 ## By kind of server
@@ -33,6 +33,9 @@ honest-agent's guides live in the repository's `example_project/README.md`
   an MCP server object and a programmatic access token (PAT) for a read-only role.
   Snowflake requires a network policy on the user before it issues a usable PAT.
   honest-agent's "Connecting to a real Snowflake account" section walks through it.
+  The token goes in the variable the target's `bearer_token_env` names (e.g.
+  `SNOWFLAKE_MCP_TOKEN`), not `MCP_BEARER_TOKEN`, which is never sent to a target's
+  server.
   Snowflake docs: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp,
   https://docs.snowflake.com/en/sql-reference/sql/create-mcp-server and
   https://docs.snowflake.com/en/user-guide/programmatic-access-tokens and
@@ -48,8 +51,9 @@ honest-agent's guides live in the repository's `example_project/README.md`
 ## Settings that affect provenance
 
 - **`default_database` / `default_schema`:** where the server's connection runs a bare
-  table name (`from orders`). Set them when the agent writes bare names, so evals can
-  check where a table lives. They must match the connection; a wrong one attributes
+  table name (`from orders`). Set them when the agent writes bare names and the
+  connection has a fixed starting point, so evals can check where a table lives.
+  Snowflake's managed server has none (bare names fail there), so leave them unset. They must match the connection; a wrong one attributes
   tables to the wrong place without warning.
 - **SQL found in tool arguments:** honest-agent reads SQL from arguments named `sql`,
   `query` or `statement`. A tool that keeps SQL in another argument needs the eval's

@@ -27,7 +27,7 @@ approve; they decide what is right for their data.
   they choose to share.
 - **Commands:** you may run `honest-agent ls`, `honest-agent logs`, `honest-agent
   debug` and `--help` without asking: they only read local files or check the setup
-  (debug lists the MCP server's tools without calling one). Ask before every
+  (debug connects to the MCP server without calling a tool). Ask before every
   `honest-agent run`, even if the user said "just run it": it calls models (it costs
   money) and the agent queries the warehouse. Keep the question to one line (what runs,
   on which target and model). Never run `honest-agent notify` or `honest-agent init`;
@@ -85,7 +85,8 @@ the essentials:
   year", "top customers", "active". That's what the eval should test. Don't make it
   clearer. If it's ambiguous, ask the user what the business means, write that reading
   into `expected_answer`, use `llm_judge` (it can weigh an answer that states its
-  assumption), and add a comment that the ambiguity is deliberate.
+  assumption; `extract_match` is fine when the reading is settled and the answer is
+  one number), and add a comment that the ambiguity is deliberate.
 - **The expected answer comes from the user:** they know it, or they run a query you
   propose (or the trusted metric or report) and check the result. Never invent it,
   and never take it from the agent's own answer, even if the user suggests it: the
@@ -103,10 +104,10 @@ the essentials:
   fine, leave `expected_sources` out and provenance isn't checked. If the same name
   exists in several databases or schemas, pin the location.
 - **Provenance only sees SQL.** If the trusted source is reached through a tool with
-  structured arguments instead of SQL (e.g. `query_metrics(metric, grain)`; the tool
-  list on `honest-agent debug`'s MCP server line helps spot them), a correct answer
-  would still score 0. Leave `expected_sources` out for that eval and tell the user
-  plainly that its provenance can't be checked.
+  structured arguments instead of SQL (e.g. `query_metrics(metric, grain)`; ask the
+  user which tools their agent uses, or look at the tool calls in `honest-agent logs`
+  after the first run), a correct answer would still score 0. Leave `expected_sources`
+  out for that eval and tell the user plainly that its provenance can't be checked.
 - **Suggest an explicit `id:`** so rewording the title later keeps the eval's
   history. The id is also how one eval is run alone (`--select <id>`).
 

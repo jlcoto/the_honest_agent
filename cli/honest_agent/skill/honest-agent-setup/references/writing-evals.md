@@ -18,7 +18,8 @@ evals:
       min_score: 0.7                # provenance threshold (default 0.7)
     tags: [smoke]
     tests:
-      # Computed 2026-10-01 with the team's revenue query; refresh it every month.
+      # Computed 2026-10-01 with the team's revenue query, for September (the business
+      # means the last full calendar month); refresh it every month.
       - id: revenue_last_month
         title: Revenue last month
         prompt: what was revenue last month?
@@ -60,7 +61,9 @@ When the question can be read more than one way ("last year": calendar or last f
 year? "revenue": gross or net?), don't rewrite it. Ask the user what the business
 means, write that into `expected_answer` (saying the reading, as in `top_customers`
 above), use `llm_judge` so an answer that states its assumption can be weighed, and
-add a comment that the ambiguity is on purpose.
+add a comment that the ambiguity is on purpose. When the business's reading is settled
+and the answer is one number, `extract_match` is fine instead; say the reading in the
+comment, as `revenue_last_month` above does.
 
 ## The expected answer
 
