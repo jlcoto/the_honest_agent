@@ -93,9 +93,8 @@ A server you run locally takes `mcp_command:` instead of `mcp_url:`, plus
 only those, never the rest of `.env`. Every setting is described in [`example_project/README.md`](example_project/README.md#the-config-file).
 
 The config holds no secrets, so you can commit it to share targets with your
-team. If it names account URLs you'd rather not publish, commit a
-`honest_agent_config.example.yml` with placeholders instead and add the real
-file to `.gitignore`, like `.env.example` (the bundled example does this).
+team. To keep an account URL out of it, read it from `.env` the way dbt does:
+`mcp_url: "{{ env_var('SNOWFLAKE_MCP_URL') }}"` ([details](example_project/README.md#reading-values-from-the-environment)).
 
 ### 4. Write an eval in `evals/`
 

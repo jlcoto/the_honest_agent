@@ -18,10 +18,21 @@ from flags, environment variables or built-in defaults, as before.
 Precedence, per setting: command-line flag > environment variable > this file > built-in
 default (applied in cli.py). Relative paths are resolved from the file's own folder, so a
 run from a subfolder still finds them.
+
+Any value can read an environment variable (from `.env` or the shell) the way dbt does,
+so account URLs can stay out of a committed file:
+
+    mcp_url: "{{ env_var('SNOWFLAKE_MCP_URL') }}"
+    max_tool_steps: "{{ env_var('MAX_TOOL_STEPS', '10') }}"   # with a default
+
+Top-level values are read when the file loads; a target's only when that target is used,
+so an unset variable only matters for the target that needs it.
 """
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -46,6 +57,10 @@ _TARGET_KEYS = _SHARED_KEYS | {
     "agent_name",
 }
 _PATH_KEYS = {"results_path", "evals_dir"}
+_INT_KEYS = {"max_tool_steps"}
+
+# dbt's `{{ env_var('NAME') }}` / `{{ env_var('NAME', 'default') }}`, single or double quotes.
+_ENV_VAR = re.compile(r"""\{\{\s*env_var\(\s*(['"])([A-Za-z_][A-Za-z0-9_]*)\1\s*(?:,\s*(['"])(.*?)\3\s*)?\)\s*\}\}""")
 
 
 class ConfigError(ValueError):
@@ -64,6 +79,7 @@ class Config:
     path: Path
     results_path: str | None
     default_target: str | None
+    # Each target's settings as written: env_var() and paths are resolved by target().
     targets: dict[str, dict[str, Any]]
     shared: dict[str, Any]
 
@@ -80,7 +96,9 @@ class Config:
             )
         if name not in self.targets:
             raise ConfigError(f"No target {name!r} in {self.path.name}. Targets: {', '.join(self.targets) or 'none'}.")
-        return Target(name, {**self.shared, **self.targets[name]})
+        where = f"target {name!r} in {self.path.name}"
+        settings = _resolve_paths(_render(self.targets[name], where), self.path.parent)
+        return Target(name, {**self.shared, **settings})
 
 
 def find_config_file(start: Path) -> Path | None:
@@ -106,6 +124,8 @@ def load_config(path: Path) -> Config:
     if not isinstance(doc, dict):
         raise ConfigError(f"{path.name} must be a mapping of settings.")
     _check_keys(doc, _TOP_LEVEL_KEYS, f"{path.name}")
+    raw_targets = doc.get("targets")
+    doc = {**_render({k: v for k, v in doc.items() if k != "targets"}, path.name), "targets": raw_targets}
 
     base = path.parent
     targets: dict[str, dict[str, Any]] = {}
@@ -115,7 +135,7 @@ def load_config(path: Path) -> Config:
         _check_keys(settings, _TARGET_KEYS, where)
         if settings.get("mcp_command") and settings.get("mcp_url"):
             raise ConfigError(f"Set either mcp_command or mcp_url in {where}, not both.")
-        targets[str(name)] = _resolve_paths(settings, base)
+        targets[str(name)] = settings
 
     default_target = doc.get("default_target")
     if default_target is not None and default_target not in targets:
@@ -131,6 +151,44 @@ def load_config(path: Path) -> Config:
         targets=targets,
         shared={key: doc[key] for key in _SHARED_KEYS if key in doc},
     )
+
+
+def _render(settings: dict[str, Any], where: str) -> dict[str, Any]:
+    """Replaces each `{{ env_var(...) }}` with the variable's value (or its default)."""
+    rendered = {}
+    for key, value in settings.items():
+        rendered[key] = _render_value(value, f"{key} in {where}")
+        if key in _INT_KEYS and isinstance(rendered[key], str):
+            try:
+                rendered[key] = int(rendered[key])
+            except ValueError:
+                raise ConfigError(f"{key} in {where} must be a whole number, got {rendered[key]!r}.") from None
+    return rendered
+
+
+def _render_value(value: Any, where: str) -> Any:
+    if isinstance(value, list):
+        return [_render_value(item, where) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    def substitute(match: re.Match) -> str:
+        name, default = match.group(2), match.group(4)
+        if name in os.environ:
+            return os.environ[name]
+        if default is not None:
+            return default
+        raise ConfigError(
+            f"{where} reads env_var('{name}'), but {name} isn't set. Add it to .env or export it, "
+            f"or give a default: env_var('{name}', '...')."
+        )
+
+    rendered = _ENV_VAR.sub(substitute, value)
+    if "{{" in rendered:
+        raise ConfigError(
+            f"{where}: only {{{{ env_var('NAME') }}}} or {{{{ env_var('NAME', 'default') }}}} is supported."
+        )
+    return rendered
 
 
 def _check_keys(settings: dict, allowed: set[str], where: str) -> None:

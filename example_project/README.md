@@ -276,8 +276,8 @@ committed, because the MotherDuck and Snowflake targets point at your own
 accounts: copy `honest_agent_config.example.yml` (committed, with
 placeholders) to `honest_agent_config.yml` and fill in your values, the same
 way `.env.example` works for secrets. In your own project you can commit the
-config to share targets with your team, or follow the same example pattern if
-it names accounts you'd rather keep private.
+config to share targets with your team, keeping account URLs in `.env` with
+`env_var()` (below), or follow the same example pattern.
 
 ```yaml
 results_path: ./honest_agent_results/results.duckdb
@@ -313,6 +313,24 @@ targets:
 | `agent_name`: defaults to the target's name | target | `--agent-name` |
 | `ignore_tools`: tools whose `sql`/`query`/`statement` argument isn't SQL | target | none |
 | `mcp_env`: variables a local server (`mcp_command`) needs, e.g. `[MOTHERDUCK_TOKEN]`. It gets only these plus PATH, HOME and similar, never the rest of `.env` | target | `--mcp-env` (repeatable) |
+
+### Reading values from the environment
+
+Any value can read an environment variable, from `.env` or your shell, the
+way dbt does. That keeps account URLs out of a committed file:
+
+```yaml
+targets:
+  snowflake:
+    mcp_url: "{{ env_var('SNOWFLAKE_MCP_URL') }}"
+    bearer_token_env: SNOWFLAKE_MCP_TOKEN
+    max_tool_steps: "{{ env_var('SNOWFLAKE_MAX_TOOL_STEPS', '10') }}"   # with a default
+```
+
+- Quote the whole value, since YAML reads `{` as the start of a map.
+- A variable that isn't set, with no default, stops only the target that
+  reads it, with an error that names it: other targets still run.
+- Only `env_var()` works: other dbt (Jinja) expressions are refused.
 
 ### Which value wins
 

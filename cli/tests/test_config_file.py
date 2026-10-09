@@ -231,3 +231,75 @@ def test_a_motherduck_results_path_is_not_resolved_as_a_file(tmp_path: Path):
     path.write_text("results_path: md:honest_agent_results\ntargets:\n  demo: {mcp_command: x}\n")
 
     assert load_config(path).results_path == "md:honest_agent_results"
+
+
+ENV_VAR_YML = """
+results_path: "{{ env_var('RESULTS_DIR', 'out') }}/results.duckdb"
+default_target: snowflake
+targets:
+  snowflake:
+    mcp_url: "{{ env_var('SNOWFLAKE_MCP_URL') }}"
+    bearer_token_env: SNOWFLAKE_MCP_TOKEN
+    max_tool_steps: "{{ env_var(\\"STEPS\\", '7') }}"
+    evals_dir: evals
+  local:
+    mcp_command: python server.py
+    evals_dir: evals
+"""
+
+
+@pytest.fixture
+def env_var_project(project: Path, monkeypatch) -> Path:
+    for var in ("RESULTS_DIR", "SNOWFLAKE_MCP_URL", "STEPS"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("SNOWFLAKE_MCP_TOKEN", "test")
+    (project / "honest_agent_config.yml").write_text(ENV_VAR_YML)
+    return project
+
+
+def test_env_var_reads_a_value_from_env(env_var_project, fake_run):
+    (env_var_project / ".env").write_text("SNOWFLAKE_MCP_URL=https://acme.example/mcp\nSTEPS=12\n")
+
+    result, run = _run(fake_run)
+
+    assert result.exit_code == 0, result.output
+    assert run["mcp_url"] == "https://acme.example/mcp"
+    assert run["max_tool_steps"] == 12
+
+
+def test_env_var_falls_back_to_its_default(env_var_project, monkeypatch, fake_run):
+    monkeypatch.setenv("SNOWFLAKE_MCP_URL", "https://acme.example/mcp")
+
+    result, run = _run(fake_run)
+
+    assert result.exit_code == 0, result.output
+    assert run["max_tool_steps"] == 7
+    assert run["results_path"] == str(env_var_project / "out" / "results.duckdb")
+
+
+def test_an_unset_env_var_only_stops_the_target_that_reads_it(env_var_project, fake_run):
+    result, run = _run(fake_run, "--target", "local")
+    assert result.exit_code == 0, result.output
+    assert run["mcp_command"] == "python server.py"
+
+    result, _ = _run(fake_run, "--target", "snowflake")
+    assert result.exit_code != 0
+    assert "reads env_var('SNOWFLAKE_MCP_URL'), but SNOWFLAKE_MCP_URL isn't set" in result.output
+
+
+def test_a_non_number_for_max_tool_steps_is_an_error(env_var_project, monkeypatch, fake_run):
+    monkeypatch.setenv("SNOWFLAKE_MCP_URL", "https://acme.example/mcp")
+    monkeypatch.setenv("STEPS", "many")
+
+    result, _ = _run(fake_run)
+
+    assert result.exit_code != 0
+    assert "max_tool_steps in target 'snowflake'" in result.output and "whole number" in result.output
+
+
+def test_only_env_var_templates_are_supported(tmp_path: Path):
+    path = tmp_path / "honest_agent_config.yml"
+    path.write_text("model: \"{{ var('model') }}\"\ntargets:\n  a: {mcp_command: x}\n")
+
+    with pytest.raises(ConfigError, match="only .*env_var"):
+        load_config(path)
