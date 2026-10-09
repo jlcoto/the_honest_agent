@@ -135,6 +135,13 @@ evals:
   explicit `id:` to keep that history when you reword a title; without one,
   renaming a title starts the eval over under a new id. The example evals
   here keep explicit ids for that reason.
+- **Selecting evals:** `run --select` and `--exclude` pick evals the way
+  dbt picks models. A bare word is an eval id, `tag:smoke` a tag and
+  `category:finance` a group's category; spaces mean OR and commas AND, so
+  `--select "category:finance,tag:smoke total_revenue_in_1996"` runs the
+  finance evals tagged smoke plus that one eval. A part that matches no eval
+  is an error, not an empty run. `honest-agent ls` lists ids, categories and
+  tags, with the same options.
 - **The same title or id in different evals directories is intended:**
   that's how results for the same question line up across agents (e.g.
   `evals_motherduck/` and `evals_snowflake/`). Within one directory,

@@ -170,42 +170,75 @@ def _duplicate_id_message(eval_id: str, first: tuple[Path, str, str], second: tu
     return f"Duplicate eval id {eval_id!r} in {places}.{hint} Eval ids must be unique within an evals directory."
 
 
-def _parse_selector(selector: str) -> list[set[str]]:
-    """Parse a dbt-style tag selector into OR-of-AND tag groups: space
-    separates groups (union), comma separates tags within a group
-    (intersection) -- mirrors dbt's `--select`/`--exclude` set-operator
-    semantics (space=union, comma=intersection). A `tag:` prefix is
-    accepted but optional, for parity with dbt's `method:value` grammar --
-    it's currently the only method, since evals have no dependency graph
-    to support path/fqn/graph-operator selectors.
-    """
-    groups: list[set[str]] = []
+class SelectorError(ValueError):
+    """A --select/--exclude part that names no eval, tag or category: likely a typo."""
+
+
+# dbt-style `method:value`; a bare value is an eval id, the way dbt's is a model name.
+_SELECTOR_METHODS = ("tag", "category")
+
+
+def _parse_selector(selector: str) -> list[list[tuple[str, str]]]:
+    """A dbt-style selector as OR-groups of AND-ed parts: spaces separate groups (union),
+    commas join parts within a group (intersection), as dbt's `--select` does. Each part
+    is `(method, value)`: `tag:smoke`, `category:sales`, or a bare eval id (method "id")."""
+    groups = []
     for group in selector.split():
-        tags = {tag[len("tag:") :] if tag.startswith("tag:") else tag for tag in group.split(",") if tag}
-        if tags:
-            groups.append(tags)
+        parts = []
+        for part in group.split(","):
+            if not part:
+                continue
+            method, sep, value = part.partition(":")
+            if not sep:
+                method, value = "id", part
+            elif method not in _SELECTOR_METHODS or not value:
+                raise SelectorError(f"Unknown selector {part!r}. Use an eval id, tag:<tag> or category:<category>.")
+            parts.append((method, value))
+        if parts:
+            groups.append(parts)
     return groups
 
 
-def _matches_selector(definition_tags: list[str], groups: list[set[str]]) -> bool:
-    tag_set = set(definition_tags)
-    return any(group.issubset(tag_set) for group in groups)
+def _value_of(definition: EvalDefinition, method: str) -> set[str]:
+    if method == "tag":
+        return set(definition.tags)
+    return {definition.category if method == "category" else definition.eval_id}
 
 
-def filter_by_tags(
+def _check_known(groups: list[list[tuple[str, str]]], definitions: list[EvalDefinition]) -> None:
+    """Every part must name something that exists, so a typo is an error, not an empty run."""
+    for group in groups:
+        for method, value in group:
+            if not any(value in _value_of(d, method) for d in definitions):
+                what = {"id": "No eval has id", "tag": "No eval is tagged", "category": "No eval is in category"}
+                raise SelectorError(f"{what[method]} {value!r}. `honest-agent ls` lists the evals.")
+
+
+def _matches(definition: EvalDefinition, groups: list[list[tuple[str, str]]]) -> bool:
+    return any(all(value in _value_of(definition, method) for method, value in group) for group in groups)
+
+
+def select_evals(
     definitions: list[EvalDefinition],
     select: str | None = None,
     exclude: str | None = None,
 ) -> list[EvalDefinition]:
-    """Filter eval definitions by tag, dbt-`--select`/`--exclude`-style.
-    `select` keeps only evals matching at least one OR-group (each group
-    itself an AND of its comma-separated tags); `exclude` is then applied
-    the same way, subtractively, on top of that result.
-    """
+    """The evals `select` picks, minus those `exclude` picks, dbt-`--select`/`--exclude`
+    style (see _parse_selector). No `select` means every eval. Raises SelectorError for a
+    malformed part or one that matches no eval at all."""
+    everything = definitions
     if select:
-        select_groups = _parse_selector(select)
-        definitions = [d for d in definitions if _matches_selector(d.tags, select_groups)]
+        groups = _parse_selector(select)
+        _check_known(groups, everything)
+        definitions = [d for d in definitions if _matches(d, groups)]
     if exclude:
-        exclude_groups = _parse_selector(exclude)
-        definitions = [d for d in definitions if not _matches_selector(d.tags, exclude_groups)]
+        groups = _parse_selector(exclude)
+        _check_known(groups, everything)  # not just what --select kept: excluding nothing is fine
+        definitions = [d for d in definitions if not _matches(d, groups)]
     return definitions
+
+
+def nothing_selected(select: str | None, exclude: str | None) -> str:
+    """The message when every part matches some eval but together they pick none."""
+    picked = f"--select {select!r}" if select else "every eval"
+    return f"No eval is left by {picked}" + (f" minus --exclude {exclude!r}" if exclude else "") + "."

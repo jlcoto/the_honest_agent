@@ -15,7 +15,7 @@ version: 1
 # here once there's real experience with how other semantic-layer tools behave, not before.
 #
 # Run with (target in ../honest_agent_config.yml):
-#   honest-agent run --target snowflake --select semantic_view_tool
+#   honest-agent run --target snowflake --select tag:semantic_view_tool
 
 evals:
   - category: finance

@@ -12,7 +12,7 @@ import click
 
 from .agent_runner import AgentClient
 from .derive import derive_result, recorded_answer
-from .eval_loader import EvalDefinition, filter_by_tags, load_evals
+from .eval_loader import EvalDefinition, SelectorError, load_evals, nothing_selected, select_evals
 from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, UNREADABLE_REPLY, grading_prompt
 from .llm import OPENAI, Judge, make_judge, provider_for
 from .raw import RunRecorder
@@ -101,9 +101,12 @@ async def run_evals(
     if not definitions:
         raise RunError(f"No evals found in {evals_dir}")
 
-    definitions = filter_by_tags(definitions, select=select, exclude=exclude)
+    try:
+        definitions = select_evals(definitions, select=select, exclude=exclude)
+    except SelectorError as exc:
+        raise RunError(str(exc)) from exc
     if not definitions:
-        raise RunError(f"No evals matched --select {select!r} --exclude {exclude!r}")
+        raise RunError(nothing_selected(select, exclude))
 
     from .anthropic_agent_runner import MAX_TOKENS, AnthropicMCPAgentClient
     from .mcp_client import build_mcp_client, describe_connection_error
