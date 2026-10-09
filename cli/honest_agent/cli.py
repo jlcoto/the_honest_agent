@@ -663,6 +663,12 @@ def notify(
     is_flag=True,
     help=f"Instead, create {init_mod.EXAMPLE_FOLDER}/: a demo agent over sample data with six evals.",
 )
+@click.option(
+    "--with-skill",
+    is_flag=True,
+    help="Add the setup skill for coding agents (asked otherwise). In a folder that already has "
+    f"{CONFIG_FILE_NAME}, only adds it, or replaces it with this version's.",
+)
 def init(
     server: str | None,
     mcp_command: str | None,
@@ -673,10 +679,15 @@ def init(
     results_db: str | None,
     no_input: bool,
     example: bool,
+    with_skill: bool,
 ):
     """Write a new project's starter files: config, a first eval and .env."""
     if example:
-        init_mod.prompt_example(model_provider, no_input)
+        init_mod.prompt_example(model_provider, no_input, with_skill)
+        return
+    if with_skill and Path(CONFIG_FILE_NAME).exists():
+        # An existing project: add the setup skill, or refresh it after an upgrade.
+        click.echo(init_mod.skill_note(*init_mod.write_skill(Path.cwd())))
         return
     init_mod.prompt_project(
         server=server,
@@ -687,6 +698,7 @@ def init(
         results=results,
         results_db=results_db,
         no_input=no_input,
+        with_skill=with_skill,
     )
 
 

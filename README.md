@@ -83,6 +83,16 @@ Every answer is also a flag, for scripts and CI:
 `uv run honest-agent init --server snowflake --mcp-url https://... --no-input`
 (`honest-agent init --help` lists them).
 
+**With a coding agent.** At the end, `init` asks whether to continue the setup
+with a coding agent (yes by default). If so, it adds a setup skill, in the open
+[Agent Skills](https://agentskills.io) format, to `.agents/skills/` (read by
+Codex, Cursor, Copilot, Gemini CLI and others) and `.claude/skills/` (Claude
+Code). Open your coding agent in the project and ask it to set up honest-agent:
+it helps connect your MCP server and write your first evals, and asks before
+anything that costs money. Never paste tokens into its chat: they go in `.env`.
+Add the skill later, or update it after upgrading honest-agent, with
+`honest-agent init --with-skill`.
+
 If the project is in git, add `.env` and `honest_agent_report/` to
 `.gitignore`; `init` lists whatever isn't ignored yet. The results folder
 keeps itself out of git; the report folder holds only the website, so it can
@@ -117,7 +127,7 @@ should read. For example:
 ```yaml
     tests:
       - title: Orders placed in 1996
-        prompt: How many orders were placed in 1996? Query the warehouse and give me just the number.
+        prompt: How many orders were placed in 1996?
         expected_answer: "2297"
         provenance:
           expected_sources: [orders]

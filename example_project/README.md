@@ -116,7 +116,7 @@ evals:
     tags: [motherduck]
     tests:
       - title: Total revenue in 1996
-        prompt: What was our total revenue in 1996? Give me just the number.
+        prompt: What was our total revenue in 1996?
         expected_answer: "311928357.78"
         provenance:
           expected_sources: [lineitem, orders]
@@ -539,7 +539,7 @@ alter user <user_name> add programmatic access token <token_name>
     days_to_expiry = 90;
 ```
 
-Put the returned token in `.env` as `MCP_BEARER_TOKEN=...` ([`ALTER USER ...
+Put the returned token in `.env` as `SNOWFLAKE_MCP_TOKEN=...` (the variable the target's `bearer_token_env` names) ([`ALTER USER ...
 ADD PROGRAMMATIC ACCESS TOKEN` reference][alter-user-pat]).
 
 ### The MCP server object and its URL

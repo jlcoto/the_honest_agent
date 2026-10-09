@@ -29,8 +29,9 @@ def test_no_input_writes_a_local_project_that_loads(in_tmp_dir: Path):
 
 
 def test_prompts_put_a_snowflake_url_in_env_and_read_it_with_env_var(in_tmp_dir: Path, monkeypatch):
-    # server 2 (Snowflake), the URL, default target name, model 2 (OpenAI), results 2 (MotherDuck), default db
-    result = _init(input=f"2\n{SNOWFLAKE_URL}\n\n2\n2\n\n")
+    # server 2 (Snowflake), the URL, default target name, model 2 (OpenAI), results 2 (MotherDuck), default db,
+    # no setup skill
+    result = _init(input=f"2\n{SNOWFLAKE_URL}\n\n2\n2\n\nn\n")
 
     assert result.exit_code == 0, result.output
     env = (in_tmp_dir / ".env").read_text()
@@ -163,3 +164,107 @@ def test_the_model_name_is_not_a_provider(in_tmp_dir: Path):
 
     assert result.exit_code != 0
     assert "'claude' is not one of 'anthropic', 'openai'" in result.output
+
+
+def _skill_folders(folder: Path) -> list[Path]:
+    return [folder / base / "honest-agent-setup" / "SKILL.md" for base in (".agents/skills", ".claude/skills")]
+
+
+def test_init_asks_for_the_setup_skill_and_yes_is_the_default(in_tmp_dir: Path):
+    # server 1 (local), its command, default target, default model, default results, Enter at the skill question
+    result = _init(input="1\nuv run python server.py\n\n\n\n\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Continue the setup with a coding agent?" in result.output
+    assert "Added the setup skill in .agents/skills/honest-agent-setup/ and .claude/skills/honest-agent-setup/" in (
+        result.output
+    )
+    for skill_md in _skill_folders(in_tmp_dir):
+        text = skill_md.read_text()
+        assert text.startswith("---\nname: honest-agent-setup\n")
+        assert "> Written by honest-agent " in text and "Don't edit" in text
+
+
+def test_saying_no_adds_nothing_for_coding_agents(in_tmp_dir: Path):
+    result = _init(input="1\nuv run python server.py\n\n\n\nn\n")
+
+    assert result.exit_code == 0, result.output
+    assert not (in_tmp_dir / ".agents").exists() and not (in_tmp_dir / ".claude").exists()
+
+
+def test_no_input_adds_the_skill_only_with_the_flag(in_tmp_dir: Path):
+    _init("--no-input", "--mcp-command", "x")
+    assert not (in_tmp_dir / ".agents").exists()
+
+    (in_tmp_dir / "honest_agent_config.yml").unlink()
+    result = _init("--no-input", "--mcp-command", "x", "--with-skill")
+
+    assert result.exit_code == 0, result.output
+    assert all(path.exists() for path in _skill_folders(in_tmp_dir))
+
+
+def test_with_skill_on_an_existing_project_only_adds_or_replaces_the_skill(in_tmp_dir: Path):
+    (in_tmp_dir / "honest_agent_config.yml").write_text("targets: {}\n")
+    stale = in_tmp_dir / ".agents/skills/honest-agent-setup/old_notes.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("from an older version")
+
+    result = _init("--with-skill")
+
+    assert result.exit_code == 0, result.output
+    assert "Replaced the setup skill with this version's" in result.output
+    assert not stale.exists()  # the whole folder is replaced
+    assert all(path.exists() for path in _skill_folders(in_tmp_dir))
+    assert (in_tmp_dir / "honest_agent_config.yml").read_text() == "targets: {}\n"
+    assert not (in_tmp_dir / ".env").exists()  # no project questions, no other files
+
+
+def test_the_example_never_asks_but_takes_the_flag(in_tmp_dir: Path, monkeypatch):
+    import honest_agent.init as init_mod
+
+    monkeypatch.setattr(init_mod, "seed_tpch", lambda path: path.write_text(""))
+
+    result = _init("--example", input="\n")  # interactive: only the model question is asked
+    assert result.exit_code == 0, result.output
+    assert "coding agent" not in result.output
+    assert not (in_tmp_dir / "honest-agent-example" / ".agents").exists()
+
+    import shutil
+
+    shutil.rmtree(in_tmp_dir / "honest-agent-example")
+    result = _init("--example", "--no-input", "--with-skill")
+    assert result.exit_code == 0, result.output
+    assert all(path.exists() for path in _skill_folders(in_tmp_dir / "honest-agent-example"))
+
+
+def test_the_packaged_skill_follows_the_agent_skills_spec():
+    """agentskills.io: `name` matches the folder (lowercase, digits, hyphens, at most 64),
+    `description` at most 1024 characters, and every file SKILL.md points to exists."""
+    import re
+
+    import yaml
+
+    from honest_agent.init import SKILL_NAME, SKILL_SOURCE
+
+    _start, frontmatter, body = (SKILL_SOURCE / "SKILL.md").read_text().split("---\n", 2)
+    meta = yaml.safe_load(frontmatter)
+    assert meta["name"] == SKILL_NAME == SKILL_SOURCE.name
+    assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", meta["name"]) and len(meta["name"]) <= 64
+    assert 0 < len(meta["description"]) <= 1024
+    for reference in re.findall(r"`(references/[^`]+)`", body):
+        assert (SKILL_SOURCE / reference).is_file(), reference
+
+
+def test_the_skills_eval_example_loads(tmp_path: Path):
+    """The YAML example the skill teaches from is a valid eval file."""
+    import re
+
+    from honest_agent.init import SKILL_SOURCE
+
+    text = (SKILL_SOURCE / "references" / "writing-evals.md").read_text()
+    (tmp_path / "evals.yml").write_text(re.search(r"```yaml\n(.*?)```", text, re.DOTALL).group(1))
+
+    evals = {e.eval_id: e for e in load_evals(tmp_path)}
+    assert set(evals) == {"revenue_last_month", "top_customers"}
+    assert evals["top_customers"].grading_method == "llm_judge"
+    assert evals["revenue_last_month"].tolerance_percent == 0.01

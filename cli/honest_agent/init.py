@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,10 +138,11 @@ evals:
     provenance:
       min_score: 0.7          # did the agent's SQL read expected_sources?
     tests:
-      - title: TODO a short name for this question
+      - id: TODO_short_id
+        title: TODO a short name for this question
         prompt: >
-          TODO a question your agent should answer from your data, e.g.
-          How many orders were placed last year? Give me just the number.
+          TODO a question your agent should answer from your data, worded the way
+          your users ask it, e.g. how many orders did we get last month?
         expected_answer: "TODO the answer you know is right"
         provenance:
           expected_sources: [TODO_table_name]
@@ -267,6 +269,61 @@ def write_example(folder: Path, provider: str) -> None:
 # The questions and messages of `honest-agent init` (the CLI command only passes its flags).
 
 
+# The setup skill for coding agents (Agent Skills format, agentskills.io), copied into a
+# project only when the user asks: `.agents/skills/` is read by most coding agents
+# (Codex, Cursor, Copilot, Gemini CLI, ...), `.claude/skills/` by Claude Code.
+SKILL_NAME = "honest-agent-setup"
+SKILL_SOURCE = Path(__file__).parent / "skill" / SKILL_NAME
+SKILL_FOLDERS = (".agents/skills", ".claude/skills")
+ASK_FOR_SKILL = "Continue the setup with a coding agent? (It helps connect your MCP server and write your first evals.)"
+
+
+def _version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("honest-agent")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def _with_header(skill_md: str) -> str:
+    """SKILL.md with a line under its frontmatter saying who wrote it and not to edit it."""
+    _start, frontmatter, body = skill_md.split("---\n", 2)
+    note = (
+        f"> Written by honest-agent {_version()}. Don't edit: `honest-agent init --with-skill` replaces this folder.\n"
+    )
+    return f"---\n{frontmatter}---\n\n{note}{body}"
+
+
+def write_skill(folder: Path) -> tuple[list[str], bool]:
+    """Copies the setup skill into `folder`'s skill folders, replacing any copy there (the
+    files are honest-agent's, not the user's). Returns the folders written and whether a
+    copy was replaced."""
+    written, replaced = [], False
+    for base in SKILL_FOLDERS:
+        target = folder / base / SKILL_NAME
+        if target.exists():
+            replaced = True
+            shutil.rmtree(target)
+        shutil.copytree(SKILL_SOURCE, target)
+        skill_md = target / "SKILL.md"
+        skill_md.write_text(_with_header(skill_md.read_text()))
+        written.append(f"{base}/{SKILL_NAME}/")
+    return written, replaced
+
+
+def skill_note(written: list[str], replaced: bool) -> str:
+    """What `init` prints after writing the skill: where it is and how to use it."""
+    verb = "Replaced the setup skill with this version's" if replaced else "Added the setup skill"
+    return (
+        f"{verb} in {' and '.join(written)}.\n"
+        "  To use it, open your coding agent in this folder and ask it to set up honest-agent;\n"
+        f"  or point it at {SKILL_FOLDERS[0]}/{SKILL_NAME}/SKILL.md. For a tool that reads AGENTS.md,\n"
+        f'  you can add: "To set up honest-agent, follow {SKILL_FOLDERS[0]}/{SKILL_NAME}/SKILL.md."'
+    )
+
+
 def _choose(question: str, options: dict[str, str], given: str | None, default: str, no_input: bool) -> str:
     """A numbered menu, e.g. `1) Claude  2) OpenAI  [1]:`; a flag's value or --no-input skips it."""
     if given is not None:
@@ -290,7 +347,7 @@ def _ask(question: str, given: str | None, default: str | None, no_input: bool, 
     return click.prompt(question, default=default)
 
 
-def prompt_example(model_provider: str | None, no_input: bool) -> None:
+def prompt_example(model_provider: str | None, no_input: bool, with_skill: bool = False) -> None:
     providers = {key: label for key, (label, _var) in PROVIDERS.items()}
     provider = _choose("Which model runs the agent?", providers, model_provider, "anthropic", no_input)
     folder = Path.cwd() / EXAMPLE_FOLDER
@@ -305,6 +362,8 @@ def prompt_example(model_provider: str | None, no_input: bool) -> None:
             "time, so this needs the network."
         ) from exc
     key_var = PROVIDERS[provider][1]
+    if with_skill:  # never asked here: the example is already set up
+        click.echo(skill_note(*write_skill(folder)))
     click.echo(
         f"\nCreated {EXAMPLE_FOLDER}/: a demo agent over sample data, and six evals.\n"
         "The demo MCP server is for trying honest-agent only, not for real data.\n"
@@ -326,8 +385,10 @@ def prompt_project(
     results: str | None,
     results_db: str | None,
     no_input: bool,
+    with_skill: bool = False,
 ) -> None:
-    """`honest-agent init`: asks what isn't given by a flag, writes the files, says what's next."""
+    """`honest-agent init`: asks what isn't given by a flag, writes the files, says what's next.
+    Adds the setup skill with --with-skill, or when asked and the user doesn't say no."""
     servers = {key: label for key, (label, *_rest) in SERVERS.items()}
     server = _choose("Which MCP server does your agent use?", servers, server, "local", no_input)
     _label, default_target, known_url, url_hint = SERVERS[server]
@@ -367,6 +428,10 @@ def prompt_project(
         click.echo("Add to .gitignore:\n" + "\n".join(f"  {path}" for path in missing))
     if results == "s3":
         click.echo("\n" + s3_note())
+    if not with_skill and not no_input:
+        with_skill = click.confirm(f"\n{ASK_FOR_SKILL}", default=True)
+    if with_skill:
+        click.echo("\n" + skill_note(*write_skill(folder)))
     steps = []
     if written.env_to_fill:
         steps.append(f"Fill in .env: {', '.join(written.env_to_fill)}")
