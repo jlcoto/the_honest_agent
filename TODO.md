@@ -264,7 +264,7 @@ future work, not a confirmed schema to design against.
 Provenance moved to parsed SQL on 2026-10-06 (`provenance.py`, sqlglot): only
 `select` statements count, errored calls don't, and `expected_sources`
 entries can carry their own database/schema. Three questions came up and were
-left open on purpose:
+left open on purpose (a fourth was added on 2026-10-09):
 
 1. **Acceptable alternatives.** `expected_sources` means *all* of them
    (recall). An eval can't say "the mart *or* the semantic view". In the
@@ -281,8 +281,30 @@ left open on purpose:
    unknown location and never matches an expected database/schema. Right for
    Snowflake's MCP server, which has no default database (bare names fail to
    compile there). A warehouse whose connection does have one would score
-   correct queries as misses; if that comes up, let a target declare its
-   default database/schema.
+   correct queries as misses. That came up with the DuckDB demo on
+   2026-10-09: see "Next: declared session defaults for provenance".
+4. **Exploration that uses `select`.** `show tables` and `describe` don't
+   count as reads, but the same exploration written as a `select` does, so
+   what "Agent queried" lists depends on how the agent explored. Seen
+   2026-10-09 in the `init --example` trial: `select * from
+   information_schema.tables limit 10` was recorded as reading `tables` in
+   schema `information_schema`. No score changes (extra reads are ignored),
+   but the result page's Provenance card lists it under "Agent queried" (one
+   expected source) or "Also read" (several), as if the answer came from it.
+   - **System catalogs (decided: exclude them):** skip `information_schema.*`,
+     `pg_catalog.*` and DuckDB's catalog functions (`duckdb_tables()` and
+     similar) the way `show`/`describe` are skipped, so "Agent queried" means
+     data the answer could come from. Keep the list of system schemas per
+     dialect right.
+   - **Peeks (to decide):** provenance counts every successful `select`
+     during an eval, not only the query behind the answer, so a peek like
+     `select * from lineitem limit 5` satisfies an expected `lineitem` even
+     if the answer came from another table (it would make the example's
+     deliberate provenance failure pass). Options: leave it, or skip
+     obvious peeks (`select *` with a small `limit` and nothing else), a
+     heuristic with its own errors.
+   - Both matter more if honest-agent ever judges extra reads (question 2,
+     or "forbidden sources"): exploration would count against the agent.
 
 ## Result page: SQL calls and Trace cards
 
