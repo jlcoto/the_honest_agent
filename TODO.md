@@ -53,7 +53,11 @@ targets:
 - The SQL always wins: a default only fills in the part a name leaves out.
 - Store the defaults with each run's settings (like `ignore_tools`), so
   `rebuild` reproduces past provenance even if the config changes later.
-- `init --example` fills them in for the demo.
+- `init --example` fills them in for the demo (`default_database: warehouse`,
+  `default_schema: main`), and its evals then show the location check: give
+  one of them (e.g. `revenue_1997`) `expected_database`/`expected_schema`, with
+  a comment, so users see that provenance can check where a table lives, not
+  only its name. Update the example's README table and rerun it.
 - **DuckDB two-part names:** DuckDB reads `a.b` as schema.table, and if there
   is no schema `a`, as database.table (`warehouse.orders` works in the demo).
   honest-agent's parser always reads it as schema.table, so `warehouse.orders`
