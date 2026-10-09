@@ -287,14 +287,23 @@ def test_an_unset_env_var_only_stops_the_target_that_reads_it(env_var_project, f
     assert "reads env_var('SNOWFLAKE_MCP_URL'), but SNOWFLAKE_MCP_URL isn't set" in result.output
 
 
-def test_a_non_number_for_max_tool_steps_is_an_error(env_var_project, monkeypatch, fake_run):
+def test_a_non_number_for_max_tool_steps_names_the_variable_not_its_value(env_var_project, monkeypatch, fake_run):
+    """The variable could hold a secret (pointed at the wrong one by mistake), so it isn't printed."""
     monkeypatch.setenv("SNOWFLAKE_MCP_URL", "https://acme.example/mcp")
-    monkeypatch.setenv("STEPS", "many")
+    monkeypatch.setenv("STEPS", "sk-ant-not-a-real-key")
 
     result, _ = _run(fake_run)
 
     assert result.exit_code != 0
-    assert "max_tool_steps in target 'snowflake'" in result.output and "whole number" in result.output
+    assert "must be a whole number; check STEPS." in result.output
+    assert "sk-ant" not in result.output
+
+
+def test_a_non_number_written_in_the_file_is_shown(tmp_path: Path):
+    (tmp_path / "honest_agent_config.yml").write_text("targets:\n  t:\n    max_tool_steps: lots\n")
+
+    with pytest.raises(ConfigError, match="must be a whole number; got 'lots'"):
+        load_config(tmp_path / "honest_agent_config.yml").target("t")
 
 
 def test_only_env_var_templates_are_supported(tmp_path: Path):
