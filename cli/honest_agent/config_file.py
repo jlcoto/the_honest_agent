@@ -55,6 +55,9 @@ _TARGET_KEYS = _SHARED_KEYS | {
     "ignore_tools",
     "mcp_env",
     "agent_name",
+    # The connection's database/schema, where a bare table name runs (provenance.py).
+    "default_database",
+    "default_schema",
 }
 _PATH_KEYS = {"results_path", "evals_dir"}
 _INT_KEYS = {"max_tool_steps"}

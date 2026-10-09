@@ -30,47 +30,6 @@ schema and invalid JSON can't happen.
   with `honest-agent rebuild` before and after and compare.
 - Closes the open half of security item 3 below.
 
-## Next: declared session defaults for provenance
-
-Found on 2026-10-09 while trying the `init --example` evals: provenance learns a
-table's database and schema only from the SQL (`db.schema.table`, or an earlier
-`use`). A bare `from orders` runs in the connection's default database and
-schema, which the SQL doesn't show, so its location is "unknown" and never
-matches `expected_database`/`expected_schema`. In the DuckDB demo nobody
-qualifies names, so a location check can never pass there. Not DuckDB-only:
-any server whose connection has a default (Snowflake, MotherDuck) has the same
-gap.
-
-Decided: a target can declare the session's defaults, both optional:
-
-```yaml
-targets:
-  demo:
-    default_database: warehouse
-    default_schema: main
-```
-
-- The SQL always wins: a default only fills in the part a name leaves out.
-- Store the defaults with each run's settings (like `ignore_tools`), so
-  `rebuild` reproduces past provenance even if the config changes later.
-- `init --example` fills them in for the demo (`default_database: warehouse`,
-  `default_schema: main`), and its evals then show the location check: give
-  one of them (e.g. `revenue_1997`) `expected_database`/`expected_schema`, with
-  a comment, so users see that provenance can check where a table lives, not
-  only its name. Update the example's README table and rerun it.
-- **DuckDB two-part names:** DuckDB reads `a.b` as schema.table, and if there
-  is no schema `a`, as database.table (`warehouse.orders` works in the demo).
-  honest-agent's parser always reads it as schema.table, so `warehouse.orders`
-  is recorded with schema `warehouse`. Rule: when a two-part name's first part
-  equals the declared `default_database` and not `default_schema`, read it as
-  database.table. Still a guess when a schema and a database share a name.
-- Document: a wrong declared default fails silently (the real risk); with a
-  server that opens a new connection per call (the demo does), a `use` doesn't
-  carry over between calls on the server, though provenance assumes it does;
-  with a search path of several schemas, the default is the first.
-- Later, opt-in: detect the defaults by running `select current_database(),
-  current_schema()` through the agent's SQL tool (not every dialect has them).
-
 ## From the first-time setup walkthrough (2026-10-08)
 
 The user installed honest-agent from scratch in an empty folder, following
@@ -286,7 +245,11 @@ left open on purpose (a fourth was added on 2026-10-09):
    Snowflake's MCP server, which has no default database (bare names fail to
    compile there). A warehouse whose connection does have one would score
    correct queries as misses. That came up with the DuckDB demo on
-   2026-10-09: see "Next: declared session defaults for provenance".
+   2026-10-09, and a target can now declare `default_database` /
+   `default_schema` (see example_project/README.md, "Where bare table names
+   run"). Later, opt-in: detect them by running `select current_database(),
+   current_schema()` through the agent's SQL tool (not every dialect has
+   them).
 4. **Exploration that uses `select`.** `show tables` and `describe` don't
    count as reads, but the same exploration written as a `select` does, so
    what "Agent queried" lists depends on how the agent explored. Seen

@@ -319,6 +319,7 @@ targets:
 | `bearer_token_env`: the variable holding the server's token | target | `--mcp-bearer-token` |
 | `evals_dir` | target | `--evals-dir` |
 | `agent_name`: defaults to the target's name | target | `--agent-name` |
+| `default_database`, `default_schema`: where the server's connection runs a bare table name (see below) | target | none |
 | `ignore_tools`: tools whose `sql`/`query`/`statement` argument isn't SQL | target | none |
 | `mcp_env`: variables a local server (`mcp_command`) needs, e.g. `[MOTHERDUCK_TOKEN]`. It gets only these plus PATH, HOME and similar, never the rest of `.env` | target | `--mcp-env` (repeatable) |
 
@@ -339,6 +340,36 @@ targets:
 - A variable that isn't set, with no default, stops only the target that
   reads it, with an error that names it: other targets still run.
 - Only `env_var()` works: other dbt (Jinja) expressions are refused.
+
+### Where bare table names run
+
+Provenance reads a table's database and schema from the SQL: `db.schema.table`,
+or an earlier `use`. A bare `from orders` runs wherever the server's connection
+starts, which the SQL doesn't show, so its location is unknown and never matches
+`expected_database`/`expected_schema`. If your server's connection has a fixed
+starting point, declare it on the target:
+
+```yaml
+targets:
+  demo:
+    default_database: warehouse   # DuckDB names the database after the file
+    default_schema: main
+```
+
+- The SQL always wins: a default only fills in what a name leaves out, and a
+  `use` changes it as usual. With only one of the two declared, the other
+  stays unknown.
+- DuckDB also reads `warehouse.orders` as database.table when there's no schema
+  called `warehouse`; with `default_database: warehouse`, so does provenance.
+- Each run stores the defaults it used, so `honest-agent rebuild` gives the same
+  result even if you change them later.
+- **A wrong default fails silently:** provenance would place tables where they
+  aren't. Declare only what your server's connection really uses. Snowflake's
+  managed MCP server has no default database (bare names fail there), so it
+  needs none.
+- A server that opens a new connection per tool call (the demo does) doesn't
+  keep a `use` from one call to the next, though provenance assumes it does.
+  With several schemas on a search path, a default can only name the first.
 
 ### Which value wins
 
