@@ -102,6 +102,12 @@ account and you can commit it to share targets with your team
 More targets, `mcp_env` for local servers and every other setting are in
 [The config file](example_project/README.md#the-config-file).
 
+**Give the MCP server read-only credentials.** honest-agent runs your agent
+with every tool its MCP server offers, and the agent reads your data, which
+can contain text written as instructions. honest-agent refuses SQL that isn't
+a read (`select`, `show`, `describe`, `use`) before it reaches the server, but
+it only sees SQL: a tool like `delete_customer(id)` isn't checked.
+
 ### 4. Write your first eval
 
 Edit `evals/first_eval.yml` and replace each `TODO`: a question your agent
@@ -175,6 +181,7 @@ same version, instead of the one pinned in its `uv.lock`.
 | A local server fails to log in to its database | It only gets the variables listed in its target's `mcp_env`; add the one it needs. |
 | `report` says a folder `isn't an honest-agent report folder` | `report` only writes into a new or empty folder, or one it wrote before, because it clears old files there. Pick another `--out`. |
 | `Address already in use` from `serve` | Another server uses the port: `serve --port 8001`. |
+| `honest-agent didn't run this SQL: it contains a ... statement` | The agent sent SQL that isn't a read, so it wasn't run: honest-agent never lets an agent change the warehouse, temp tables included. |
 | `hit the step limit without a final answer` | The agent needed more steps: set `max_tool_steps: 10` on the target. |
 
 ## Try the bundled example

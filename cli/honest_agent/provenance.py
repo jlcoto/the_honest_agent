@@ -53,7 +53,8 @@ class Provenance(NamedTuple):
     unparsed: list[str]
 
 
-def _parse(sql: str) -> list[exp.Expression] | None:
+def parse_statements(sql: str) -> list[exp.Expression] | None:
+    """The statements in `sql`, or None when no dialect can parse it."""
     for dialect in _DIALECTS:
         try:
             return [tree for tree in sqlglot.parse(sql, read=dialect) if tree is not None]
@@ -120,7 +121,7 @@ def queried_sources(
     seen: dict[tuple, Source] = {}
     unparsed: list[str] = []
     for sql in sql_statements:
-        statements = _parse(sql)
+        statements = parse_statements(sql)
         if statements is None:
             unparsed.append(sql)
             continue
