@@ -180,6 +180,7 @@ same version, instead of the one pinned in its `uv.lock`.
 | `Unknown setting(s) in target ...` | A typo in `honest_agent_config.yml`; the message lists the allowed settings. |
 | A local server fails to log in to its database | It only gets the variables listed in its target's `mcp_env`; add the one it needs. |
 | `report` says a folder `isn't an honest-agent report folder` | `report` only writes into a new or empty folder, or one it wrote before, because it clears old files there. Pick another `--out`. |
+| `serve` says a folder `isn't an honest-agent report folder` | `serve` only publishes a folder `report` wrote, so it can't expose other files (like `.env`). Run `honest-agent report` first, or pass its folder with `--out`. |
 | `Address already in use` from `serve` | Another server uses the port: `serve --port 8001`. |
 | `honest-agent didn't run this SQL: it contains a ... statement` | The agent sent SQL that isn't a read, so it wasn't run: honest-agent never lets an agent change the warehouse, temp tables included. |
 | `hit the step limit without a final answer` | The agent needed more steps: set `max_tool_steps: 10` on the target. |

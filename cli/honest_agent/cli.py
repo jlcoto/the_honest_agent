@@ -393,6 +393,11 @@ def report(ctx: click.Context, results_path: str | None, out: str, days: int):
 @click.option("--open-browser/--no-open-browser", default=True)
 def serve(out: str, port: int, open_browser: bool):
     """Serve a generated report folder locally, the same way `dbt docs serve` does."""
+    if not report_mod.is_report(Path(out)):
+        raise click.ClickException(
+            f"{out} isn't an honest-agent report folder, so `serve` won't publish it. "
+            "Generate one with `honest-agent report`, or pass its folder with --out."
+        )
     click.echo(f"Serving {out}/ at http://127.0.0.1:{port}/ (Ctrl+C to stop)")
     serve_mod.serve(Path(out), port, open_browser=open_browser)
 

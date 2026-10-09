@@ -76,14 +76,14 @@ def _claim_report_dir(out_dir: Path) -> None:
     with someone's files in it."""
     if not out_dir.exists():
         out_dir.mkdir(parents=True)
-    elif any(out_dir.iterdir()) and not _is_report(out_dir):
+    elif any(out_dir.iterdir()) and not is_report(out_dir):
         raise ReportFolderError(
             f"{out_dir} isn't empty and isn't an honest-agent report folder, so `report` won't write into it "
             "(it would delete and overwrite files there). Pick a new or empty folder with --out."
         )
 
 
-def _is_report(folder: Path) -> bool:
+def is_report(folder: Path) -> bool:
     """A folder `report` wrote before: its index.html carries honest-agent's generator tag.
     The mark is part of the website itself, so the folder holds nothing but the website."""
     index = folder / "index.html"
