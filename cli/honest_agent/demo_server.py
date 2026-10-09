@@ -2,7 +2,9 @@
 company MCP endpoint: one `query_warehouse` tool that runs SQL against a DuckDB file.
 
 Demo only, not for real data: it runs any read-only SQL the model sends, with no
-authentication and no limits besides a row cap, against the whole file. honest-agent
+authentication and no limits besides a row cap, against the whole file. DuckDB's SQL can
+also read local files and URLs (`read_text`, `read_csv`, extensions), which would let a
+misled agent read e.g. the `.env` next to the database; the connection turns that off. honest-agent
 evaluates your agent through your agent's own MCP server; this one only exists to try
 honest-agent end to end.
 
@@ -44,7 +46,9 @@ def run_query(database: Path | None, sql: str) -> str:
     if database is None or not database.exists():
         raise ToolError(f"Database file not found: {database}. Start the server with the path to a DuckDB file.")
     try:
-        con = duckdb.connect(str(database), read_only=True)
+        # No files, URLs or extensions beyond the database itself, and SQL can't turn them back on.
+        config = {"enable_external_access": False, "lock_configuration": True}
+        con = duckdb.connect(str(database), read_only=True, config=config)
     except duckdb.Error as exc:
         raise ToolError(f"error opening {database}: {exc}") from exc
     try:
