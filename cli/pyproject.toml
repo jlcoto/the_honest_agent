@@ -38,7 +38,7 @@ include = ["honest_agent*"]
 
 # The prebuilt report UI (built from ../ui with `npm run build`).
 [tool.setuptools.package-data]
-honest_agent = ["report_ui/**/*"]
+honest_agent = ["report_ui/**/*", "example/*"]
 
 [tool.ruff]
 target-version = "py310"

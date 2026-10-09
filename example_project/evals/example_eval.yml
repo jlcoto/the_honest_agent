@@ -1,7 +1,7 @@
 version: 1
 
 # No `tools:` block here -- `honest-agent` sources its tools live from the
-# connected MCP server (see ../mcp_server/server.py's query_warehouse), so a
+# connected MCP server (honest-agent's demo server, honest_agent/demo_server.py), so a
 # locally-declared tool schema would just be unused. Run with `honest-agent run`
 # (the default `demo` target in ../honest_agent_config.yml) after seeding the
 # warehouse with `uv run python warehouse/seed.py`.
@@ -29,11 +29,11 @@ evals:
           and give me just the number.
         expected_answer: "311928357.78"
         grading:
-          # fct_revenue_by_year.revenue is an unrounded raw sum (...7805); the
-          # agent faithfully reporting that isn't a real accuracy failure.
+          # Revenue is an unrounded sum (...7805); the agent faithfully
+          # reporting that isn't a real accuracy failure.
           tolerance: 0.01
         provenance:
-          expected_sources: [fct_revenue_by_year]
+          expected_sources: [lineitem, orders]
 
       - id: q_order_count_1996
         title: Orders placed in 1996

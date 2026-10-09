@@ -13,11 +13,20 @@ against a warehouse (`warehouse.duckdb`) seeded from DuckDB's own built-in
 TPC-H generator — a standard multi-table schema (`orders`, `lineitem`,
 `customer`, `part`, `supplier`, `nation`, `region`, ...) with real joins, not
 a single flat table. The tool that answers them (`query_warehouse`) is
-exposed by the bundled demo MCP server (`mcp_server/server.py`), or by a
+exposed by the demo MCP server that ships with honest-agent
+(`honest_agent/demo_server.py`), or by a
 real MotherDuck/Snowflake MCP server — this is what demonstrates provenance
 checking against *real* SQL and *real* data: `honest-agent` calls Claude with
 tools sourced live from that MCP server, so it's testing the actual agent
 employees would connect to, not a locally reimplemented stand-in.
+
+> **The demo MCP server is for trying honest-agent, not for real data.** It
+> runs any read-only SQL the model sends against the whole DuckDB file it's
+> given (`python -m honest_agent.demo_server warehouse.duckdb`), with no
+> authentication and no limits besides a 200-row cap. honest-agent evaluates
+> your agent through your agent's own MCP server; it doesn't provide one. Like
+> a real server, the demo doesn't list its tables to the agent: the agent
+> finds them itself.
 
 ## Setup
 
@@ -59,12 +68,11 @@ reads the evals in `evals/`.
   default to 0.8 / 0.7 if omitted), and appends the results into a local
   DuckDB file at `./honest_agent_results/results.duckdb` (created on first
   run).
-- `q_revenue_1996` expects the agent to query `fct_revenue_by_year` (the
-  pre-aggregated mart) rather than joining `orders`+`lineitem` and
-  recomputing TPC-H's revenue formula by hand — if it queries the wrong
-  table, `provenance_score` drops below threshold even though the *answer*
-  might still come out correct. Run `honest-agent logs` after a run to see
-  every call it made, including the SQL it executed.
+- `q_revenue_1996` expects the agent to read `lineitem` and `orders`, where
+  TPC-H's revenue comes from — if it reads only one of them,
+  `provenance_score` drops below threshold even though the *answer* might
+  still come out correct. Run `honest-agent logs` after a run to see every
+  call it made, including the SQL it executed.
 - `honest-agent report` writes the web report to `honest_agent_report/`: the
   report UI plus `data/report.json`, holding every stored run's results,
   agent traces, and SQL calls.
@@ -111,7 +119,7 @@ evals:
         prompt: What was our total revenue in 1996? Give me just the number.
         expected_answer: "311928357.78"
         provenance:
-          expected_sources: [fct_revenue_by_year]
+          expected_sources: [lineitem, orders]
         tags: [smoke]
 ```
 
@@ -154,7 +162,7 @@ or semantic view it read, with the database and schema each one lives in.
     expected_database: agent_quiz_demo
     expected_schema: public
     expected_sources:
-      - fct_revenue_by_year                      # agent_quiz_demo.public
+      - orders                                   # agent_quiz_demo.public
       - snowflake_sample_data.tpch_sf1.customer  # its own database and schema
       - staging.customer_flags                   # agent_quiz_demo.staging
   ```
@@ -276,8 +284,8 @@ committed, because the MotherDuck and Snowflake targets point at your own
 accounts: copy `honest_agent_config.example.yml` (committed, with
 placeholders) to `honest_agent_config.yml` and fill in your values, the same
 way `.env.example` works for secrets. In your own project you can commit the
-config to share targets with your team, or follow the same example pattern if
-it names accounts you'd rather keep private.
+config to share targets with your team, keeping account URLs in `.env` with
+`env_var()` (below), or follow the same example pattern.
 
 ```yaml
 results_path: ./honest_agent_results/results.duckdb
@@ -285,7 +293,7 @@ default_target: demo
 
 targets:
   demo:
-    mcp_command: uv run python mcp_server/server.py
+    mcp_command: uv run python -m honest_agent.demo_server warehouse.duckdb
     evals_dir: evals
   motherduck:
     mcp_url: https://api.motherduck.com/mcp
@@ -313,6 +321,24 @@ targets:
 | `agent_name`: defaults to the target's name | target | `--agent-name` |
 | `ignore_tools`: tools whose `sql`/`query`/`statement` argument isn't SQL | target | none |
 | `mcp_env`: variables a local server (`mcp_command`) needs, e.g. `[MOTHERDUCK_TOKEN]`. It gets only these plus PATH, HOME and similar, never the rest of `.env` | target | `--mcp-env` (repeatable) |
+
+### Reading values from the environment
+
+Any value can read an environment variable, from `.env` or your shell, the
+way dbt does. That keeps account URLs out of a committed file:
+
+```yaml
+targets:
+  snowflake:
+    mcp_url: "{{ env_var('SNOWFLAKE_MCP_URL') }}"
+    bearer_token_env: SNOWFLAKE_MCP_TOKEN
+    max_tool_steps: "{{ env_var('SNOWFLAKE_MAX_TOOL_STEPS', '10') }}"   # with a default
+```
+
+- Quote the whole value, since YAML reads `{` as the start of a map.
+- A variable that isn't set, with no default, stops only the target that
+  reads it, with an error that names it: other targets still run.
+- Only `env_var()` works: other dbt (Jinja) expressions are refused.
 
 ### Which value wins
 

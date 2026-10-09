@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from recorded import claude_reply, definition, model_call, record, text, tool_call, tool_use
 
 from honest_agent.cli import _eval_loop, main
+from honest_agent.grading import UNREADABLE_REPLY
 from honest_agent.raw import RunRecorder, read_records
 from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
 
@@ -247,15 +248,33 @@ def test_a_run_records_every_call_and_derives_its_results(tmp_path: Path):
     assert "There were 2,297 orders." in json.loads(rec["events"][3]["request"])["prompt"]
 
 
+def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])
+    evals = [definition(grading_method="llm_judge", expected_answer="2297")]
+
+    rows = _run_loop(path, agent, _ScriptedJudge("not json"), evals)
+
+    assert [r["accuracy_score"] for r in rows] == [0.0]
+    assert rows[0]["accuracy_rationale"].startswith(UNREADABLE_REPLY)
+    (rec,) = read_records(path)
+    assert [e["kind"] for e in rec["events"]] == ["model_call", "grading_call"]
+
+
+class _FailingJudge:
+    async def complete(self, prompt, model, max_tokens):
+        raise RuntimeError("the grading API is down")
+
+
 def test_an_eval_that_fails_is_recorded_before_the_run_stops(tmp_path: Path):
     path = str(tmp_path / "results.duckdb")
     agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])
     evals = [definition(grading_method="llm_judge", expected_answer="2297")]
 
     try:
-        _run_loop(path, agent, _ScriptedJudge("not json"), evals)
-        raise AssertionError("expected the unparseable grading reply to stop the run")
-    except ValueError:
+        _run_loop(path, agent, _FailingJudge(), evals)
+        raise AssertionError("expected the failing grading call to stop the run")
+    except RuntimeError:
         pass
 
     (rec,) = read_records(path)

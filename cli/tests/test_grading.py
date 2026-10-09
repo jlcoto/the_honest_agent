@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from honest_agent.grading import grade_contains, grading_prompt, score
+from honest_agent.grading import UNREADABLE_REPLY, grade_contains, grading_prompt, score
 
 
 def _extracted(value: str) -> str:
@@ -43,9 +43,20 @@ def test_extract_match_reads_json_inside_a_code_block():
     assert score("extract_match", "2297", "2297", reply).extracted_answer == "2297"
 
 
-def test_an_unparseable_reply_is_an_error():
-    with pytest.raises(ValueError, match="parseable JSON"):
-        score("llm_judge", "4", "4", "I think it's right")
+@pytest.mark.parametrize(
+    ("method", "reply"),
+    [
+        ("llm_judge", "I think it's right"),  # no JSON at all
+        ("llm_judge", '{"score": 0.0, "rationale": "a stray quote at the end.""}'),  # seen from Claude Haiku
+        ("llm_judge", '{"rationale": "no score"}'),
+        ("extract_match", '{"value": "2297"}'),
+    ],
+)
+def test_an_unreadable_reply_fails_the_eval_instead_of_the_run(method, reply):
+    grade = score(method, "4", "4", reply)
+
+    assert grade.score == 0.0
+    assert grade.rationale.startswith(UNREADABLE_REPLY)
 
 
 def test_llm_judge_takes_the_models_score_and_rationale():

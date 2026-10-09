@@ -4,24 +4,103 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
+## Next, first: split cli.py
+
+Decided 2026-10-09, to do right after PR #14 merges and before the two items
+below (both touch the run path). `cli.py` is 803 lines, about half of it the
+orchestration of a run rather than CLI.
+
+- **`runner.py`:** `_eval_loop`, `_run_async`, `_resolve_server`,
+  `_resolve_agent_name` as plain functions with no click, so a run can be
+  driven without the CLI (a future `suggest`, a skill).
+- **`init.py`** takes its prompts (`_choose`, `_ask`, `_init_example`).
+- **`cli.py`** keeps `main`, the shared helpers (`_config`, `_results_path`,
+  `_from_layers`) and thin commands; about 300 lines.
+- A pure move in its own PR: no behaviour change, the same tests (only the
+  ones patching `honest_agent.cli._run_async` follow it).
+
+## Next: structured output for grading
+
+Found on 2026-10-09 while trying the `init --example` evals with Claude Haiku:
+an `llm_judge` reply came back as `{"score": 0.0, "rationale": "...instead).""}`
+(a stray quote), and the whole `run` stopped with a JSONDecodeError. The
+grading prompts only *ask* for JSON, and `grading.py` (`_reply_json`) grabs
+`\{.*\}` with a regex and `json.loads` it.
+
+Stopgap since then: a reply that can't be read scores that eval 0, with
+"Not graded: the grading model's reply wasn't the JSON it was asked for (...)"
+as its rationale and a warning in the output; the run continues.
+
+The fix: **structured output**, so the model API constrains the reply to a
+schema and invalid JSON can't happen.
+
+- Claude: tool use with one forced tool whose input schema is the reply
+  (`{"score": number, "rationale": string}` for `llm_judge`,
+  `{"extracted_answer": string}` for `extract_match`), or the API's
+  structured-output option if the models we use support it. OpenAI:
+  `response_format` with a JSON schema.
+- Both judges, Claude and OpenAI; keep the stopgap for anything that still
+  fails (a refusal, a cut-off reply).
+- Check that grades don't shift: re-grade the example project's stored runs
+  with `honest-agent rebuild` before and after and compare.
+- Closes the open half of security item 3 below.
+
+## Next: declared session defaults for provenance
+
+Found on 2026-10-09 while trying the `init --example` evals: provenance learns a
+table's database and schema only from the SQL (`db.schema.table`, or an earlier
+`use`). A bare `from orders` runs in the connection's default database and
+schema, which the SQL doesn't show, so its location is "unknown" and never
+matches `expected_database`/`expected_schema`. In the DuckDB demo nobody
+qualifies names, so a location check can never pass there. Not DuckDB-only:
+any server whose connection has a default (Snowflake, MotherDuck) has the same
+gap.
+
+Decided: a target can declare the session's defaults, both optional:
+
+```yaml
+targets:
+  demo:
+    default_database: warehouse
+    default_schema: main
+```
+
+- The SQL always wins: a default only fills in the part a name leaves out.
+- Store the defaults with each run's settings (like `ignore_tools`), so
+  `rebuild` reproduces past provenance even if the config changes later.
+- `init --example` fills them in for the demo (`default_database: warehouse`,
+  `default_schema: main`), and its evals then show the location check: give
+  one of them (e.g. `revenue_1997`) `expected_database`/`expected_schema`, with
+  a comment, so users see that provenance can check where a table lives, not
+  only its name. Update the example's README table and rerun it.
+- **DuckDB two-part names:** DuckDB reads `a.b` as schema.table, and if there
+  is no schema `a`, as database.table (`warehouse.orders` works in the demo).
+  honest-agent's parser always reads it as schema.table, so `warehouse.orders`
+  is recorded with schema `warehouse`. Rule: when a two-part name's first part
+  equals the declared `default_database` and not `default_schema`, read it as
+  database.table. Still a guess when a schema and a database share a name.
+- Document: a wrong declared default fails silently (the real risk); with a
+  server that opens a new connection per call (the demo does), a `use` doesn't
+  carry over between calls on the server, though provenance assumes it does;
+  with a search path of several schemas, the default is the first.
+- Later, opt-in: detect the defaults by running `select current_database(),
+  current_schema()` through the agent's SQL tool (not every dialect has them).
+
 ## From the first-time setup walkthrough (2026-10-08)
 
 The user installed honest-agent from scratch in an empty folder, following
 only the README, then set up hosting and CI (recipe: `docs/hosting.md`).
 README fixes done 2026-10-08 (example eval, `--target`, sharing via
-`docs/hosting.md`, `export` auth). Left:
+`docs/hosting.md`, `export` auth); `init` built 2026-10-09. Left:
 
-1. **`init` should ask where results live:** a local file, MotherDuck
-   (a separate results-only token, `HONEST_AGENT_RESULTS_TOKEN`), or a file
-   in S3 (link to `docs/hosting.md`).
-2. **`honest-agent run` always exits 0**, even when evals fall below
+1. **`honest-agent run` always exits 0**, even when evals fall below
    threshold, so a CI job never fails on a regression (only `notify`
    alerts). Decide whether to add an option that sets a failing exit code.
-3. **Ship the AWS setup as code**, after the recipe settles: a
+2. **Ship the AWS setup as code**, after the recipe settles: a
    CloudFormation template with a "Launch stack" link (bucket, minimal
    policy, GitHub OIDC role), a Terraform module when a team asks. It must
    cope with an existing GitHub OIDC provider (one per account).
-4. **Turn the tested recipe into a Claude Code skill** that asks for
+3. **Turn the tested recipe into a Claude Code skill** that asks for
    storage, host, CI and warehouse and generates the workflow, config and
    commands, pointing to `docs/hosting.md`. Never asks for tokens in chat,
    never suggests public hosting, confirms before creating resources.
@@ -89,8 +168,8 @@ Lower severity:
    2026-10-03: the agent's answer now goes into the judge and extraction
    prompts inside `<answer>` tags, with a note that it's data, not
    instructions. Still open: `grading.py` reads the judge's score with a
-   greedy `\{.*\}` regex; use structured output instead (for both the Claude
-   and OpenAI judges, checking grades don't shift). Low priority unless an
+   greedy `\{.*\}` regex; use structured output instead: now planned in
+   "Next: structured output for grading" above. Low priority unless an
    agent answers from free text written by outsiders (support tickets,
    reviews, CRM notes); `extract_match` compares in code and is less exposed.
 4. **`serve`** has no Host-header check (DNS rebinding can read
@@ -204,13 +283,13 @@ future work, not a confirmed schema to design against.
 Provenance moved to parsed SQL on 2026-10-06 (`provenance.py`, sqlglot): only
 `select` statements count, errored calls don't, and `expected_sources`
 entries can carry their own database/schema. Three questions came up and were
-left open on purpose:
+left open on purpose (a fourth was added on 2026-10-09):
 
 1. **Acceptable alternatives.** `expected_sources` means *all* of them
    (recall). An eval can't say "the mart *or* the semantic view". In the
    Snowflake results, four answers that came from
    `agent_quiz_demo.public.tpch_semantic_view` scored 0 because the evals
-   expect `fct_revenue_by_year` / `orders`. Decide whether the semantic view
+   expect specific tables. Decide whether the semantic view
    is an acceptable source there (then list it, or add an any-of form to the
    YAML) or a real miss.
 2. **Extra sources.** Recall ignores tables the agent read beyond the
@@ -221,8 +300,30 @@ left open on purpose:
    unknown location and never matches an expected database/schema. Right for
    Snowflake's MCP server, which has no default database (bare names fail to
    compile there). A warehouse whose connection does have one would score
-   correct queries as misses; if that comes up, let a target declare its
-   default database/schema.
+   correct queries as misses. That came up with the DuckDB demo on
+   2026-10-09: see "Next: declared session defaults for provenance".
+4. **Exploration that uses `select`.** `show tables` and `describe` don't
+   count as reads, but the same exploration written as a `select` does, so
+   what "Agent queried" lists depends on how the agent explored. Seen
+   2026-10-09 in the `init --example` trial: `select * from
+   information_schema.tables limit 10` was recorded as reading `tables` in
+   schema `information_schema`. No score changes (extra reads are ignored),
+   but the result page's Provenance card lists it under "Agent queried" (one
+   expected source) or "Also read" (several), as if the answer came from it.
+   - **System catalogs (decided: exclude them):** skip `information_schema.*`,
+     `pg_catalog.*` and DuckDB's catalog functions (`duckdb_tables()` and
+     similar) the way `show`/`describe` are skipped, so "Agent queried" means
+     data the answer could come from. Keep the list of system schemas per
+     dialect right.
+   - **Peeks (decided 2026-10-09: leave as they are):** provenance counts
+     every successful `select` during an eval, not only the query behind the
+     answer, so a peek like `select * from lineitem limit 5` satisfies an
+     expected `lineitem` even if the answer came from another table. Telling
+     a peek from real use is too tricky to do reliably, so it stays a
+     documented limitation (it can make the example's deliberate provenance
+     failure pass; its README says so).
+   - Both matter more if honest-agent ever judges extra reads (question 2,
+     or "forbidden sources"): exploration would count against the agent.
 
 ## Result page: SQL calls and Trace cards
 
@@ -380,6 +481,34 @@ users can pick what fits their setup.
   and a presigning backend defeats the no-server point. Revoking access
   takes effect immediately, since no copy of the data is left behind.
 
+## Improvement suggestions from a model (future)
+
+Idea from 2026-10-09: hand a run's results (answers, scores, rationales, the
+agent's SQL and trace) to a model and ask what to improve. Trying the
+`init --example` evals showed the kind of findings it could surface, which
+were found by reading traces by hand:
+
+- **The evals:** an ambiguous prompt ("average order value", "last year"),
+  an expectation that's too strict (provenance expecting a table the
+  question doesn't need) or too loose, a tolerance that hides a real error,
+  an eval that flips between runs.
+- **The agent:** tool descriptions that steer it wrong (the old demo server
+  pointing at a table that didn't exist), wasted exploration steps, a missing
+  semantic layer or documentation the agent keeps rebuilding by hand.
+
+Open points:
+- **Where it lives:** a command (e.g. `honest-agent suggest --run-id ...`)
+  that prints suggestions, or part of the planned project-setup skill, which
+  already runs in a coding agent with the repo and results at hand. The
+  skill may be the cheaper home: no new command, and it can edit the eval
+  files directly once the user agrees.
+- **Data:** traces hold warehouse data, so sending them to a model provider
+  needs the same care as hosting the report; say so, and let users choose
+  what's included (scores and SQL only, or full traces).
+- **Never automatic:** suggestions only; changing evals or thresholds stays
+  a human decision, or the evals stop measuring anything.
+- Cost: one model call per run (or per failing eval), on top of the run.
+
 ## "Investigate in Claude Code" button on the result page
 
 Discussed 2026-10-07, for later. A button on a failing result's page that
@@ -433,6 +562,10 @@ in the evals for now: no current server needs it, since honest-agent finds
 
 ## `honest-agent init`: starter files for a new project
 
+**Status (2026-10-09):** built: `env_var()` in the config, `init`, and
+`init --example` (six evals over TPC-H only, tried end to end with Claude Haiku;
+the demo server now ships in honest-agent as `honest_agent/demo_server.py`).
+
 Found during the first-time setup dry runs (2026-10-02): after `uv add`, a
 new user starts from an empty folder and has to write
 `honest_agent_config.yml` and a first eval from the docs. Copying the
@@ -472,7 +605,41 @@ command, like `dbt init`:
 - "Getting started" in README.md then shrinks to install, `init`, fill in
   `.env`, run.
 
-Open question for the user: prompts like `dbt init`, or flags only.
+**Decided 2026-10-09** (plan with the full discussion:
+https://claude.ai/code/artifact/46742cb1-ce7b-4ad5-9255-0bbc9f36b6d0):
+
+1. Prompts with numbered options and defaults (Enter accepts), free text only
+   for the user's own values (URL, command); every answer is also a flag, and
+   `--no-input` makes it scriptable.
+2. Servers: local command (the default), Snowflake managed MCP, MotherDuck,
+   another URL; Snowflake and MotherDuck prefill the URL shape and token
+   variable.
+3. Model: Claude (default) or OpenAI; only that key goes in `.env`.
+4. Results: local file (default), MotherDuck (`results_path` +
+   `HONEST_AGENT_RESULTS_TOKEN`, written under a "# MotherDuck only" comment;
+   the name stays generic for other backends), or a file in S3 (prints the two
+   `aws s3 cp` lines with a plain note that honest-agent won't copy to S3
+   itself, and links `docs/hosting.md`).
+5. Plain `init` always writes a placeholder eval; a passing MotherDuck
+   `sample_data` eval belongs in `init --example`, if ever.
+6. **Env vars in the config, dbt style:** any value can be
+   `{{ env_var('VAR') }}`, with an optional default as the second argument.
+   For every URL target, `init` writes the URL into `.env` and the config reads
+   it, so accounts stay out of git with one committed file. A local command
+   stays inline. Needs `env_var()` support in the config loader (a small
+   pattern match, no Jinja).
+7. `.gitignore`: print the lines to add, never edit it.
+8. Target name: the server's name (`local`, `snowflake`, `motherduck`),
+   changeable at the prompt; more targets (e.g. `snowflake_dev`) by hand.
+9. `init --example`: its own folder, 5-6 evals on the demo warehouse, some
+   failing on purpose, covering every accuracy method and every provenance
+   check, on a cheap model (e.g. Claude Haiku); its README says which cases
+   are meant to fail; it ends with a warning to add the provider's API key.
+
+Later: two skills (project setup, e.g. drafting evals from the user's
+schema; hosting and CI), in the Agent Skills format so they work in Claude
+Code and Codex; `init` could add them behind an opt-in flag (`--with-skill`).
+
 
 ## Evaluate Snowflake's business chat (Snowflake Intelligence / Cortex Agents)
 

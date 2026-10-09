@@ -44,6 +44,11 @@ You need:
 - The MCP server your agent uses: its URL and a token, or the command that
   starts it locally.
 
+To see it work before connecting your own agent, run
+`uv run honest-agent init --example` after step 1: it creates
+`honest-agent-example/`, a demo agent over DuckDB's sample data with six evals
+(some fail on purpose), runnable with only a model API key.
+
 ### 1. Create a project and install
 
 ```bash
@@ -56,60 +61,54 @@ uv add "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git#subdir
 honest-agent into the project and records the exact version in `uv.lock`, so
 teammates who run `uv sync` get the same one.
 
-### 2. Put secrets in `.env`
+### 2. Create the starter files
+
+```bash
+uv run honest-agent init
+```
+
+`init` asks a few questions, with numbered options and defaults (Enter accepts
+them): which MCP server your agent uses (a local command, Snowflake's managed
+MCP server, MotherDuck or another URL), its URL or command, which model runs
+the agent (Claude or OpenAI) and where results live (here, MotherDuck or a
+file in S3). Then it writes three files, and never overwrites one that exists:
+
+| File | What it holds |
+|---|---|
+| `honest_agent_config.yml` | One target for your agent, like a target in a dbt profile |
+| `evals/first_eval.yml` | A first eval to fill in |
+| `.env` | The variables the setup needs: your server's URL, and empty slots for the keys |
+
+Every answer is also a flag, for scripts and CI:
+`uv run honest-agent init --server snowflake --mcp-url https://... --no-input`
+(`honest-agent init --help` lists them).
+
+If the project is in git, add `.env` and `honest_agent_report/` to
+`.gitignore`; `init` lists whatever isn't ignored yet. The results folder
+keeps itself out of git; the report folder holds only the website, so it can
+be uploaded as is.
+
+### 3. Fill in `.env`
 
 ```
 ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY=...
 SNOWFLAKE_MCP_TOKEN=...      # the token for your MCP server
 ```
 
-Only secrets go here. If the project is in git, add `.env` and
-`honest_agent_report/` to `.gitignore`. The results folder keeps itself out of
-git; the report folder holds only the website, so it can be uploaded as is.
+Only secrets and account URLs go here. The config reads the URL with
+`{{ env_var('SNOWFLAKE_MCP_URL') }}`, the way dbt does, so the config holds no
+account and you can commit it to share targets with your team
+([details](example_project/README.md#reading-values-from-the-environment)).
+More targets, `mcp_env` for local servers and every other setting are in
+[The config file](example_project/README.md#the-config-file).
 
-### 3. Describe your agent in `honest_agent_config.yml`
+### 4. Write your first eval
 
-One target per agent you evaluate, like the targets in a dbt profile:
-
-```yaml
-default_target: snowflake
-targets:
-  snowflake:
-    mcp_url: https://<account>.snowflakecomputing.com/api/v2/databases/<db>/schemas/<schema>/mcp-servers/<server>
-    bearer_token_env: SNOWFLAKE_MCP_TOKEN   # the .env variable holding the token
-```
-
-Other servers work the same way, for example MotherDuck's hosted one:
+Edit `evals/first_eval.yml` and replace each `TODO`: a question your agent
+should answer from your data, the answer you know is right, and the tables it
+should read. For example:
 
 ```yaml
-  motherduck:
-    mcp_url: https://api.motherduck.com/mcp
-    bearer_token_env: MOTHERDUCK_TOKEN
-    max_tool_steps: 10
-```
-
-A server you run locally takes `mcp_command:` instead of `mcp_url:`, plus
-`mcp_env:` listing the variables it needs (e.g. `[MOTHERDUCK_TOKEN]`): it gets
-only those, never the rest of `.env`. Every setting is described in [`example_project/README.md`](example_project/README.md#the-config-file).
-
-The config holds no secrets, so you can commit it to share targets with your
-team. If it names account URLs you'd rather not publish, commit a
-`honest_agent_config.example.yml` with placeholders instead and add the real
-file to `.gitignore`, like `.env.example` (the bundled example does this).
-
-### 4. Write an eval in `evals/`
-
-`evals/orders.yml`:
-
-```yaml
-version: 1
-evals:
-  - category: orders
-    grading:
-      method: extract_match
-      min_score: 0.8
-    provenance:
-      min_score: 0.7
     tests:
       - title: Orders placed in 1996
         prompt: How many orders were placed in 1996? Query the warehouse and give me just the number.
@@ -118,13 +117,9 @@ evals:
           expected_sources: [orders]
 ```
 
-This example fits the bundled demo warehouse (its TPC-H `orders` table).
-For your agent, replace the `prompt` with a question it should answer from
-your data, `expected_answer` with the answer you know is right, and
-`expected_sources` with the tables it should read.
-
 `expected_answer` checks accuracy; `expected_sources` checks provenance, i.e.
-that the SQL the agent ran actually read `orders`. See
+that the SQL the agent ran actually read `orders`. (This example fits the
+bundled demo warehouse's TPC-H data, not yours.) See
 [Writing evals](example_project/README.md#writing-evals) and
 [Choosing a grading method](example_project/README.md#choosing-a-grading-method).
 
@@ -173,7 +168,8 @@ same version, instead of the one pinned in its `uv.lock`.
 
 | You see | What to do |
 |---|---|
-| `--mcp-command or --mcp-url is required` | honest-agent found no `honest_agent_config.yml`: run it from your project folder. In the bundled example, copy `honest_agent_config.example.yml` to `honest_agent_config.yml` first. |
+| `--mcp-command or --mcp-url is required` | honest-agent found no `honest_agent_config.yml`: run it from your project folder, or create one with `honest-agent init`. In the bundled example, copy `honest_agent_config.example.yml` to `honest_agent_config.yml` first. |
+| `... reads env_var('X'), but X isn't set` | The config reads `X` from the environment: add it to `.env`. |
 | `Note: MCP_URL from the environment overrides target ...` | An environment variable beats the config file. Remove `MCP_URL`/`MCP_COMMAND` from `.env` and your shell. |
 | `Unknown setting(s) in target ...` | A typo in `honest_agent_config.yml`; the message lists the allowed settings. |
 | A local server fails to log in to its database | It only gets the variables listed in its target's `mcp_env`; add the one it needs. |
@@ -200,7 +196,7 @@ uv run honest-agent notify --webhook-url ...                   # Slack alert if 
 per agent being evaluated, like the targets in a dbt profile: `honest-agent run --target
 motherduck` evaluates another one. The default target calls the model with the
 `query_warehouse` tool sourced live from the
-bundled demo MCP server (`mcp_server/server.py`), against a real seeded
+bundled demo MCP server (`python -m honest_agent.demo_server`), against a real seeded
 TPC-H warehouse — real SQL, real data, real provenance checking (does the
 agent's SQL actually hit the table we expect). By default results land in
 `./honest_agent_results/results.duckdb`. See `example_project/README.md` for

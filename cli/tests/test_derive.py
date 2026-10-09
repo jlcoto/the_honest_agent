@@ -21,7 +21,7 @@ from recorded import (
 from honest_agent.derive import derive_result
 from honest_agent.storage import connect
 
-SQL = "select sum(revenue) from agent_quiz_demo.public.fct_revenue_by_year"
+SQL = "select sum(revenue) from agent_quiz_demo.public.lineitem"
 CORTEX_SQL = "select * from semantic_view(agent_quiz_demo.public.tpch_semantic_view metrics total_revenue)"
 
 
@@ -44,7 +44,7 @@ def test_a_claude_run_derives_its_answer_trace_tokens_and_tools(tmp_path: Path):
             tool_call("t1", "query_warehouse", {"sql": SQL}, mcp_result("311928357.78")),
             model_call(claude_reply(text("It was 311928357.78."), input_tokens=150, output_tokens=10)),
         ],
-        eval_definition=definition(expected_answer="311928357.78", expected_sources=["fct_revenue_by_year"]),
+        eval_definition=definition(expected_answer="311928357.78", expected_sources=["lineitem"]),
     )
 
     row = _derive(path)
@@ -133,7 +133,7 @@ def test_a_tool_result_flagged_as_an_error_shows_as_one(tmp_path: Path):
             tool_call("t1", "query_warehouse", {"sql": SQL}, mcp_result("SQL compilation error", is_error=True)),
             model_call(claude_reply(text("I couldn't get it."))),
         ],
-        eval_definition=definition(expected_sources=["fct_revenue_by_year"]),
+        eval_definition=definition(expected_sources=["lineitem"]),
     )
 
     row = _derive(path)
