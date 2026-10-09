@@ -34,7 +34,7 @@ SERVERS = {
     "motherduck": ("MotherDuck", "motherduck", "https://api.motherduck.com/mcp", None),
     "url": ("another URL", "agent", None, "https://..."),
 }
-PROVIDERS = {"anthropic": ("Claude", "ANTHROPIC_API_KEY"), "openai": ("OpenAI", "OPENAI_API_KEY")}
+PROVIDERS = {"anthropic": ("Anthropic (Claude)", "ANTHROPIC_API_KEY"), "openai": ("OpenAI", "OPENAI_API_KEY")}
 RESULTS = {"local": "here, a local file", "motherduck": "MotherDuck", "s3": "a file in S3"}
 RESULTS_TOKEN_ENV = "HONEST_AGENT_RESULTS_TOKEN"
 
