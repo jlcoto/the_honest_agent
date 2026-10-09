@@ -4,15 +4,6 @@ Things intentionally not built yet, parked here so they don't get lost. Not a
 backlog of everything imaginable -- only real, discussed decisions that are
 waiting on information we don't have yet.
 
-## Next: rename `--model-provider claude` to `anthropic`
-
-`init --model-provider` takes `claude` or `openai`: a model name next to a
-company name. Everything else says `anthropic` (`ANTHROPIC_API_KEY`, the
-provider names in `llm.py` and in the recorded calls), so `anthropic` is what
-people type. Rename the key in `init.py`'s `PROVIDERS` and its two defaults;
-the interactive menu keeps showing "Claude". No alias for `claude` (no users
-yet). Its own branch, after `deps-and-traces`.
-
 ## From the first-time setup walkthrough (2026-10-08)
 
 The user installed honest-agent from scratch in an empty folder, following

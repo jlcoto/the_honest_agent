@@ -443,7 +443,7 @@ def notify(
 @click.option("--mcp-command", default=None, help="The command that starts a local MCP server (--server local).")
 @click.option("--mcp-url", default=None, help="The MCP server's URL (any other --server); it goes into .env.")
 @click.option("--target-name", default=None, help="The target's name. Defaults to the server's name.")
-@click.option("--model-provider", type=click.Choice(list(init_mod.PROVIDERS)), help="Claude or OpenAI.")
+@click.option("--model-provider", type=click.Choice(list(init_mod.PROVIDERS)), help="anthropic (Claude) or openai.")
 @click.option("--results", type=click.Choice(list(init_mod.RESULTS)), help="Where results live.")
 @click.option("--results-db", default=None, help="The MotherDuck database for results (--results motherduck).")
 @click.option("--no-input", is_flag=True, help="Ask nothing: use the flags given and the defaults.")

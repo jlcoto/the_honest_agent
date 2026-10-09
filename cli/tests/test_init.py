@@ -143,3 +143,23 @@ def test_example_with_openai_uses_its_cheap_model(in_tmp_dir: Path, monkeypatch)
     folder = in_tmp_dir / "honest-agent-example"
     assert load_config(folder / "honest_agent_config.yml").shared["model"] == "gpt-5.4-mini"
     assert "OPENAI_API_KEY=" in (folder / ".env").read_text()
+
+
+def test_model_provider_takes_the_company_name(in_tmp_dir: Path, monkeypatch):
+    """`anthropic`, like ANTHROPIC_API_KEY and the provider names honest-agent records."""
+    import honest_agent.init as init_mod
+
+    monkeypatch.setattr(init_mod, "seed_tpch", lambda path: path.write_text(""))
+
+    result = _init("--example", "--no-input", "--model-provider", "anthropic")
+
+    assert result.exit_code == 0, result.output
+    folder = in_tmp_dir / "honest-agent-example"
+    assert load_config(folder / "honest_agent_config.yml").shared["model"] == "claude-haiku-4-5"
+
+
+def test_the_model_name_is_not_a_provider(in_tmp_dir: Path):
+    result = _init("--no-input", "--mcp-command", "x", "--model-provider", "claude")
+
+    assert result.exit_code != 0
+    assert "'claude' is not one of 'anthropic', 'openai'" in result.output
