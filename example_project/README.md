@@ -116,7 +116,7 @@ evals:
     tags: [motherduck]
     tests:
       - title: Total revenue in 1996
-        prompt: What was our total revenue in 1996? Give me just the number.
+        prompt: What was our total revenue in 1996?
         expected_answer: "311928357.78"
         provenance:
           expected_sources: [lineitem, orders]

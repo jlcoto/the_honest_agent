@@ -235,3 +235,36 @@ def test_the_example_never_asks_but_takes_the_flag(in_tmp_dir: Path, monkeypatch
     result = _init("--example", "--no-input", "--with-skill")
     assert result.exit_code == 0, result.output
     assert all(path.exists() for path in _skill_folders(in_tmp_dir / "honest-agent-example"))
+
+
+def test_the_packaged_skill_follows_the_agent_skills_spec():
+    """agentskills.io: `name` matches the folder (lowercase, digits, hyphens, at most 64),
+    `description` at most 1024 characters, and every file SKILL.md points to exists."""
+    import re
+
+    import yaml
+
+    from honest_agent.init import SKILL_NAME, SKILL_SOURCE
+
+    _start, frontmatter, body = (SKILL_SOURCE / "SKILL.md").read_text().split("---\n", 2)
+    meta = yaml.safe_load(frontmatter)
+    assert meta["name"] == SKILL_NAME == SKILL_SOURCE.name
+    assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", meta["name"]) and len(meta["name"]) <= 64
+    assert 0 < len(meta["description"]) <= 1024
+    for reference in re.findall(r"`(references/[^`]+)`", body):
+        assert (SKILL_SOURCE / reference).is_file(), reference
+
+
+def test_the_skills_eval_example_loads(tmp_path: Path):
+    """The YAML example the skill teaches from is a valid eval file."""
+    import re
+
+    from honest_agent.init import SKILL_SOURCE
+
+    text = (SKILL_SOURCE / "references" / "writing-evals.md").read_text()
+    (tmp_path / "evals.yml").write_text(re.search(r"```yaml\n(.*?)```", text, re.DOTALL).group(1))
+
+    evals = {e.eval_id: e for e in load_evals(tmp_path)}
+    assert set(evals) == {"revenue_last_month", "top_customers"}
+    assert evals["top_customers"].grading_method == "llm_judge"
+    assert evals["revenue_last_month"].tolerance_percent == 0.01

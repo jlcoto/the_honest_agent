@@ -138,10 +138,11 @@ evals:
     provenance:
       min_score: 0.7          # did the agent's SQL read expected_sources?
     tests:
-      - title: TODO a short name for this question
+      - id: TODO_short_id
+        title: TODO a short name for this question
         prompt: >
-          TODO a question your agent should answer from your data, e.g.
-          How many orders were placed last year? Give me just the number.
+          TODO a question your agent should answer from your data, worded the way
+          your users ask it, e.g. how many orders did we get last month?
         expected_answer: "TODO the answer you know is right"
         provenance:
           expected_sources: [TODO_table_name]
