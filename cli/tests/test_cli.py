@@ -41,6 +41,19 @@ def test_logs_prints_each_recorded_call_as_stored(tmp_path: Path):
     assert "Accuracy" not in result.output  # scores live in the report
 
 
+def test_logs_never_prints_raw_control_characters(tmp_path: Path):
+    """Text from models and tools can carry terminal escape codes (a clipboard write, a
+    screen rewrite); logs shows them escaped (as JSON does), so the terminal doesn't act on them."""
+    path = str(tmp_path / "results.duckdb")
+    planted = "2297\x1b]52;c;ZWNobyBoaQ==\x07\r\x9b2J"
+    record(path, [model_call(claude_reply(text(planted)))])
+
+    output = CliRunner().invoke(main, ["logs", "--results-path", path]).output
+
+    assert "\\u001b]52" in output
+    assert not any(char in output for char in "\x1b\x07\r\x9b")
+
+
 def test_logs_json_prints_the_records_as_stored(tmp_path: Path):
     path = str(tmp_path / "results.duckdb")
     record(path, [model_call(claude_reply(text("4")))])
