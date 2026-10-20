@@ -260,7 +260,7 @@ _model_options = _options(
         envvar="HONEST_AGENT_MODEL",
         default=None,
         help="Model to evaluate (the agent under test): a Claude model, or an OpenAI one (gpt-*, o3, o4-mini, ...). "
-        "Only the API key for its provider is needed. Defaults to claude-haiku-4-5 if ANTHROPIC_API_KEY is set, "
+        "Only the API key for its provider is needed. Defaults to claude-haiku-5-5 if ANTHROPIC_API_KEY is set, "
         "else gpt-5.4-mini if OPENAI_API_KEY is set.",
     ),
     click.option(

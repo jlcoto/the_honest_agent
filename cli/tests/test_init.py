@@ -115,7 +115,7 @@ def test_example_creates_its_own_folder_with_evals_that_load(in_tmp_dir: Path, m
     target = load_config(folder / "honest_agent_config.yml").target(None)
     assert target.name == "demo"
     assert "-m honest_agent.demo_server warehouse.duckdb" in target.settings["mcp_command"]
-    assert target.settings["model"] == "claude-haiku-4-5"
+    assert target.settings["model"] == "claude-haiku-5-5"
     assert target.settings["max_tool_steps"] == 8
     assert (target.settings["default_database"], target.settings["default_schema"]) == ("warehouse", "main")
     evals = load_evals(folder / "evals")
@@ -157,7 +157,7 @@ def test_model_provider_takes_the_company_name(in_tmp_dir: Path, monkeypatch):
 
     assert result.exit_code == 0, result.output
     folder = in_tmp_dir / "honest-agent-example"
-    assert load_config(folder / "honest_agent_config.yml").shared["model"] == "claude-haiku-4-5"
+    assert load_config(folder / "honest_agent_config.yml").shared["model"] == "claude-haiku-5-5"
 
 
 def test_the_model_name_is_not_a_provider(in_tmp_dir: Path):
