@@ -1,0 +1,63 @@
+name: Docker image
+
+# Builds the image in cli/Dockerfile and checks it starts the demo project. On a version tag
+# it also pushes it to GHCR as ghcr.io/jlcoto/honest-agent:<version> (v0.2.0 -> 0.2.0).
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    paths: ["cli/**", ".github/workflows/docker.yml"]
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: cli
+          load: true
+          tags: honest-agent:test
+
+      # `debug` calls no model, so a placeholder key is enough. It starts the demo MCP server
+      # and lists its tools.
+      - name: Check the image
+        run: |
+          docker run --rm honest-agent:test --version
+          docker run --rm --entrypoint uvx honest-agent:test --version
+          docker run --rm -e ANTHROPIC_API_KEY=placeholder --entrypoint sh honest-agent:test -c \
+            "cd /tmp && honest-agent init --example --no-input && cd honest-agent-example && honest-agent debug"
+
+      - name: Image tags
+        id: meta
+        if: github.event_name == 'push'
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/jlcoto/honest-agent
+          tags: type=semver,pattern={{version}}
+
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Reuses the layers from the build above.
+      - name: Push
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: cli
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

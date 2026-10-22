@@ -77,6 +77,7 @@ export default defineConfig({
             { label: 'Host the report on Cloudflare', link: '/docs/team/report-cloudflare/' },
             { label: 'Host the report on AWS', link: '/docs/team/report-aws/' },
             { label: 'Run it in GitHub Actions', link: '/docs/team/ci/' },
+            { label: 'Run it in a container', link: '/docs/team/container/' },
           ],
         },
         {
