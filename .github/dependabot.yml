@@ -1,0 +1,11 @@
+# Keeps the pinned base images in cli/Dockerfile and the actions in the workflows current.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /cli
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
