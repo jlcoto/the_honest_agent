@@ -30,7 +30,8 @@ docker pull ghcr.io/jlcoto/honest-agent:<version>
 
 Pin the version you tested, as with `uv add`. The image has Python, honest-agent and
 [uv](https://docs.astral.sh/uv/), so MCP servers started with `uvx` work as they do on
-your machine. Its entrypoint is `honest-agent`: anything after the image name is the
+your machine. It's built for `linux/amd64` and `linux/arm64` (the 0.3.0 image is amd64
+only: on Apple Silicon, add `--platform linux/amd64` to `docker run`). Its entrypoint is `honest-agent`: anything after the image name is the
 command, like `run` or `report`.
 
 To build it yourself, from a clone of the repository:
