@@ -11,6 +11,10 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   for prompts under 100k tokens. Runs that relied on the default now use another
   model, so their results can differ: set `model: claude-haiku-4-5` in
   `honest_agent_config.yml` to keep the old one.
+- **A Docker image,** `ghcr.io/jlcoto/honest-agent:<version>`, for scheduled runs outside
+  GitHub Actions (GitLab CI, Airflow, Kubernetes, ECS). It has honest-agent and uv, runs
+  as a normal user, and is published on each release tag. See "Run it in a container" in
+  the team docs.
 
 ## v0.2.0 (alpha) — 2026-10-21
 
