@@ -67,6 +67,32 @@ A few things about it:
   write them as yourself, add `--user "$(id -u):$(id -g)" -e HOME=/tmp` (`uvx` needs a
   home folder it can write to).
 
+## Run it by hand with Compose
+
+A scheduler has its own place for the image, the mount and the variables, so it needs
+nothing from this section. If you run the container by hand often, a `compose.yml` next
+to `honest_agent_config.yml` saves retyping them:
+
+```yaml
+services:
+  honest-agent:
+    image: ghcr.io/jlcoto/honest-agent:<version>
+    volumes:
+      - .:/project
+    env_file: .env
+```
+
+Then the command is the same as on your machine, after `docker compose run --rm honest-agent`:
+
+```bash
+docker compose run --rm honest-agent run
+docker compose run --rm honest-agent report
+```
+
+Compose reads `.env` the way honest-agent does (double quotes around a value are
+stripped), so the `--env-file` caveat above doesn't apply. The file is a convenience for
+one machine: don't commit it with anything but the image version in it.
+
 ## Look at the report
 
 `report` writes the report into the mounted folder, like on your machine:
