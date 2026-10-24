@@ -8,7 +8,7 @@ your team, and to Slack when an eval falls below its threshold.
 
 ```bash
 uv init --bare --python 3.11
-uv add "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.1.0#subdirectory=cli"
+uv add "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.2.0#subdirectory=cli"
 uv run honest-agent init --example
 ```
 

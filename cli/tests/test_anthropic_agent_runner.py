@@ -69,9 +69,11 @@ class _FakeMessages:
     def __init__(self, responses: list[_FakeResponse]):
         self._responses = list(responses)
         self.sent: list[list[dict]] = []  # the full `messages` of each call
+        self.kwargs: list[dict] = []  # everything else each call was given
 
     async def create(self, **kwargs):
         self.sent.append(copy.deepcopy(kwargs["messages"]))
+        self.kwargs.append(copy.deepcopy({k: v for k, v in kwargs.items() if k != "messages"}))
         return self._responses.pop(0)
 
 
@@ -103,16 +105,18 @@ class _Recorder:
         return await pending
 
 
-def _make_client(responses: list[_FakeResponse], max_tool_steps: int = 5) -> AnthropicMCPAgentClient:
-    # Bypasses __init__ (which builds a real anthropic.AsyncAnthropic()) so
-    # this stays a pure unit test of the loop, no real API key needed.
-    client = AnthropicMCPAgentClient.__new__(AnthropicMCPAgentClient)
-    client._anthropic = type("_FakeAnthropicClient", (), {"messages": _FakeMessages(responses)})()
-    client._mcp = _FakeMCP()
-    client._model = "claude-test"
-    client._max_tool_steps = max_tool_steps
-    client._tools = [{"name": "calculator", "description": "Does math", "input_schema": {}}]
-    return client
+def _make_client(
+    responses: list[_FakeResponse], max_tool_steps: int = 5, instructions: str | None = None
+) -> AnthropicMCPAgentClient:
+    # A fake Anthropic client, so this stays a pure unit test of the loop, no API key needed.
+    return AnthropicMCPAgentClient(
+        _FakeMCP(),
+        model="claude-test",
+        tools=[_FakeMCPTool(name="calculator", description="Does math", input_schema={})],
+        max_tool_steps=max_tool_steps,
+        instructions=instructions,
+        client=type("_FakeAnthropicClient", (), {"messages": _FakeMessages(responses)})(),
+    )
 
 
 def _two_turns() -> list[_FakeResponse]:
@@ -163,3 +167,26 @@ def test_run_stops_at_max_tool_steps():
     asyncio.run(client.run("Keep going", recorder))
 
     assert [kind for kind, _, _ in recorder.calls] == ["model_call", "tool_call", "model_call", "tool_call"]
+
+
+def test_server_instructions_go_in_the_system_prompt_with_the_cache_breakpoint():
+    client, recorder = _make_client(_two_turns(), instructions="Use DuckDB SQL."), _Recorder()
+
+    asyncio.run(client.run("What is 1+1?", recorder))
+
+    for kwargs in client._anthropic.messages.kwargs:
+        assert kwargs["system"] == [{"type": "text", "text": "Use DuckDB SQL.", "cache_control": {"type": "ephemeral"}}]
+        assert "cache_control" not in kwargs["tools"][-1]  # one breakpoint, after tools and system
+    # The record names the system prompt; its text is in the run's settings, once.
+    assert recorder.calls[0][2]["system"] == "server instructions"
+
+
+def test_without_instructions_the_tools_carry_the_cache_breakpoint():
+    client, recorder = _make_client(_two_turns()), _Recorder()
+
+    asyncio.run(client.run("What is 1+1?", recorder))
+
+    kwargs = client._anthropic.messages.kwargs[0]
+    assert "system" not in kwargs
+    assert kwargs["tools"][-1]["cache_control"] == {"type": "ephemeral"}
+    assert "system" not in recorder.calls[0][2]

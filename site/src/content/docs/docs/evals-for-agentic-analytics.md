@@ -121,7 +121,8 @@ sources. Both are below their thresholds, so the eval fails.
 - **Provenance sees SQL.** If your agent answers through tools with structured arguments
   and no SQL, provenance can't be checked for those evals.
 - **It tests the model and the tools, not your app.** honest-agent asks the question with
-  the model and the MCP tools your agent uses. Your agent's own system prompt, memory or
+  the model and the MCP tools your agent uses, plus the instructions the MCP server sends
+  when it connects (as Claude's own clients do). Your agent's own system prompt, memory or
   conversation history aren't part of the run.
 - **A passing eval set isn't proof.** It covers the questions you wrote. Add an eval each
   time the agent gets a real question wrong.

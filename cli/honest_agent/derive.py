@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 
 from .eval_loader import EvalDefinition
 from .grading import CUT_OFF_REPLY, Grade, score
-from .llm import OPENAI, response_stop, response_text, response_tokens
+from .llm import OPENAI, response_cache_tokens, response_stop, response_text, response_tokens
 from .provenance import check_provenance
 from .raw import honest_agent_version
 from .sql_capture import extract_sql_calls
@@ -235,11 +235,11 @@ def derive_result(con, result_id: str) -> Derived:
         settings.get("default_schema"),
     )
 
-    agent_tokens = [
-        response_tokens(e["provider"], e["response"])
-        for e in agent_events
-        if e["kind"] == "model_call" and e["response"] is not None
+    agent_responses = [
+        (e["provider"], e["response"]) for e in agent_events if e["kind"] == "model_call" and e["response"] is not None
     ]
+    agent_tokens = [response_tokens(provider, response) for provider, response in agent_responses]
+    agent_cache = [response_cache_tokens(provider, response) for provider, response in agent_responses]
     grading_tokens = response_tokens(grading["provider"], grading["response"]) if grading else (0, 0)
     latency_ms = (
         int((max(_end(e) for e in agent_events) - agent_events[0]["started_at"]).total_seconds() * 1000)
@@ -285,6 +285,8 @@ def derive_result(con, result_id: str) -> Derived:
         "hit_step_limit": hit_step_limit,
         "agent_input_tokens": sum(t[0] for t in agent_tokens),
         "agent_output_tokens": sum(t[1] for t in agent_tokens),
+        "agent_cache_read_tokens": sum(t[0] for t in agent_cache),
+        "agent_cache_write_tokens": sum(t[1] for t in agent_cache),
         "grading_input_tokens": grading_tokens[0],
         "grading_output_tokens": grading_tokens[1],
         "derived_at": datetime.now(timezone.utc).strftime(_TIME),

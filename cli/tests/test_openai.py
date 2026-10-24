@@ -12,7 +12,15 @@ from click.testing import CliRunner
 from honest_agent.agent_runner import to_jsonable
 from honest_agent.cli import main
 from honest_agent.grading import GRADING_SCHEMAS
-from honest_agent.llm import ANTHROPIC, OPENAI, OpenAIJudge, provider_for, response_text, response_tokens
+from honest_agent.llm import (
+    ANTHROPIC,
+    OPENAI,
+    OpenAIJudge,
+    provider_for,
+    response_cache_tokens,
+    response_text,
+    response_tokens,
+)
 from honest_agent.openai_agent_runner import OpenAIMCPAgentClient
 
 
@@ -179,3 +187,45 @@ def test_without_any_api_key_run_says_which_keys_it_accepts(fake_run, in_tmp_dir
 
     assert result.exit_code != 0
     assert "Add ANTHROPIC_API_KEY (Claude) or OPENAI_API_KEY (GPT)" in result.output
+
+
+def test_openai_agent_sends_server_instructions_and_a_cache_key():
+    openai = _fake_openai(_completion("**2297**"))
+    recorder = _Recorder()
+
+    asyncio.run(
+        OpenAIMCPAgentClient(
+            _FakeMCP(),
+            model="gpt-5.4-mini",
+            tools=[],
+            instructions="Use DuckDB SQL.",
+            cache_key="honest-agent-run-1",
+            client=openai,
+        ).run("How many?", recorder)
+    )
+
+    (call,) = openai.chat.completions.calls
+    assert call["messages"][0] == {"role": "system", "content": "Use DuckDB SQL."}
+    assert call["prompt_cache_key"] == "honest-agent-run-1"
+    # The record names the system message; its text is in the run's settings, once.
+    assert recorder.calls[0][2]["system"] == "server instructions"
+    assert recorder.calls[0][2]["messages"] == [{"role": "user", "content": "How many?"}]
+
+
+def test_input_tokens_count_cached_ones_and_the_cache_split_is_kept():
+    anthropic_usage = {
+        "usage": {
+            "input_tokens": 100,
+            "cache_creation_input_tokens": 2000,
+            "cache_read_input_tokens": 14000,
+            "output_tokens": 50,
+        }
+    }
+    assert response_tokens(ANTHROPIC, anthropic_usage) == (16100, 50)
+    assert response_cache_tokens(ANTHROPIC, anthropic_usage) == (14000, 2000)
+    openai_usage = {
+        "usage": {"prompt_tokens": 16100, "completion_tokens": 50, "prompt_tokens_details": {"cached_tokens": 14000}}
+    }
+    assert response_tokens(OPENAI, openai_usage) == (16100, 50)
+    assert response_cache_tokens(OPENAI, openai_usage) == (14000, 0)
+    assert response_cache_tokens(ANTHROPIC, {"usage": {"input_tokens": 1, "output_tokens": 1}}) == (0, 0)

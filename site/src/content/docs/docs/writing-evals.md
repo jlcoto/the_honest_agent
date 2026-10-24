@@ -163,6 +163,13 @@ A model pulls the one value out of the answer and writes it as a plain number,
 whatever the agent's format: "1.284.500,20 €" becomes `1284500.20`, and "$310.33 million"
 becomes `310330000`. Then code compares it with the expected answer.
 
+:::note[Not `exact_match`]
+In other eval tools, `exact_match` compares the whole reply as text, with no model and no
+tolerance. `extract_match` first has the grading model extract the value, then compares
+it, optionally within a tolerance. It is close to "answer extraction" in lm-eval or
+Inspect, which use a regular expression instead of a model.
+:::
+
 ```yaml
         grading:
           method: extract_match

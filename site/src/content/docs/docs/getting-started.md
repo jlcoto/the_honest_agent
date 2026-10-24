@@ -30,7 +30,7 @@ Create a folder for your evals and install honest-agent into it:
 ```bash
 mkdir my-agent-evals && cd my-agent-evals
 uv init --bare --python 3.11
-uv add "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.1.0#subdirectory=cli"
+uv add "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.2.0#subdirectory=cli"
 ```
 
 To upgrade later, run the same `uv add` with a newer tag from
@@ -39,7 +39,7 @@ To upgrade later, run the same `uv add` with a newer tag from
 To have one `honest-agent` command for every project instead, install it as a tool:
 
 ```bash
-uv tool install "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.1.0#subdirectory=cli"
+uv tool install "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.2.0#subdirectory=cli"
 ```
 
 Then run `honest-agent` without `uv run` in any folder with a `honest_agent_config.yml`.

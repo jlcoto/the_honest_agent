@@ -29,12 +29,26 @@ def _mcp_tool_to_openai_schema(tool: Any) -> dict:
 class OpenAIMCPAgentClient(AgentClient):
     """GPT as the agent, with the tools of a live, already-connected `mcp.Client`."""
 
-    def __init__(self, mcp_client, model: str, tools: list, max_tool_steps: int = 5, client: Any = None):
+    def __init__(
+        self,
+        mcp_client,
+        model: str,
+        tools: list,
+        max_tool_steps: int = 5,
+        instructions: str | None = None,
+        cache_key: str | None = None,
+        client: Any = None,
+    ):
         self._openai = client or openai_client()
         self._mcp = mcp_client
         self._model = model
         self._tools = [_mcp_tool_to_openai_schema(t) for t in tools]
         self._max_tool_steps = max_tool_steps
+        # The server's instructions, sent as the system message like a chat client would.
+        self._system = [{"role": "system", "content": instructions}] if instructions else []
+        # OpenAI caches a repeated prompt start by itself; one key per run keeps a run's
+        # calls on the same cache.
+        self._optional = {"prompt_cache_key": cache_key} if cache_key else {}
 
     async def run(self, prompt: str, record: EvalRecorder) -> None:
         chat: list[dict] = [{"role": "user", "content": prompt}]
@@ -47,11 +61,15 @@ class OpenAIMCPAgentClient(AgentClient):
                 "tools": [tool["function"]["name"] for tool in self._tools],  # in full in raw.runs.tools_offered
                 "messages": chat[already_recorded:],
             }
+            if self._system:
+                request["system"] = "server instructions"  # in full in raw.runs.settings
             response = await record.call(
                 "model_call",
                 "openai",
                 request,
-                self._openai.chat.completions.create(model=self._model, messages=chat, tools=self._tools),
+                self._openai.chat.completions.create(
+                    model=self._model, messages=self._system + chat, tools=self._tools, **self._optional
+                ),
             )
             message = response.choices[0].message
             calls = message.tool_calls or []

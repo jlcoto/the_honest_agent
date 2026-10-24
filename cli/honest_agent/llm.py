@@ -71,11 +71,24 @@ def response_text(provider: str, response: dict) -> str:
 
 
 def response_tokens(provider: str, response: dict) -> tuple[int, int]:
-    """(input, output) tokens of a recorded model response, for either provider."""
+    """(input, output) tokens of a recorded model response, for either provider. Input
+    counts every prompt token, cached or not, so runs with and without caching compare."""
     usage = response.get("usage") or {}
     if provider == OPENAI:
         return usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
-    return usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+    # Anthropic's input_tokens leaves out the tokens written to or read from the cache.
+    cached = (usage.get("cache_creation_input_tokens") or 0) + (usage.get("cache_read_input_tokens") or 0)
+    return (usage.get("input_tokens") or 0) + cached, usage.get("output_tokens", 0)
+
+
+def response_cache_tokens(provider: str, response: dict) -> tuple[int, int]:
+    """(read, written) prompt tokens of a recorded model response that came from or went to
+    the provider's cache. Reads cost a fraction of input; Anthropic charges extra for
+    writes, OpenAI doesn't report them (0)."""
+    usage = response.get("usage") or {}
+    if provider == OPENAI:
+        return (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0, 0
+    return usage.get("cache_read_input_tokens") or 0, usage.get("cache_creation_input_tokens") or 0
 
 
 def response_stop(provider: str, response: dict) -> str | None:

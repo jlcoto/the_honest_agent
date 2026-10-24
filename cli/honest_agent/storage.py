@@ -109,8 +109,12 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     # no LLM call) -- conflating them would hide whether an eval is expensive
     # because the agent is chatty/looping or because grading itself is.
     # Input/output are split too since Anthropic prices them differently.
-    ("agent_input_tokens", "integer"),
+    ("agent_input_tokens", "integer"),  # every prompt token, cached or not
     ("agent_output_tokens", "integer"),
+    # The part of agent_input_tokens read from the provider's cache (billed at a fraction),
+    # and written to it (Anthropic bills extra; OpenAI doesn't report it: 0).
+    ("agent_cache_read_tokens", "integer"),
+    ("agent_cache_write_tokens", "integer"),
     ("grading_input_tokens", "integer"),
     ("grading_output_tokens", "integer"),
     # When the eval's last recorded call ended (run_timestamp is when it started).

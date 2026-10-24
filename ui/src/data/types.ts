@@ -36,6 +36,8 @@ export interface ResultRow {
   hit_step_limit: boolean | null // used every step and was still asking for tools: no answer
   agent_input_tokens: number | null
   agent_output_tokens: number | null
+  agent_cache_read_tokens?: number | null // part of agent_input_tokens read from the cache
+  agent_cache_write_tokens?: number | null // written to the cache (Anthropic only)
   grading_input_tokens: number | null
   grading_output_tokens: number | null
 }

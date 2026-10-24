@@ -12,6 +12,20 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   model, so their results can differ: set `model: claude-haiku-4-5` in
   `honest_agent_config.yml` to keep the old one.
 
+## v0.2.0 (alpha) — 2026-10-21
+
+- **The agent gets the MCP server's instructions.** Servers can send instructions when a
+  client connects (MotherDuck's describe DuckDB's SQL and how to explore the catalog), and
+  Claude's own clients put them in the model's context. honest-agent now sends them as the
+  system prompt and stores them in the run's settings. Results can change for servers that
+  send instructions: compare runs from before and after with that in mind.
+- **Prompt caching.** The tools and the server's instructions are cached: with Claude, a
+  cache breakpoint after them (reads cost a tenth of the input price); with OpenAI, a
+  `prompt_cache_key` per run. Answers don't change, only the cost.
+- **Cache tokens in results:** `agent_cache_read_tokens` and `agent_cache_write_tokens`.
+  `agent_input_tokens` keeps counting every input token, cached or not. Run
+  `honest-agent rebuild` to fill the new columns for older runs (0 there).
+
 ## v0.1.0 (alpha) — 2026-10-15
 
 The first release for testers. Install it from the tag (see the README).

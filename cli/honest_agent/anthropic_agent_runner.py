@@ -32,14 +32,31 @@ def _mcp_tool_to_anthropic_schema(tool: Any) -> dict:
 class AnthropicMCPAgentClient(AgentClient):
     """Claude as the agent, with the tools of a live, already-connected `mcp.Client`."""
 
-    def __init__(self, mcp_client, model: str, tools: list, max_tool_steps: int = 5):
-        import anthropic
+    def __init__(
+        self,
+        mcp_client,
+        model: str,
+        tools: list,
+        max_tool_steps: int = 5,
+        instructions: str | None = None,
+        client: Any = None,
+    ):
+        if client is None:
+            import anthropic
 
-        self._anthropic = anthropic.AsyncAnthropic()
+            client = anthropic.AsyncAnthropic()
+        self._anthropic = client
         self._mcp = mcp_client
         self._model = model
         self._tools = [_mcp_tool_to_anthropic_schema(t) for t in tools]
         self._max_tool_steps = max_tool_steps
+        # The server's instructions, sent as the system prompt like Claude's own clients do.
+        self._system = [{"type": "text", "text": instructions}] if instructions else []
+        # Tools and system are the same in every call: one cache breakpoint at their end
+        # caches both. A prompt below the model's minimum is sent uncached, without error.
+        last = self._system or self._tools
+        if last:
+            last[-1]["cache_control"] = {"type": "ephemeral"}
 
     async def run(self, prompt: str, record: EvalRecorder) -> None:
         messages: list[dict] = [{"role": "user", "content": prompt}]
@@ -53,12 +70,15 @@ class AnthropicMCPAgentClient(AgentClient):
                 "tools": [tool["name"] for tool in self._tools],  # in full in raw.runs.tools_offered
                 "messages": messages[already_recorded:],
             }
+            if self._system:
+                request["system"] = "server instructions"  # in full in raw.runs.settings
+            optional = {"system": self._system} if self._system else {}
             response = await record.call(
                 "model_call",
                 "anthropic",
                 request,
                 self._anthropic.messages.create(
-                    model=self._model, max_tokens=MAX_TOKENS, tools=self._tools, messages=messages
+                    model=self._model, max_tokens=MAX_TOKENS, tools=self._tools, messages=messages, **optional
                 ),
             )
             messages.append({"role": "assistant", "content": plain_content(response.content)})

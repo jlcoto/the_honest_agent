@@ -16,7 +16,7 @@ server, and checks each answer for two things:
 - **accuracy**: is the answer right?
 - **provenance**: did the agent's SQL read the tables it should?
 
-> **Alpha (v0.1.0): expect breaking changes between versions.** Each release's notes in
+> **Alpha (v0.2.0): expect breaking changes between versions.** Each release's notes in
 > [CHANGELOG.md](CHANGELOG.md) say what changed and what to do.
 
 <a href="https://thehonestagent.dev/report/"><img src="site/public/assets/review-overview.webp" alt="The honest-agent report: scores per eval over ten runs, and the evals below their threshold" width="800"></a>
@@ -43,7 +43,7 @@ OpenAI API key. Try it on the bundled example, a demo agent over DuckDB's sample
 ```bash
 mkdir my-agent-evals && cd my-agent-evals
 uv init --bare --python 3.11
-uv add "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.1.0#subdirectory=cli"
+uv add "honest-agent @ git+https://github.com/jlcoto/the_honest_agent.git@v0.2.0#subdirectory=cli"
 uv run honest-agent init --example
 cd honest-agent-example          # then add your API key to .env
 uv run honest-agent run

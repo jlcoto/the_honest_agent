@@ -151,6 +151,9 @@ async def run_evals(
         agent_name = resolve_agent_name(agent_name, connected)
         click.echo(f"Evaluating agent: {agent_name}")
         tools = (await connected.list_tools()).tools
+        # Instructions the server sends when it connects; Claude's clients put them in the
+        # model's context, so the agent under test gets them too.
+        instructions = getattr(connected, "instructions", None) or None
         openai_agent = provider_for(model) == OPENAI
         recorder = RunRecorder(con)
         recorder.start_run(
@@ -166,6 +169,7 @@ async def run_evals(
                 "ignore_tools": ignore_tools,
                 "default_database": default_database,
                 "default_schema": default_schema,
+                "server_instructions": instructions,
             },
             tools_offered=tools,
         )
@@ -175,9 +179,18 @@ async def run_evals(
         if openai_agent:
             from .openai_agent_runner import OpenAIMCPAgentClient
 
-            agent = OpenAIMCPAgentClient(tool_caller, model=model, tools=tools, max_tool_steps=max_tool_steps)
+            agent = OpenAIMCPAgentClient(
+                tool_caller,
+                model=model,
+                tools=tools,
+                max_tool_steps=max_tool_steps,
+                instructions=instructions,
+                cache_key=f"honest-agent-{run_id}",
+            )
         else:
-            agent = AnthropicMCPAgentClient(tool_caller, model=model, tools=tools, max_tool_steps=max_tool_steps)
+            agent = AnthropicMCPAgentClient(
+                tool_caller, model=model, tools=tools, max_tool_steps=max_tool_steps, instructions=instructions
+            )
         click.echo(f"Model: {model} · grading model: {grading_model}")
         rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con)
     finally:

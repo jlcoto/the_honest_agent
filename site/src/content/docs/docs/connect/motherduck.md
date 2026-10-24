@@ -116,6 +116,11 @@ sets `max_tool_steps: 10`: in our tests, the default of 5 was too few for the ag
 answer. Start with a few evals and a cheap model, and check the cost on your provider's
 dashboard.
 
+The tool descriptions and the server's instructions are the same in every call, so
+honest-agent asks the provider to cache them: with Claude, calls after the first in a run
+read them at a tenth of the input price. `agent_input_tokens` still counts them; the cached
+part is in `agent_cache_read_tokens`.
+
 ## MotherDuck's local server
 
 MotherDuck also publishes a local server,
