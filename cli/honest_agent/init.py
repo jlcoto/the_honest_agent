@@ -75,7 +75,7 @@ def config_text(answers: Answers) -> str:
     if answers.results == "motherduck":
         lines.append(f"results_path: md:{answers.results_db}   # opened with {RESULTS_TOKEN_ENV} from .env")
     lines += [
-        "# model: claude-haiku-4-5   # optional; without it, the model follows the API key in .env",
+        "# model: claude-haiku-5-5   # optional; without it, the model follows the API key in .env",
         "",
         "targets:",
         f"  {answers.target}:",

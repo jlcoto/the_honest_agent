@@ -4,6 +4,14 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
+## Unreleased
+
+- **The default Claude model is now `claude-haiku-5-5`** (was `claude-haiku-4-5`),
+  for the agent and the grading model when `--model` isn't set. It's 10x cheaper
+  for prompts under 100k tokens. Runs that relied on the default now use another
+  model, so their results can differ: set `model: claude-haiku-4-5` in
+  `honest_agent_config.yml` to keep the old one.
+
 ## v0.2.0 (alpha) — 2026-10-21
 
 - **The agent gets the MCP server's instructions.** Servers can send instructions when a
