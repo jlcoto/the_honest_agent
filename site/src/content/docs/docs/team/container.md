@@ -21,7 +21,7 @@ above.
 
 ## The image
 
-Each release after v0.2.0 is published to GitHub's registry, tagged with its version
+From v0.3.0 on, each release is published to GitHub's registry, tagged with its version
 without the `v` (v0.3.0 is `0.3.0`):
 
 ```bash

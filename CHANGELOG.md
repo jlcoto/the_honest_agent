@@ -4,7 +4,7 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
-## Unreleased
+## v0.3.0 (alpha) — 2026-10-24
 
 - **The default Claude model is now `claude-haiku-5-5`** (was `claude-haiku-4-5`),
   for the agent and the grading model when `--model` isn't set. It's 10x cheaper
