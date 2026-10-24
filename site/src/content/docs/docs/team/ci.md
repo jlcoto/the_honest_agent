@@ -167,7 +167,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Install honest-agent
-        run: uv tool install "git+https://github.com/jlcoto/the_honest_agent@v0.3.0#subdirectory=cli"
+        run: uv tool install "git+https://github.com/jlcoto/the_honest_agent@v0.3.1#subdirectory=cli"
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:

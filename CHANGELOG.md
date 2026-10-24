@@ -4,7 +4,7 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
-## Unreleased
+## v0.3.1 (alpha) — 2026-10-24
 
 - **The Docker image is built for arm64 too** (`linux/amd64` and `linux/arm64`). The
   0.3.0 image is amd64 only; on Apple Silicon it needs `--platform linux/amd64`.
