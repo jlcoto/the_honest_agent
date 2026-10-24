@@ -17,7 +17,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # QEMU lets the amd64 runner build the arm64 image too (Apple Silicon, Graviton).
       - uses: docker/setup-qemu-action@v3
@@ -25,7 +25,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: cli
           load: true
@@ -57,7 +57,7 @@ jobs:
       - name: Image tags
         id: meta
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/jlcoto/honest-agent
           tags: type=semver,pattern={{version}}
@@ -74,7 +74,7 @@ jobs:
       # workflow and commit built the image and what is in it.
       - name: Push
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: cli
           push: true
