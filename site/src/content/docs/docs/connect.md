@@ -99,11 +99,11 @@ model: claude-sonnet-4-5        # for every target
 targets:
   sales-agent:
     model: claude-sonnet-4-5    # or per target
-    grading_model: claude-haiku-4-5
+    grading_model: claude-haiku-5-5
 ```
 
 - **`model`** runs the agent. Without one, honest-agent picks a small, cheap model from
-  the key it finds: `claude-haiku-4-5` if `ANTHROPIC_API_KEY` is set, otherwise
+  the key it finds: `claude-haiku-5-5` if `ANTHROPIC_API_KEY` is set, otherwise
   `gpt-5.4-mini`. It prints which one it chose.
 - **The provider comes from the name:** `gpt-*`, `o3`, `o4-mini` and similar are OpenAI;
   anything else is Claude.
@@ -129,13 +129,13 @@ results share one store, so one report covers every agent.
 A setting can come from four places. honest-agent uses the first one it finds, in this
 order:
 
-1. a flag on the command, like `--model claude-haiku-4-5`;
+1. a flag on the command, like `--model claude-haiku-5-5`;
 2. an environment variable, from `.env` or your shell, like `HONEST_AGENT_MODEL`;
 3. `honest_agent_config.yml`;
 4. honest-agent's own default.
 
 So if the config says `model: claude-sonnet-4-5` but you run
-`honest-agent run --model claude-haiku-4-5`, that run uses `claude-haiku-4-5`. The flag
+`honest-agent run --model claude-haiku-5-5`, that run uses `claude-haiku-5-5`. The flag
 changes only that one run; the config stays as it is.
 
 When an environment variable overrides the config, `run` prints a note saying so. Keep
