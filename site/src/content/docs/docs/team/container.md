@@ -63,9 +63,10 @@ A few things about it:
   that lasts: [MotherDuck](/docs/team/results-motherduck/), or a file you copy in and out
   as in [Store results in S3](/docs/team/results-s3/). The image has no AWS CLI: add it
   in your own image (below), or copy the file in a step before and after.
-- **The container runs as root,** so on Linux the files it writes belong to root. To
-  write them as yourself, add `--user "$(id -u):$(id -g)" -e HOME=/tmp` (`uvx` needs a
-  home folder it can write to).
+- **The container runs as a normal user** (`honest`, id 1000), not as root, so on Linux
+  the files it writes belong to id 1000. If that isn't your id (`id -u` says), add
+  `--user "$(id -u):$(id -g)" -e HOME=/tmp` and the files are yours (`uvx` needs a home
+  folder it can write to).
 
 ## Run it by hand with Compose
 
@@ -127,6 +128,9 @@ Node.js, extra Python packages or another tool, build your own image from this o
 ```dockerfile
 FROM ghcr.io/jlcoto/honest-agent:<version>
 
+# The image runs as the user `honest`; installing needs root, so switch and switch back.
+USER root
+
 # Node.js, for MCP servers started with npx (Debian's version: check it's new enough
 # for your server).
 RUN apt-get update \
@@ -141,6 +145,8 @@ RUN uv tool install <server-package>
 # A server script of your own, with its packages in a separate environment so they
 # can't clash with honest-agent's. mcp_command: "/opt/mcp/bin/python mcp_server/server.py"
 RUN uv venv /opt/mcp && uv pip install --python /opt/mcp/bin/python <packages>
+
+USER honest
 ```
 
 The local server gets only `PATH`, `HOME` and a few other basics, plus the variables in

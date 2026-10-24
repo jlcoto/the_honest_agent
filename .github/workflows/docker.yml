@@ -27,6 +27,7 @@ jobs:
           context: cli
           load: true
           tags: honest-agent:test
+          provenance: false
 
       # `debug` calls no model, so a placeholder key is enough. It starts the demo MCP server
       # and lists its tools.
@@ -37,6 +38,19 @@ jobs:
           docker run --rm -e ANTHROPIC_API_KEY=placeholder --entrypoint sh honest-agent:test -c \
             "cd /tmp && honest-agent init --example --no-input && cd honest-agent-example && honest-agent debug"
 
+      # The image must report the tag's version, so a stale pyproject.toml can't publish
+      # v0.3.0 as 0.2.0.
+      - name: Check the version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          expected="${GITHUB_REF_NAME#v}"
+          actual="$(docker run --rm honest-agent:test --version | awk '{print $NF}')"
+          if [ "$actual" != "$expected" ]; then
+            echo "The image reports version $actual, but the tag is $GITHUB_REF_NAME." >&2
+            exit 1
+          fi
+
+      # Version tags only, no `latest`: the docs ask users to pin the version they tested.
       - name: Image tags
         id: meta
         if: startsWith(github.ref, 'refs/tags/v')
@@ -44,6 +58,7 @@ jobs:
         with:
           images: ghcr.io/jlcoto/honest-agent
           tags: type=semver,pattern={{version}}
+          flavor: latest=false
 
       - uses: docker/login-action@v3
         if: startsWith(github.ref, 'refs/tags/v')
@@ -52,7 +67,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Reuses the layers from the build above.
+      # Reuses the layers from the build above. Provenance and SBOM attestations say which
+      # workflow and commit built the image and what is in it.
       - name: Push
         if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/build-push-action@v6
@@ -61,3 +77,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
