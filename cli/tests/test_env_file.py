@@ -17,8 +17,6 @@ _VARS = [
     "ANTHROPIC_API_KEY",
     "HONEST_AGENT_MODEL",
     "HONEST_AGENT_GRADING_MODEL",
-    "HONEST_AGENT_EFFORT",
-    "HONEST_AGENT_GRADING_EFFORT",
     "HONEST_AGENT_ENV_FILE",
 ]
 
@@ -44,7 +42,7 @@ def test_dotenv_in_the_current_directory_is_loaded(project, fake_run):
 
     assert result.exit_code == 0, result.output
     assert os.environ["OPENAI_API_KEY"] == "from-project"
-    assert captured["model"] == "gpt-6-luna"
+    assert captured["model"] == "gpt-5.4-mini"
 
 
 def test_env_file_option_loads_the_named_file(project, fake_run, tmp_path_factory):

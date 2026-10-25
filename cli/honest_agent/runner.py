@@ -40,7 +40,6 @@ async def eval_loop(
     run_id: str,
     recorder: RunRecorder,
     con,
-    grading_effort: str | None = None,
 ) -> list[dict]:
     """Runs and grades each eval, recording every call as it returns (raw layer), then
     derives the eval's results from that record and writes them before the next one."""
@@ -60,19 +59,11 @@ async def eval_loop(
             if prompt is not None:
                 schema = GRADING_SCHEMAS[definition.grading_method]
                 request = {"model": grading_model, "max_tokens": GRADING_MAX_TOKENS, "prompt": prompt, "schema": schema}
-                if grading_effort:
-                    request["effort"] = grading_effort
                 await record.call(
                     "grading_call",
                     provider_for(grading_model),
                     request,
-                    judge.complete(
-                        prompt,
-                        model=grading_model,
-                        max_tokens=GRADING_MAX_TOKENS,
-                        schema=schema,
-                        effort=grading_effort,
-                    ),
+                    judge.complete(prompt, model=grading_model, max_tokens=GRADING_MAX_TOKENS, schema=schema),
                 )
             derived = derive_result(con, result_id)
         except Exception as exc:
@@ -85,12 +76,6 @@ async def eval_loop(
             click.echo(f"    WARNING: couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
         rows.append(derived.row)
     return rows
-
-
-def with_effort(model: str, effort: str | None) -> str:
-    """A model as the run reports it: `claude-sonnet-5-5 (low effort)`, or just the name
-    when no effort is sent and the provider's default applies."""
-    return f"{model} ({effort} effort)" if effort else model
 
 
 def resolve_agent_name(explicit: str | None, connected_client) -> str:
@@ -117,8 +102,6 @@ async def run_evals(
     mcp_cwd: str | None,
     mcp_env: list[str],
     grading_model: str,
-    effort: str | None = None,
-    grading_effort: str | None = None,
 ) -> int:
     """Runs the selected evals and stores the results; returns how many fell below
     their thresholds (`run` exits 1 when any did)."""
@@ -187,9 +170,6 @@ async def run_evals(
                 "default_database": default_database,
                 "default_schema": default_schema,
                 "server_instructions": instructions,
-                # None: not sent, so the provider's default applied.
-                "effort": effort,
-                "grading_effort": grading_effort,
             },
             tools_offered=tools,
         )
@@ -206,19 +186,13 @@ async def run_evals(
                 max_tool_steps=max_tool_steps,
                 instructions=instructions,
                 cache_key=f"honest-agent-{run_id}",
-                effort=effort,
             )
         else:
             agent = AnthropicMCPAgentClient(
-                tool_caller,
-                model=model,
-                tools=tools,
-                max_tool_steps=max_tool_steps,
-                instructions=instructions,
-                effort=effort,
+                tool_caller, model=model, tools=tools, max_tool_steps=max_tool_steps, instructions=instructions
             )
-        click.echo(f"Model: {with_effort(model, effort)} · grading model: {with_effort(grading_model, grading_effort)}")
-        rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort)
+        click.echo(f"Model: {model} · grading model: {grading_model}")
+        rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con)
     finally:
         con.close()
         await mcp_client.__aexit__(None, None, None)

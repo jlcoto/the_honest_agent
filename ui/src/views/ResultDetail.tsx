@@ -5,7 +5,6 @@ import {
   accuracyPasses,
   agentOf,
   formatRunTime,
-  modelLabel,
   pct,
   provenancePasses,
   evalTitles,
@@ -262,7 +261,6 @@ function AccuracyCard({ r }: { r: ResultRow }) {
             ))
           : null}
         {r.accuracy_method !== 'contains' && r.grading_model ? <Badge mono>grading model {r.grading_model}</Badge> : null}
-        {r.accuracy_method !== 'contains' && r.grading_effort ? <Badge mono>grading effort {r.grading_effort}</Badge> : null}
       </div>
     </Card>
   )
@@ -1119,7 +1117,6 @@ function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <Badge mono>{usesModel ? `grading model ${model ?? ''}`.trim() : 'graded in code, no model call'}</Badge>
-        {usesModel && r.grading_effort ? <Badge mono>grading effort {r.grading_effort}</Badge> : null}
       </div>
     </Card>
   )
@@ -1151,7 +1148,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         subtitle={
           <>
             <span style={mono}>{r.eval_id}</span> · {r.category ?? 'Uncategorized'} · {formatRunTime(r.run_timestamp)} ·{' '}
-            {agentOf(r)} · <span style={mono}>{modelLabel(r)}</span>
+            {agentOf(r)} · <span style={mono}>{r.model_name}</span>
           </>
         }
       >

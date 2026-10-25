@@ -47,7 +47,7 @@ export function runsOf(results: ResultRow[]): Run[] {
       timestamp,
       date: timestamp.slice(0, 10),
       agent: agentOf(rows[0]),
-      model: modelLabel(rows[0]),
+      model: rows[0].model_name,
       results: rows,
       accuracy,
       provenance,
@@ -67,11 +67,7 @@ export function agentsOf(results: ResultRow[]): string[] {
   return results.some((r) => r.agent_name == null) ? [...named, UNKNOWN_AGENT] : named
 }
 
-/** The agent's model as runs are grouped and compared: one model at two efforts is two
- * series (`claude-haiku-5-5 · high`); without an effort, the provider's default ran. */
-export const modelLabel = (r: ResultRow) => (r.effort ? `${r.model_name} · ${r.effort}` : r.model_name)
-
-export const modelsOf = (results: ResultRow[]) => [...new Set(results.map(modelLabel))].sort()
+export const modelsOf = (results: ResultRow[]) => [...new Set(results.map((r) => r.model_name))].sort()
 
 /** Each eval's most recent title, so runs from before a title was added still show it. */
 export function evalTitles(results: ResultRow[]): Map<string, string> {

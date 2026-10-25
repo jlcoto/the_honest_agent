@@ -76,8 +76,6 @@ def config_text(answers: Answers) -> str:
         lines.append(f"results_path: md:{answers.results_db}   # opened with {RESULTS_TOKEN_ENV} from .env")
     lines += [
         "# model: claude-haiku-5-5   # optional; without it, the model follows the API key in .env",
-        "# grading_model: claude-sonnet-5-5   # optional; see the docs on choosing it",
-        "# effort: medium   # optional: low, medium or high; without it, the provider's default",
         "",
         "targets:",
         f"  {answers.target}:",

@@ -189,73 +189,17 @@ def _run_capturing_models(fake_run, args: list[str]):
     result = CliRunner().invoke(
         main,
         ["run", "--evals-dir", "evals", "--mcp-command", "python server.py", *args],
-        env={
-            "ANTHROPIC_API_KEY": "test",
-            "HONEST_AGENT_GRADING_MODEL": "",
-            "HONEST_AGENT_EFFORT": "",
-            "HONEST_AGENT_GRADING_EFFORT": "",
-        },
+        env={"ANTHROPIC_API_KEY": "test", "HONEST_AGENT_GRADING_MODEL": ""},
     )
     assert result.exit_code == 0, result.output
-    fake_run["output"] = result.output
     return {"model": fake_run["model"], "grading_model": fake_run["grading_model"]}
 
 
-def test_the_default_grading_model_is_a_stronger_one_at_low_effort(fake_run, in_tmp_dir):
-    assert _run_capturing_models(fake_run, ["--model", "claude-haiku-5-5"]) == {
-        "model": "claude-haiku-5-5",
-        "grading_model": "claude-sonnet-5-5",
+def test_grading_model_defaults_to_the_agent_model(fake_run, in_tmp_dir):
+    assert _run_capturing_models(fake_run, ["--model", "claude-sonnet-5"]) == {
+        "model": "claude-sonnet-5",
+        "grading_model": "claude-sonnet-5",
     }
-    assert (fake_run["effort"], fake_run["grading_effort"]) == (None, "low")
-    assert "No --grading-model given; using claude-sonnet-5-5 (low effort)" in fake_run["output"]
-    assert "WARNING" not in fake_run["output"]
-
-
-def test_a_chosen_grading_model_runs_at_its_providers_default_effort(fake_run, in_tmp_dir):
-    _run_capturing_models(fake_run, ["--model", "claude-haiku-5-5", "--grading-model", "claude-opus-5-5"])
-
-    assert fake_run["grading_effort"] is None
-    assert "No --grading-model given" not in fake_run["output"]
-
-
-def test_efforts_can_be_set_for_both_models(fake_run, in_tmp_dir):
-    _run_capturing_models(
-        fake_run,
-        [
-            "--model",
-            "claude-haiku-5-5",
-            "--effort",
-            "HIGH",
-            "--grading-model",
-            "claude-opus-5-5",
-            "--grading-effort",
-            "medium",
-        ],
-    )
-
-    assert (fake_run["effort"], fake_run["grading_effort"]) == ("high", "medium")
-
-
-def test_an_agent_grading_itself_gets_a_warning(fake_run, in_tmp_dir):
-    # The default judge for a Claude agent is claude-sonnet-5-5, so this agent grades itself.
-    _run_capturing_models(fake_run, ["--model", "claude-sonnet-5-5"])
-
-    assert fake_run["grading_model"] == "claude-sonnet-5-5"
-    assert "WARNING: The agent and the grading model are both claude-sonnet-5-5." in fake_run["output"]
-    assert "#choosing-the-grading-model" in fake_run["output"]
-
-
-def test_an_effort_for_a_model_that_rejects_it_stops_the_run(fake_run, in_tmp_dir):
-    Path("evals").mkdir()
-    result = CliRunner().invoke(
-        main,
-        ["run", "--evals-dir", "evals", "--mcp-command", "x", "--model", "claude-haiku-4-5", "--effort", "low"],
-        env={"ANTHROPIC_API_KEY": "test", "HONEST_AGENT_GRADING_EFFORT": ""},
-    )
-
-    assert result.exit_code != 0
-    assert "claude-haiku-4-5 doesn't accept an effort setting, but effort is low" in result.output
-    assert not fake_run
 
 
 def test_grading_model_can_differ_from_the_agent_model(fake_run, in_tmp_dir):
@@ -294,8 +238,7 @@ class _ScriptedJudge:
     def __init__(self, reply: str):
         self._reply = reply
 
-    async def complete(self, prompt, model, max_tokens, schema, effort=None):
-        self.efforts = [*getattr(self, "efforts", []), effort]
+    async def complete(self, prompt, model, max_tokens, schema):
         return claude_reply(text(self._reply))
 
 
@@ -341,36 +284,6 @@ def test_a_run_records_every_call_and_derives_its_results(tmp_path: Path):
     grading_request = json.loads(rec["events"][3]["request"])
     assert "There were 2,297 orders." in grading_request["prompt"]
     assert grading_request["schema"]["required"] == ["extracted_answer"]
-    assert "effort" not in grading_request  # none set: the provider's default
-
-
-def test_the_grading_effort_is_sent_recorded_and_stored(tmp_path: Path):
-    path = str(tmp_path / "results.duckdb")
-    agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])
-    judge = _ScriptedJudge('{"score": 1.0, "rationale": "right"}')
-    con = connect(path)
-    try:
-        recorder = RunRecorder(con)
-        recorder.start_run(
-            "run_1",
-            agent_name="demo",
-            target="demo",
-            model="claude-test",
-            judge_model="claude-judge",
-            settings={"max_tool_steps": 5, "mcp": {}, "ignore_tools": [], "effort": "high", "grading_effort": "low"},
-            tools_offered=[],
-        )
-        evals = [definition(grading_method="llm_judge", expected_answer="2297")]
-        (row,) = asyncio.run(eval_loop(agent, evals, judge, "claude-judge", "run_1", recorder, con, "low"))
-    finally:
-        con.close()
-
-    assert judge.efforts == ["low"]
-    assert (row["effort"], row["grading_effort"]) == ("high", "low")
-    (rec,) = read_records(path)
-    assert json.loads(rec["events"][1]["request"])["effort"] == "low"
-    (stored,) = read_all_results(path)
-    assert (stored["effort"], stored["grading_effort"]) == ("high", "low")
 
 
 def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):
@@ -387,7 +300,7 @@ def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):
 
 
 class _FailingJudge:
-    async def complete(self, prompt, model, max_tokens, schema, effort=None):
+    async def complete(self, prompt, model, max_tokens, schema):
         raise RuntimeError("the grading API is down")
 
 
@@ -450,24 +363,3 @@ def test_ls_names_a_selector_that_matches_nothing(tmp_path: Path):
 
     assert result.exit_code != 0
     assert "No eval has id 'revenue_1996'" in result.output
-
-
-def test_a_grading_model_from_a_lower_tier_gets_a_warning(fake_run, in_tmp_dir):
-    _run_capturing_models(fake_run, ["--model", "claude-opus-5-5", "--grading-model", "claude-haiku-5-5"])
-
-    assert (
-        "WARNING: The grading model claude-haiku-5-5 looks less capable than the agent's claude-opus-5-5."
-        in (fake_run["output"])
-    )
-    assert "#choosing-the-grading-model" in fake_run["output"]
-
-
-def test_tiers_compare_within_a_provider_only():
-    from honest_agent.llm import looks_less_capable
-
-    assert looks_less_capable("claude-sonnet-5-5", "claude-opus-5-5")
-    assert looks_less_capable("gpt-6-luna", "gpt-6-astra")
-    assert not looks_less_capable("claude-opus-5-5", "claude-haiku-5-5")
-    assert not looks_less_capable("claude-sonnet-5-5", "claude-sonnet-5")  # same tier
-    assert not looks_less_capable("claude-haiku-5-5", "gpt-6-astra")  # two providers
-    assert not looks_less_capable("gpt-5.5", "gpt-6-astra")  # no tier in the name

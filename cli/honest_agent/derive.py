@@ -264,7 +264,6 @@ def derive_result(con, result_id: str) -> Derived:
         "accuracy_method": definition.grading_method,
         # The model that graded the answer; `contains` uses none.
         "grading_model": run["judge_model"] if grading else None,
-        "grading_effort": settings.get("grading_effort") if grading else None,
         "accuracy_rationale": grade.rationale,
         "extracted_answer": grade.extracted_answer,
         "accuracy_tolerance": definition.tolerance,
@@ -278,7 +277,6 @@ def derive_result(con, result_id: str) -> Derived:
         # No threshold for a check that didn't happen (see check_provenance).
         "provenance_min_score": definition.provenance_min_score if provenance.score is not None else None,
         "model_name": run["model"],
-        "effort": settings.get("effort"),
         "agent_name": run["agent_name"],
         "latency_ms": latency_ms,
         # One step is one model call and the tool calls it asks for.

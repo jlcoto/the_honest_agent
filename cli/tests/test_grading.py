@@ -184,18 +184,3 @@ def test_the_claude_judge_constrains_its_reply_to_the_methods_schema():
 
     assert response == "response"
     assert calls[0]["output_config"] == {"format": {"type": "json_schema", "schema": schema}}
-
-
-def test_the_claude_judges_effort_goes_next_to_its_schema():
-    calls = []
-
-    async def create(**kwargs):
-        calls.append(kwargs)
-        return "response"
-
-    judge = AnthropicJudge(NS(messages=NS(create=create)))
-    schema = GRADING_SCHEMAS["llm_judge"]
-
-    asyncio.run(judge.complete("grade this", model="claude-sonnet-5-5", max_tokens=200, schema=schema, effort="low"))
-
-    assert calls[0]["output_config"] == {"format": {"type": "json_schema", "schema": schema}, "effort": "low"}
