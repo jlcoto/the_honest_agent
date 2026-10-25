@@ -35,7 +35,7 @@ Set at the top level, a value applies to every target; a target's own value wins
 |---|---|
 | `effort` | How much the agent's model thinks before it answers: `low`, `medium` or `high`. Default: none is sent, so the provider's default applies. |
 | `grading_effort` | How much the grading model thinks: `low`, `medium` or `high`. Default: `low` for the default grading model; the provider's default for one you choose. |
-| `grading_model` | The model for grading: it pulls the value out for `extract_match` and judges the answer for `llm_judge` (`contains` uses none). Default: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` for an OpenAI one. If you change it, keep it a different model, at least as capable as the agent's ([Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model)). |
+| `grading_model` | The model for grading: it pulls the value out for `extract_match` and judges the answer for `llm_judge` (`contains` uses none). Default: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` for an OpenAI one. See [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model). |
 | `max_tool_steps` | Steps the agent may take per question; a step is one model call and the tool calls it asks for. Default: 5. |
 | `model` | The model that plays the agent. Default: chosen from the API key you have. |
 

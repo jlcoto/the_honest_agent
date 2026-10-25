@@ -35,6 +35,7 @@ from .llm import (
     default_grading_model,
     default_model,
     effort_unsupported,
+    looks_less_capable,
     provider_for,
 )
 from .raw import read_records
@@ -203,14 +204,23 @@ def _effort_value(value: str | None, key: str) -> str | None:
 GRADING_MODEL_DOCS = "https://thehonestagent.dev/docs/writing-evals/#choosing-the-grading-model"
 
 
-def same_model_warning(models: Models) -> str | None:
-    """A warning when the agent's model would grade its own answers."""
-    if models.model is None or models.model != models.grading_model:
+def grading_model_warning(models: Models) -> str | None:
+    """A warning when the agent's model grades its own answers, or a lower tier grades it.
+    The choice stays the user's: the warning says what the research found and links it."""
+    model, grading_model = models.model, models.grading_model
+    if model is None or grading_model is None:
         return None
-    return (
-        f"The agent and the grading model are both {models.model}. A model grading its own answers "
-        f"tends to favour them: set grading_model to another model, at least as capable. See {GRADING_MODEL_DOCS}"
-    )
+    if model == grading_model:
+        return (
+            f"The agent and the grading model are both {model}. Models tend to favour their own "
+            f"answers. More in {GRADING_MODEL_DOCS}"
+        )
+    if looks_less_capable(grading_model, model):
+        return (
+            f"The grading model {grading_model} looks less capable than the agent's {model}. A judge "
+            f"no more accurate than the model it grades gives a weaker signal. More in {GRADING_MODEL_DOCS}"
+        )
+    return None
 
 
 def _envvar(ctx: click.Context, param: str) -> str:
@@ -346,9 +356,9 @@ _model_options = _options(
         default=None,
         help="Model for grading: it pulls the value out of the answer for extract_match evals and judges "
         "the answer for llm_judge ones (contains needs none). Defaults to a stronger model from the agent's "
-        "provider: claude-sonnet-5-5 for Claude agents, gpt-6.1-sol for OpenAI ones. If you change it, pick "
-        "a model other than --model and at least as capable: a model grading its own answers tends to favour "
-        "them. Keeping it the same across runs keeps comparisons between agent models fair.",
+        "provider: claude-sonnet-5-5 for Claude agents, gpt-6.1-sol for OpenAI ones. `run` warns when it's the "
+        "agent's own model or looks less capable. Keeping it the same across runs keeps comparisons between "
+        "agent models fair.",
     ),
     click.option(
         "--effort",
@@ -482,7 +492,7 @@ def run(
             f"No --grading-model given; using {with_effort(grading_model, models.grading_effort)}, "
             f"the default for {'OpenAI' if provider_for(model) == OPENAI else 'Claude'} agents."
         )
-    if warning := same_model_warning(models):
+    if warning := grading_model_warning(models):
         click.echo(f"WARNING: {warning}")
     providers = {provider_for(model), provider_for(grading_model)}
     missing = [API_KEY_ENV[p] for p in sorted(providers) if not os.environ.get(API_KEY_ENV[p])]
@@ -628,7 +638,7 @@ def debug(
         else:
             where = f"target {chosen.name}" if chosen else "no targets"
             report.ok("Config", f"{debug_mod.shown(config.path)}, {where}")
-        if warning := same_model_warning(models):
+        if warning := grading_model_warning(models):
             click.echo(f"{'':<24}WARNING: {warning}")
 
     # The API keys for the model and the grading model.

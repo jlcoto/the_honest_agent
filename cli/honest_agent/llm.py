@@ -158,6 +158,30 @@ def default_grading_model(model: str) -> str:
     return DEFAULT_GRADING_MODELS[provider_for(model)]
 
 
+# A rough capability rank by model tier, within one provider, from words in the name. Only
+# tiers the providers present as steps up; a name with none of them has no rank, and
+# models from two providers aren't compared.
+_TIERS = {
+    ANTHROPIC: (("haiku", 1), ("sonnet", 2), ("opus", 3), ("fable", 4), ("mythos", 4)),
+    OPENAI: (("nano", 0), ("mini", 1), ("luna", 1), ("sol", 2), ("astra", 3)),
+}
+
+
+def tier(model: str) -> int | None:
+    """`model`'s tier within its provider (Haiku < Sonnet < Opus; Luna < Sol < Astra), or
+    None when the name doesn't say."""
+    name = model.lower()
+    return next((rank for word, rank in _TIERS[provider_for(model)] if word in name), None)
+
+
+def looks_less_capable(grading_model: str, model: str) -> bool:
+    """Whether the grading model is from a lower tier than the agent's, same provider."""
+    if provider_for(grading_model) != provider_for(model):
+        return False
+    judge, agent = tier(grading_model), tier(model)
+    return judge is not None and agent is not None and judge < agent
+
+
 def default_model(environ: Mapping[str, str]) -> str | None:
     """Claude's default when ANTHROPIC_API_KEY is set (including when both keys are),
     else OpenAI's when OPENAI_API_KEY is set, else None."""

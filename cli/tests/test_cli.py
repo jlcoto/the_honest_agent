@@ -450,3 +450,24 @@ def test_ls_names_a_selector_that_matches_nothing(tmp_path: Path):
 
     assert result.exit_code != 0
     assert "No eval has id 'revenue_1996'" in result.output
+
+
+def test_a_grading_model_from_a_lower_tier_gets_a_warning(fake_run, in_tmp_dir):
+    _run_capturing_models(fake_run, ["--model", "claude-opus-5-5", "--grading-model", "claude-haiku-5-5"])
+
+    assert (
+        "WARNING: The grading model claude-haiku-5-5 looks less capable than the agent's claude-opus-5-5."
+        in (fake_run["output"])
+    )
+    assert "#choosing-the-grading-model" in fake_run["output"]
+
+
+def test_tiers_compare_within_a_provider_only():
+    from honest_agent.llm import looks_less_capable
+
+    assert looks_less_capable("claude-sonnet-5-5", "claude-opus-5-5")
+    assert looks_less_capable("gpt-6-luna", "gpt-6-astra")
+    assert not looks_less_capable("claude-opus-5-5", "claude-haiku-5-5")
+    assert not looks_less_capable("claude-sonnet-5-5", "claude-sonnet-5")  # same tier
+    assert not looks_less_capable("claude-haiku-5-5", "gpt-6-astra")  # two providers
+    assert not looks_less_capable("gpt-5.5", "gpt-6-astra")  # no tier in the name

@@ -39,8 +39,7 @@ SETTINGS = {
         "both",
         "The model for grading: it pulls the value out for `extract_match` and judges the answer for "
         "`llm_judge` (`contains` uses none). Default: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` "
-        "for an OpenAI one. If you change it, keep it a different model, at least as capable as the agent's "
-        "([Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model)).",
+        "for an OpenAI one. See [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model).",
     ),
     "effort": (
         "both",

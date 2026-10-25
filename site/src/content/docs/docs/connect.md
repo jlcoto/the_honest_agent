@@ -112,8 +112,8 @@ targets:
   `extract_match` has it pull the value out of the answer, `llm_judge` has it judge the
   answer. `contains` uses none. Without one, honest-agent uses a stronger model from the
   agent's provider: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` for an OpenAI
-  one. You can change it; see
-  [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model) first.
+  one. You can change it; [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model)
+  sums up what research says about the choice.
 - **`effort`** sets how much the agent's model thinks before it answers: `low`, `medium`
   or `high`. Without it, none is sent and the provider's default applies. The effort is
   part of what you evaluate: the report shows each model and effort as its own agent

@@ -226,16 +226,19 @@ is enough:
 | OpenAI | `gpt-6-luna` | `gpt-6.1-sol`, at low effort |
 
 You can change both with `model` and `grading_model` (see [Models](/docs/connect/#models)).
-If you change the grading model, keep two things true:
+The choice is yours. Two findings are worth knowing when you make it:
 
-- **It isn't the agent's model.** A model tends to favour its own answers. Anthropic's
+- **Models tend to favour their own answers.** Anthropic's
   [guide to automating eval design](https://claude.dev/blog/automating-eval-design-and-hillclimbing/)
-  puts it plainly: "You pick the judge model, and it should not be the model you are
-  testing." `run` and `debug` warn when the two are the same.
-- **It's at least as capable as the agent's model.** A judge that is no more accurate
-  than the model it grades gives a weak signal: in
-  [Dorner, Nastl and Hardt (ICLR 2025)](https://arxiv.org/abs/2410.13341), such a judge
-  could at most halve the human-checked answers an evaluation needs.
+  says: "You pick the judge model, and it should not be the model you are testing."
+- **A judge's accuracy limits what it can tell you.** In
+  [Dorner, Nastl and Hardt (ICLR 2025)](https://arxiv.org/abs/2410.13341), a judge that is
+  no more accurate than the model it grades could at most halve the human-checked answers
+  an evaluation needs.
+
+`run` and `debug` print a warning, with a link to this section, when the grading model is
+the agent's own model or comes from a lower tier of the same provider: Haiku below Sonnet
+below Opus, or Luna below Sol below Astra.
 
 Keep the grading model the same across runs you compare, so a change in scores comes from
 the agent, not the grading.
