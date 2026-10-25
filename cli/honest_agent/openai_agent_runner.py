@@ -13,7 +13,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from .agent_runner import AgentClient
-from .llm import openai_client
+from .llm import OPENAI, effort_params, openai_client
 
 if TYPE_CHECKING:
     from .raw import EvalRecorder
@@ -37,6 +37,7 @@ class OpenAIMCPAgentClient(AgentClient):
         max_tool_steps: int = 5,
         instructions: str | None = None,
         cache_key: str | None = None,
+        effort: str | None = None,
         client: Any = None,
     ):
         self._openai = client or openai_client()
@@ -49,6 +50,9 @@ class OpenAIMCPAgentClient(AgentClient):
         # OpenAI caches a repeated prompt start by itself; one key per run keeps a run's
         # calls on the same cache.
         self._optional = {"prompt_cache_key": cache_key} if cache_key else {}
+        # Unset: nothing is sent, and the model runs at the provider's default effort.
+        self._effort = effort
+        self._optional |= effort_params(OPENAI, effort)
 
     async def run(self, prompt: str, record: EvalRecorder) -> None:
         chat: list[dict] = [{"role": "user", "content": prompt}]
@@ -63,6 +67,8 @@ class OpenAIMCPAgentClient(AgentClient):
             }
             if self._system:
                 request["system"] = "server instructions"  # in full in raw.runs.settings
+            if self._effort:
+                request["effort"] = self._effort
             response = await record.call(
                 "model_call",
                 "openai",

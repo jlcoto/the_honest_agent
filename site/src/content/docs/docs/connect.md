@@ -95,21 +95,34 @@ honest-agent works with Anthropic (Claude) and OpenAI (GPT) models. You only nee
 provider you use: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
 
 ```yaml
-model: claude-sonnet-4-5        # for every target
+model: claude-haiku-5-5         # for every target
 targets:
   sales-agent:
-    model: claude-sonnet-4-5    # or per target
-    grading_model: claude-haiku-5-5
+    model: claude-sonnet-5-5    # or per target
+    grading_model: claude-opus-5-5
+    effort: medium
 ```
 
 - **`model`** runs the agent. Without one, honest-agent picks a small, cheap model from
   the key it finds: `claude-haiku-5-5` if `ANTHROPIC_API_KEY` is set, otherwise
-  `gpt-5.4-mini`. It prints which one it chose.
+  `gpt-6-luna`. It prints which one it chose.
 - **The provider comes from the name:** `gpt-*`, `o3`, `o4-mini` and similar are OpenAI;
   anything else is Claude.
 - **`grading_model`** is the model for grading, for both methods that use one:
   `extract_match` has it pull the value out of the answer, `llm_judge` has it judge the
-  answer. `contains` uses none. Without one, `model` grades too.
+  answer. `contains` uses none. Without one, honest-agent uses a stronger model from the
+  agent's provider: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` for an OpenAI
+  one. You can change it; [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model)
+  sums up what research says about the choice.
+- **`effort`** sets how much the agent's model thinks before it answers: `low`, `medium`
+  or `high`. Without it, none is sent and the provider's default applies. The effort is
+  part of what you evaluate: the report shows each model and effort as its own agent
+  model, such as `claude-haiku-5-5 · medium`.
+- **`grading_effort`** does the same for the grading model. The default grading model runs
+  at `low`: grading against an expected answer needs little thinking. A grading model you
+  choose runs at its provider's default unless you set it.
+- Claude Haiku 4.5 and Sonnet 4.5 and OpenAI's GPT-4 models don't accept an effort, so
+  `run` stops if one is set for them.
 
 ## Other target settings
 
