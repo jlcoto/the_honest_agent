@@ -4,6 +4,24 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
+## Unreleased
+
+- **A stronger default grading model, never the agent's own.** Without `grading_model`,
+  grading used the agent's model, so an agent graded its own answers. Now the default is
+  a stronger model from the agent's provider, at low effort: `claude-sonnet-5-5` for
+  Claude agents, `gpt-6.1-sol` for OpenAI ones. Grades can change for runs that relied on
+  the old default; set `grading_model` to keep grading with the same model as before.
+  `run` and `debug` warn when the grading model is the agent's own model, or a lower
+  tier of the same provider (Haiku below Sonnet below Opus, Luna below Sol below Astra).
+- **The default OpenAI model is now `gpt-6-luna`** (was `gpt-5.4-mini`): about a ninth
+  of the price, and newer. Set `model: gpt-5.4-mini` to keep the old one.
+- **`effort` and `grading_effort`:** how much the agent's and the grading model think
+  (`low`, `medium` or `high`), in the config file or with `--effort` and
+  `--grading-effort`. Without `effort`, none is sent, as before. Both are stored with
+  each result (`effort` and `grading_effort` columns), and the report shows a model run
+  at an effort as its own model, such as `claude-haiku-5-5 · high`. Run
+  `honest-agent rebuild` to add the columns to older results (empty there).
+
 ## v0.3.1 (alpha) — 2026-10-24
 
 - **The Docker image is built for arm64 too** (`linux/amd64` and `linux/arm64`). The
