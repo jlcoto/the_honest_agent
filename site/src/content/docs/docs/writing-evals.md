@@ -214,8 +214,31 @@ one-sentence reason. It's the only method with partial credit.
 - The score comes from a model, so a borderline answer may pass one run and fail the
   next. The reason it gives shows why.
 
-Both `extract_match` and `llm_judge` use the same model: the target's `grading_model`, or
-its `model` if none is set (see [Models](/docs/connect/#models)).
+### Choosing the grading model
+
+Both `extract_match` and `llm_judge` use the same model, the grading model. By default
+it's a stronger model than the default agent, from the agent's provider, so one API key
+is enough:
+
+| Agent's provider | Default agent model | Default grading model |
+|---|---|---|
+| Anthropic | `claude-haiku-5-5` | `claude-sonnet-5-5`, at low effort |
+| OpenAI | `gpt-6-luna` | `gpt-6.1-sol`, at low effort |
+
+You can change both with `model` and `grading_model` (see [Models](/docs/connect/#models)).
+If you change the grading model, keep two things true:
+
+- **It isn't the agent's model.** A model tends to favour its own answers. Anthropic's
+  [guide to automating eval design](https://claude.dev/blog/automating-eval-design-and-hillclimbing/)
+  puts it plainly: "You pick the judge model, and it should not be the model you are
+  testing." `run` and `debug` warn when the two are the same.
+- **It's at least as capable as the agent's model.** A judge that is no more accurate
+  than the model it grades gives a weak signal: in
+  [Dorner, Nastl and Hardt (ICLR 2025)](https://arxiv.org/abs/2410.13341), such a judge
+  could at most halve the human-checked answers an evaluation needs.
+
+Keep the grading model the same across runs you compare, so a change in scores comes from
+the agent, not the grading.
 
 ## Checking provenance
 

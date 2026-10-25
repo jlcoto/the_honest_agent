@@ -143,7 +143,7 @@ def test_example_with_openai_uses_its_cheap_model(in_tmp_dir: Path, monkeypatch)
 
     assert result.exit_code == 0, result.output
     folder = in_tmp_dir / "honest-agent-example"
-    assert load_config(folder / "honest_agent_config.yml").shared["model"] == "gpt-5.4-mini"
+    assert load_config(folder / "honest_agent_config.yml").shared["model"] == "gpt-6-luna"
     assert "OPENAI_API_KEY=" in (folder / ".env").read_text()
 
 

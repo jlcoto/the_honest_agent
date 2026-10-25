@@ -39,6 +39,8 @@ _ENV_VARS = [
     "MOTHERDUCK_TOKEN",
     "HONEST_AGENT_MODEL",
     "HONEST_AGENT_GRADING_MODEL",
+    "HONEST_AGENT_EFFORT",
+    "HONEST_AGENT_GRADING_EFFORT",
     "HONEST_AGENT_AGENT_NAME",
     "HONEST_AGENT_CONFIG_FILE",
 ]
@@ -325,3 +327,18 @@ def test_only_env_var_templates_are_supported(tmp_path: Path):
 
     with pytest.raises(ConfigError, match="only .*env_var"):
         load_config(path)
+
+
+def test_efforts_in_the_config_apply_and_are_checked(project, fake_run):
+    config = project / "honest_agent_config.yml"
+    original = config.read_text()
+    config.write_text("effort: High\ngrading_model: claude-opus-5-5\ngrading_effort: medium\n" + original)
+
+    result, run = _run(fake_run, "--model", "claude-haiku-5-5")  # the file's Haiku 4.5 takes no effort
+
+    assert result.exit_code == 0, result.output
+    assert (run["effort"], run["grading_effort"]) == ("high", "medium")
+    config.write_text("effort: max\n" + original)
+    result, _ = _run(fake_run, "--model", "claude-haiku-5-5")
+    assert result.exit_code != 0
+    assert "effort must be one of low, medium, high; got 'max'" in result.output
