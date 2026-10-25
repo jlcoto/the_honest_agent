@@ -24,8 +24,6 @@ CLEAN_ENV = {
         "OPENAI_API_KEY",
         "HONEST_AGENT_MODEL",
         "HONEST_AGENT_GRADING_MODEL",
-        "HONEST_AGENT_EFFORT",
-        "HONEST_AGENT_GRADING_EFFORT",
         "MCP_COMMAND",
         "MCP_URL",
         "MCP_BEARER_TOKEN",
@@ -219,18 +217,3 @@ def test_an_eval_file_that_isnt_valid_yaml_is_named(demo_project):
     evals_line = _lines(result.output)["Evals"]
     assert evals_line.startswith("FAILED   b.yml isn't valid YAML (line 4, column 23):")
     assert "<unicode string>" not in result.output
-
-
-def test_debug_shows_the_efforts_and_warns_when_the_agent_grades_itself(demo_project):
-    result = _debug("--model", "claude-sonnet-5-5")
-
-    lines = _lines(result.output)
-    assert "model claude-sonnet-5-5, grading model claude-sonnet-5-5 (low effort)" in lines["Variables"]
-    assert "WARNING: The agent and the grading model are both claude-sonnet-5-5." in result.output
-
-
-def test_debug_fails_the_config_check_for_an_effort_the_model_rejects(demo_project):
-    result = _debug("--effort", "low")  # the demo config's model is claude-haiku-4-5
-
-    assert result.exit_code == 1
-    assert _lines(result.output)["Config"].startswith("FAILED   claude-haiku-4-5 doesn't accept an effort setting")

@@ -78,10 +78,8 @@ percentage points, on the evals both ran.
 - **Scores over time** has one row per model, with a point for its last run each day.
 
 To compare models, run the same evals with each one:
-`honest-agent run --model gpt-6-luna`. Keep the same `--grading-model` for every run, so
-the grading is the same and the comparison is fair. Set it explicitly when you compare
-providers: the default grading model follows the agent's provider. A model run at
-different efforts shows as separate models, such as `claude-haiku-5-5 · high`.
+`honest-agent run --model gpt-5.4-mini`. Keep the same `--grading-model` for every run, so
+the grading is the same and the comparison is fair.
 
 ## A result
 

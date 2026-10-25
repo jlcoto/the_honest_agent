@@ -38,18 +38,7 @@ SETTINGS = {
     "grading_model": (
         "both",
         "The model for grading: it pulls the value out for `extract_match` and judges the answer for "
-        "`llm_judge` (`contains` uses none). Default: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` "
-        "for an OpenAI one. See [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model).",
-    ),
-    "effort": (
-        "both",
-        "How much the agent's model thinks before it answers: `low`, `medium` or `high`. Default: none is "
-        "sent, so the provider's default applies.",
-    ),
-    "grading_effort": (
-        "both",
-        "How much the grading model thinks: `low`, `medium` or `high`. Default: `low` for the default "
-        "grading model; the provider's default for one you choose.",
+        "`llm_judge` (`contains` uses none). Default: `model`.",
     ),
     "max_tool_steps": (
         "both",

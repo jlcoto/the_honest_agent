@@ -11,7 +11,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .agent_runner import AgentClient, plain_content
-from .llm import ANTHROPIC, effort_params
 
 if TYPE_CHECKING:
     from .raw import EvalRecorder
@@ -40,7 +39,6 @@ class AnthropicMCPAgentClient(AgentClient):
         tools: list,
         max_tool_steps: int = 5,
         instructions: str | None = None,
-        effort: str | None = None,
         client: Any = None,
     ):
         if client is None:
@@ -52,8 +50,6 @@ class AnthropicMCPAgentClient(AgentClient):
         self._model = model
         self._tools = [_mcp_tool_to_anthropic_schema(t) for t in tools]
         self._max_tool_steps = max_tool_steps
-        # Unset: nothing is sent, and the model runs at the provider's default effort.
-        self._effort = effort
         # The server's instructions, sent as the system prompt like Claude's own clients do.
         self._system = [{"type": "text", "text": instructions}] if instructions else []
         # Tools and system are the same in every call: one cache breakpoint at their end
@@ -76,10 +72,7 @@ class AnthropicMCPAgentClient(AgentClient):
             }
             if self._system:
                 request["system"] = "server instructions"  # in full in raw.runs.settings
-            if self._effort:
-                request["effort"] = self._effort
             optional = {"system": self._system} if self._system else {}
-            optional |= effort_params(ANTHROPIC, self._effort)
             response = await record.call(
                 "model_call",
                 "anthropic",
