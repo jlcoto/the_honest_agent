@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 
 from .agent_runner import AgentClient
+from .config_file import CONFIG_FILE_NAME
 from .derive import CUT_OFF_ANSWER, derive_result, recorded_answer
 from .eval_loader import (
     EvalDefinition,
@@ -22,6 +23,7 @@ from .eval_loader import (
 )
 from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, NOT_GRADED, grading_prompt
 from .llm import OPENAI, Judge, make_judge, provider_for
+from .prices import PRICES_AS_OF, price_for, usd
 from .raw import RunRecorder
 from .sql_guard import ReadOnlySQL
 from .storage import connect, write_derived
@@ -93,6 +95,37 @@ def with_effort(model: str, effort: str | None) -> str:
     return f"{model} ({effort} effort)" if effort else model
 
 
+def saved_prices(model: str, grading_model: str, custom: dict | None) -> dict:
+    """The prices a run saves for its two models (None for one without a price), so its
+    cost keeps them when the table changes."""
+    models = {}
+    for name in (model, grading_model):
+        price, source = price_for(name, custom)
+        models[name] = {**price.to_dict(), "source": source} if price else None
+    return {"as_of": PRICES_AS_OF, "models": models}
+
+
+def cost_line(rows: list[dict], model: str, grading_model: str) -> str:
+    """`Estimated cost: $0.025 (agent $0.008 · grading $0.018)`, or what could be priced
+    and the model that couldn't; never $0 for a model without a price."""
+    agent = [r["agent_cost_usd"] for r in rows]
+    grading = [r["grading_cost_usd"] for r in rows]
+    agent_cost = None if None in agent else sum(agent)
+    grading_cost = None if None in grading else sum(grading)
+    if agent_cost is not None and grading_cost is not None:
+        total = usd(agent_cost + grading_cost)
+        return f"Estimated cost: {total} (agent {usd(agent_cost)} · grading {usd(grading_cost)})"
+    add = f"under prices: in {CONFIG_FILE_NAME}"
+    if agent_cost is not None:
+        missing = f"no price for the grading model {grading_model}"
+        return f"Estimated cost: {usd(agent_cost)} for the agent · {missing}; add it {add}"
+    if grading_cost is not None:
+        return f"Estimated cost: {usd(grading_cost)} for grading · no price for the agent's model {model}; add it {add}"
+    if model == grading_model:
+        return f"Estimated cost: unknown (no price for {model}); add it {add}"
+    return f"Estimated cost: unknown (no prices for {model} or {grading_model}); add them {add}"
+
+
 def resolve_agent_name(explicit: str | None, connected_client) -> str:
     """`--agent-name` wins; otherwise the name the MCP server reported during the handshake."""
     return explicit or connected_client.server_info.name
@@ -119,6 +152,7 @@ async def run_evals(
     grading_model: str,
     effort: str | None = None,
     grading_effort: str | None = None,
+    prices: dict[str, dict[str, float]] | None = None,
 ) -> int:
     """Runs the selected evals and stores the results; returns how many fell below
     their thresholds (`run` exits 1 when any did)."""
@@ -190,6 +224,7 @@ async def run_evals(
                 # None: not sent, so the provider's default applied.
                 "effort": effort,
                 "grading_effort": grading_effort,
+                "prices": saved_prices(model, grading_model, prices),
             },
             tools_offered=tools,
         )
@@ -224,6 +259,7 @@ async def run_evals(
         await mcp_client.__aexit__(None, None, None)
 
     click.echo(f"Wrote {len(rows)} result(s) to {results_path}")
+    click.echo(cost_line(rows, model, grading_model))
 
     failures = failing_rows(rows)
     if failures:

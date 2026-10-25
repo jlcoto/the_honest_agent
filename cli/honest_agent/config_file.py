@@ -15,6 +15,8 @@ from flags, environment variables or built-in defaults, as before.
         bearer_token_env: MOTHERDUCK_TOKEN                # names the variable, never the secret
         evals_dir: evals_motherduck
         max_tool_steps: 10
+    prices:                                               # optional: USD per million tokens
+      my-proxy-model: {input: 3.00, output: 15.00}        # for models the built-in table lacks
 
 Precedence, per setting: command-line flag > environment variable > this file > built-in
 default (applied in cli.py). Relative paths are resolved from the file's own folder, so a
@@ -40,12 +42,14 @@ from typing import Any
 
 import yaml
 
+from .prices import CUSTOM_PRICE_KEYS
+
 CONFIG_FILE_NAME = "honest_agent_config.yml"
 EXAMPLE_CONFIG_FILE_NAME = "honest_agent_config.example.yml"
 
 # Settings any target can set, or the top level can set for every target.
 _SHARED_KEYS = {"model", "grading_model", "effort", "grading_effort", "max_tool_steps"}
-_TOP_LEVEL_KEYS = _SHARED_KEYS | {"results_path", "default_target", "targets"}
+_TOP_LEVEL_KEYS = _SHARED_KEYS | {"results_path", "default_target", "targets", "prices"}
 # results_path stays top-level only: every agent's results go in one file, so one report
 # covers every agent.
 _TARGET_KEYS = _SHARED_KEYS | {
@@ -86,6 +90,8 @@ class Config:
     # Each target's settings as written: env_var() and paths are resolved by target().
     targets: dict[str, dict[str, Any]]
     shared: dict[str, Any]
+    # `prices:`, by model name: USD per million tokens (prices.py).
+    prices: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def target(self, name: str | None) -> Target:
         """The named target, else `default_target`, else the only target if there is one."""
@@ -142,7 +148,9 @@ def load_config(path: Path) -> Config:
         raise ConfigError(f"{path.name} must be a mapping of settings.")
     _check_keys(doc, _TOP_LEVEL_KEYS, f"{path.name}")
     raw_targets = doc.get("targets")
-    doc = {**_render({k: v for k, v in doc.items() if k != "targets"}, path.name), "targets": raw_targets}
+    prices = _prices(doc.get("prices"), path.name)
+    rest = {k: v for k, v in doc.items() if k not in ("targets", "prices")}
+    doc = {**_render(rest, path.name), "targets": raw_targets}
 
     base = path.parent
     targets: dict[str, dict[str, Any]] = {}
@@ -167,7 +175,31 @@ def load_config(path: Path) -> Config:
         default_target=default_target,
         targets=targets,
         shared={key: doc[key] for key in _SHARED_KEYS if key in doc},
+        prices=prices,
     )
+
+
+def _prices(section: Any, name: str) -> dict[str, dict[str, float]]:
+    """`prices:`: each model's input and output (required) and cache_read and cache_write
+    (optional), in USD per million tokens."""
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise ConfigError(f"prices in {name} must map model names to their prices.")
+    prices = {}
+    for model, values in section.items():
+        where = f"prices.{model} in {name}"
+        if not isinstance(values, dict):
+            raise ConfigError(f"{where} must set input and output (USD per million tokens).")
+        _check_keys(values, set(CUSTOM_PRICE_KEYS), where)
+        missing = [key for key in ("input", "output") if key not in values]
+        if missing:
+            raise ConfigError(f"{where} needs {' and '.join(missing)} (USD per million tokens).")
+        for key, value in values.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+                raise ConfigError(f"{key} in {where} must be a number of dollars per million tokens; got {value!r}.")
+        prices[str(model)] = {key: float(value) for key, value in values.items()}
+    return prices
 
 
 def _render(settings: dict[str, Any], where: str) -> dict[str, Any]:

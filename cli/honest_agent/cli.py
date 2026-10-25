@@ -38,6 +38,7 @@ from .llm import (
     looks_less_capable,
     provider_for,
 )
+from .prices import PRICES_AS_OF, price_for
 from .raw import read_records
 from .runner import RunError, run_evals, with_effort
 from .storage import (
@@ -526,6 +527,7 @@ def run(
                 grading_model=grading_model,
                 effort=models.effort,
                 grading_effort=models.grading_effort,
+                prices=config.prices if config else None,
             )
         )
     except RunError as exc:
@@ -672,6 +674,9 @@ def debug(
             f"grading model {with_effort(grading_model, models.grading_effort)}",
         )
 
+    if model is not None:
+        report.ok("Prices", price_sources(model, grading_model, config))
+
     try:
         evals_dir = _evals_dir(evals_dir, chosen)
         definitions = load_evals(Path(evals_dir))
@@ -709,6 +714,21 @@ def debug(
     except Exception as exc:
         report.failed("Results store", str(exc))
     _finish(ctx, report)
+
+
+def price_sources(model: str, grading_model: str, config: Config | None) -> str:
+    """Where each model's price comes from, for `debug`: `claude-haiku-5-5 built-in (as of
+    2026-10-25) · my-proxy-model from honest_agent_config.yml`, or that it has none."""
+    shown = []
+    for name in dict.fromkeys([model, grading_model]):
+        _, source = price_for(name, config.prices if config else None)
+        if source == "config":
+            shown.append(f"{name} from {config.path.name}")
+        elif source == "built-in":
+            shown.append(f"{name} built-in (as of {PRICES_AS_OF})")
+        else:
+            shown.append(f"{name} no price (add it under prices: in {CONFIG_FILE_NAME})")
+    return " · ".join(shown)
 
 
 def _not_set(names: list[str]) -> str:

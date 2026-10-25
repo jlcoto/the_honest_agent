@@ -123,6 +123,10 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("agent_cache_write_tokens", "integer"),
     ("grading_input_tokens", "integer"),
     ("grading_output_tokens", "integer"),
+    # Estimated USD, from those tokens and the prices the run saved (prices.py). NULL when
+    # the model had no price, never 0; grading_cost_usd is 0 when nothing was graded by a model.
+    ("agent_cost_usd", "double"),
+    ("grading_cost_usd", "double"),
     # When the eval's last recorded call ended (run_timestamp is when it started).
     ("finished_at", "varchar"),
     # When derive.py built this row, and the honest-agent version that did; a

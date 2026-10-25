@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 from .eval_loader import EvalDefinition
 from .grading import CUT_OFF_REPLY, Grade, score
 from .llm import OPENAI, response_cache_tokens, response_stop, response_text, response_tokens
+from .prices import Price, call_cost
 from .provenance import check_provenance
 from .raw import honest_agent_version
 from .sql_capture import extract_sql_calls
@@ -197,6 +198,16 @@ def recorded_answer(con, result_id: str) -> tuple[str, bool]:
     return agent_answer(agent_events, json.loads(run["settings"])["max_tool_steps"])
 
 
+def _cost(settings: dict, model: str, responses: list[tuple[str, dict]]) -> float | None:
+    """Estimated USD for these calls at the price the run saved for `model`; None when it
+    had none (or the run is from before prices were saved)."""
+    saved = (settings.get("prices") or {}).get("models", {}).get(model)
+    if saved is None:
+        return None
+    price = Price.from_dict({k: v for k, v in saved.items() if k != "source"})
+    return sum(call_cost(price, provider, response) for provider, response in responses)
+
+
 def derive_result(con, result_id: str) -> Derived:
     """One result's derived rows, from its raw record alone."""
     run, evaluation, events = _read(con, result_id)
@@ -291,6 +302,10 @@ def derive_result(con, result_id: str) -> Derived:
         "agent_cache_write_tokens": sum(t[1] for t in agent_cache),
         "grading_input_tokens": grading_tokens[0],
         "grading_output_tokens": grading_tokens[1],
+        "agent_cost_usd": _cost(settings, run["model"], agent_responses),
+        "grading_cost_usd": _cost(settings, run["judge_model"], [(grading["provider"], grading["response"])])
+        if grading
+        else 0.0,
         "derived_at": datetime.now(timezone.utc).strftime(_TIME),
         "honest_agent_version": honest_agent_version(),
         # -- traces --

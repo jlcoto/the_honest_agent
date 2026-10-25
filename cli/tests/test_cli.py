@@ -303,7 +303,7 @@ async def _returns(value):
     return value
 
 
-def _run_loop(path: str, agent, judge, definitions) -> list[dict]:
+def _run_loop(path: str, agent, judge, definitions, prices: dict | None = None) -> list[dict]:
     con = connect(path)
     try:
         recorder = RunRecorder(con)
@@ -313,7 +313,7 @@ def _run_loop(path: str, agent, judge, definitions) -> list[dict]:
             target="demo",
             model="claude-test",
             judge_model="claude-judge",
-            settings={"max_tool_steps": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": []},
+            settings={"max_tool_steps": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": [], "prices": prices},
             tools_offered=[],
         )
         return asyncio.run(eval_loop(agent, definitions, judge, "claude-judge", "run_1", recorder, con))
@@ -371,6 +371,21 @@ def test_the_grading_effort_is_sent_recorded_and_stored(tmp_path: Path):
     assert json.loads(rec["events"][1]["request"])["effort"] == "low"
     (stored,) = read_all_results(path)
     assert (stored["effort"], stored["grading_effort"]) == ("high", "low")
+
+
+def test_each_result_stores_its_estimated_cost_at_the_prices_the_run_saved(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])
+    evals = [definition(grading_method="llm_judge", expected_answer="2297")]
+    # claude_reply reports 10 input and 5 output tokens; the judge's reply the same.
+    prices = {"models": {"claude-test": {"input": 1.0, "output": 2.0, "cache_read": 0.1, "cache_write": 1.25}}}
+
+    (row,) = _run_loop(path, agent, _ScriptedJudge('{"score": 1.0}'), evals, prices=prices)
+
+    assert row["agent_cost_usd"] == pytest.approx((10 * 1.0 + 5 * 2.0) / 1e6)
+    assert row["grading_cost_usd"] is None  # claude-judge has no saved price: unknown, not 0
+    (stored,) = read_all_results(path)
+    assert stored["agent_cost_usd"] == pytest.approx(row["agent_cost_usd"])
 
 
 def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):

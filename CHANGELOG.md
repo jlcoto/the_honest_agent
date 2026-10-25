@@ -6,6 +6,14 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 ## Unreleased
 
+- **`run` estimates what the run cost:** a line after the results are written, such as
+  `Estimated cost: $0.025 (agent $0.008 · grading $0.018)`. It's token counts × the
+  providers' published prices, from a table that ships with each release, so the
+  provider's bill is the real figure. Each result stores its estimate in the new
+  `agent_cost_usd` and `grading_cost_usd` columns, at the prices of the day it ran. A
+  model with no price is named instead of counted as $0; add it under the new `prices:`
+  key in `honest_agent_config.yml`, which can also override a built-in price. `debug`
+  shows where each model's price comes from. Results from earlier runs have no cost.
 - **A stronger default grading model, never the agent's own.** Without `grading_model`,
   grading used the agent's model, so an agent graded its own answers. Now the default is
   a stronger model from the agent's provider, at low effort: `claude-sonnet-5-5` for
