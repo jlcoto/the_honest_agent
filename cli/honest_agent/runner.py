@@ -22,6 +22,7 @@ from .eval_loader import (
 )
 from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, NOT_GRADED, grading_prompt
 from .llm import OPENAI, Judge, make_judge, provider_for
+from .progress import Progress
 from .raw import RunRecorder
 from .sql_guard import ReadOnlySQL
 from .storage import connect, write_derived
@@ -44,37 +45,48 @@ async def eval_loop(
     """Runs and grades each eval, recording every call as it returns (raw layer), then
     derives the eval's results from that record and writes them before the next one."""
     rows: list[dict] = []
-    for definition in definitions:
-        click.echo(f"  - {definition.eval_id}: {definition.prompt!r}")
-        result_id = str(uuid.uuid4())
-        record = recorder.start_eval(result_id, run_id, definition)
-        try:
-            await agent.run(definition.prompt, record)
-            answer, hit_turn_limit = recorded_answer(con, result_id)
-            if hit_turn_limit:
-                click.echo(f"    WARNING: {definition.eval_id} hit the step limit without a final answer.")
-            elif answer.startswith(CUT_OFF_ANSWER):
-                click.echo(f"    WARNING: {definition.eval_id}: {answer}")
-            prompt = grading_prompt(definition.grading_method, answer, definition.expected_answer, definition.prompt)
-            if prompt is not None:
-                schema = GRADING_SCHEMAS[definition.grading_method]
-                request = {"model": grading_model, "max_tokens": GRADING_MAX_TOKENS, "prompt": prompt, "schema": schema}
-                await record.call(
-                    "grading_call",
-                    provider_for(grading_model),
-                    request,
-                    judge.complete(prompt, model=grading_model, max_tokens=GRADING_MAX_TOKENS, schema=schema),
+    async with Progress([d.eval_id for d in definitions]) as progress:
+        for definition in definitions:
+            progress.start(definition.eval_id)
+            warnings: list[str] = []
+            result_id = str(uuid.uuid4())
+            record = recorder.start_eval(result_id, run_id, definition)
+            try:
+                await agent.run(definition.prompt, record)
+                answer, hit_turn_limit = recorded_answer(con, result_id)
+                if hit_turn_limit:
+                    warnings.append(f"{definition.eval_id} hit the step limit without a final answer.")
+                elif answer.startswith(CUT_OFF_ANSWER):
+                    warnings.append(f"{definition.eval_id}: {answer}")
+                prompt = grading_prompt(
+                    definition.grading_method, answer, definition.expected_answer, definition.prompt
                 )
-            derived = derive_result(con, result_id)
-        except Exception as exc:
-            record.eval_error(exc)
-            raise
-        write_derived(con, [derived.row])
-        if (derived.row.get("accuracy_rationale") or "").startswith(NOT_GRADED):
-            click.echo(f"    WARNING: {definition.eval_id}: {derived.row['accuracy_rationale']}")
-        for sql in derived.unparsed:
-            click.echo(f"    WARNING: couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
-        rows.append(derived.row)
+                if prompt is not None:
+                    schema = GRADING_SCHEMAS[definition.grading_method]
+                    request = {
+                        "model": grading_model,
+                        "max_tokens": GRADING_MAX_TOKENS,
+                        "prompt": prompt,
+                        "schema": schema,
+                    }
+                    await record.call(
+                        "grading_call",
+                        provider_for(grading_model),
+                        request,
+                        judge.complete(prompt, model=grading_model, max_tokens=GRADING_MAX_TOKENS, schema=schema),
+                    )
+                derived = derive_result(con, result_id)
+            except Exception as exc:
+                record.eval_error(exc)
+                progress.fail(warnings)
+                raise
+            write_derived(con, [derived.row])
+            if (derived.row.get("accuracy_rationale") or "").startswith(NOT_GRADED):
+                warnings.append(f"{definition.eval_id}: {derived.row['accuracy_rationale']}")
+            for sql in derived.unparsed:
+                warnings.append(f"couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
+            progress.finish(derived.row, warnings)
+            rows.append(derived.row)
     return rows
 
 

@@ -4,6 +4,14 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
+## Unreleased
+
+- **`run` shows its progress like dbt:** one line per eval as it finishes, with its
+  position, PASS or FAIL against its thresholds, its scores and how long it took, as in
+  `[2/16] revenue_q4 ... FAIL  accuracy 0.00 · provenance 1.00  [14.9s]`. The line no
+  longer shows the eval's prompt. In a terminal, a progress bar on the bottom line names
+  the eval running and its time; CI logs, pipes and files get only the lines.
+
 ## v0.3.1 (alpha) — 2026-10-24
 
 - **The Docker image is built for arm64 too** (`linux/amd64` and `linux/arm64`). The
