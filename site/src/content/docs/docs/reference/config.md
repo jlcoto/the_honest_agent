@@ -24,6 +24,7 @@ targets:
 | Setting | What it does |
 |---|---|
 | `default_target` | The target `run`, `debug`, `ls` and `notify` use without `--target`. |
+| `prices` | Prices for models the built-in table doesn't have, or to override it, by model name: `input`, `output`, and optionally `cache_read` and `cache_write`, in USD per million tokens. See [What a run costs](/docs/running-evals/#what-a-run-costs). |
 | `results_path` | Where results are stored: a local DuckDB file (default `./honest_agent_results/results.duckdb`) or a MotherDuck database as `md:<name>`. To keep the file in cloud storage such as S3, copy it in and out around each run ([Storing results](/docs/storing-results/#in-cloud-storage)). Every target shares it, so one report covers every agent. |
 | `targets` | One entry per agent you evaluate, by name. Each holds the target settings below. |
 

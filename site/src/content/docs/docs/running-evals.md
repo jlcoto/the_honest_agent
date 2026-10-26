@@ -23,6 +23,7 @@ Model: claude-haiku-5-5 · grading model: claude-sonnet-5-5 (low effort)
   - top_segment: 'Which market segment has the most customers?'
   - top_nations_last_year: 'Which 5 nations placed the most orders last year?'
 Wrote 4 result(s) to ./honest_agent_results/results.duckdb
+Estimated cost: $0.025 (agent $0.008 · grading $0.018)
 2/4 eval(s) below threshold this run:
   - revenue_q4: accuracy 0.00 < 0.8, provenance 0.50 < 0.7
   - order_total_2026: provenance 0.50 < 0.7
@@ -47,12 +48,73 @@ Run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 complete. Next: `honest-agent report` /
 
 :::caution[Each run costs money]
 Every eval calls the model, and the grading methods `extract_match` and `llm_judge` call
-it again. Start with one eval, check its tokens in the report, then run the rest.
+it again. Start with one eval, check what it cost, then run the rest.
 :::
+
+### What a run costs
+
+After the results are written, `run` prints an estimate of what the run cost, with the
+agent and grading apart:
+
+```
+Estimated cost: $0.025 (agent $0.008 · grading $0.018)
+```
+
+It's an estimate: the token counts each call reports, times the provider's published
+prices. Your provider's bill is the real figure.
+
+- **The prices** come from a table in honest-agent, checked against
+  [Claude's](https://platform.claude.com/docs/en/about-claude/pricing) and
+  [OpenAI's](https://developers.openai.com/api/docs/pricing) pricing pages for each
+  release. Nothing is downloaded during a run.
+- **Each kind of token has its own price:** input, input read from the cache, input
+  written to it, and output, which includes thinking. Each call is priced on its own, so
+  a call over a model's long-prompt threshold (Claude Haiku 5.5 above 100k tokens) gets
+  the higher rate.
+- **Each result keeps its cost** at the prices of the day it ran, in the
+  `agent_cost_usd` and `grading_cost_usd` columns. A later price change, or a
+  `rebuild`, doesn't change it.
+- **A model with no price** is named instead of counted as $0, for example a model behind
+  a proxy or one newer than your honest-agent:
+
+  ```
+  Estimated cost: $0.008 for the agent · no price for the grading model my-proxy-model; add it under prices: in honest_agent_config.yml
+  ```
+
+#### Your own prices
+
+Add a model, or override a built-in price (a negotiated rate, say), under `prices:` at
+the top level of `honest_agent_config.yml`, in USD per million tokens:
+
+```yaml
+prices:
+  my-proxy-model:
+    input: 3.00
+    output: 15.00
+    cache_read: 0.30     # optional; without it, priced as input
+    cache_write: 3.75    # optional; without it, priced as input
+  claude-sonnet-5-5:
+    input: 1.80
+    output: 9.00
+```
+
+- **Each entry applies to the model with that name**, as the agent or as the grading
+  model, so one file can list every model you switch between. An entry no run uses does
+  nothing.
+- **The name must match the model's**, ignoring case. A model id with a date on the end
+  (`claude-sonnet-5-5-20261001`) also matches an entry without it.
+- **Your entries come first,** then the built-in table. An entry has one flat rate, with
+  no long-prompt rate.
+- **To check which price applies,** run `honest-agent debug`. Its Prices line says where
+  each model's price comes from, so a typo shows up before you spend anything:
+
+  ```
+  Prices         OK       claude-haiku-5-5 built-in (as of 2026-10-25) · my-proxy-model from honest_agent_config.yml
+  ```
 
 ### Check first
 
-`honest-agent debug` checks the config, the variables, the evals, the MCP server and the
+`honest-agent debug` checks the config, the variables, the prices, the evals, the MCP server and the
 results store, without calling a model or running a query. Run it after changing your
 setup, before a run that costs money. If it reports a problem, see
 [Troubleshooting](/docs/troubleshooting/).

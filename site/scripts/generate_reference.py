@@ -34,6 +34,12 @@ SETTINGS = {
         "run ([Storing results](/docs/storing-results/#in-cloud-storage)). Every target shares it, so one report "
         "covers every agent.",
     ),
+    "prices": (
+        "top",
+        "Prices for models the built-in table doesn't have, or to override it, by model name: `input`, "
+        "`output`, and optionally `cache_read` and `cache_write`, in USD per million tokens. See "
+        "[What a run costs](/docs/running-evals/#what-a-run-costs).",
+    ),
     "model": ("both", "The model that plays the agent. Default: chosen from the API key you have."),
     "grading_model": (
         "both",
