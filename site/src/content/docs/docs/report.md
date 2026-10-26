@@ -113,7 +113,7 @@ that answer was graded, which tables it read, and the steps it took to get there
 - **SQL calls:** every query the agent sent, in order, and whether it ran or failed.
   Open one to read it: a long query sent on one line shows a line per clause, with its
   keywords coloured; one the agent already wrote over several lines keeps its own. Only
-  the spacing changes, never the words or their case. "Copy" copies the query exactly as
+  the spacing changes, never the words or their case. The copy button copies the query exactly as
   the agent sent it, to run it again. The Trace shows queries the same way.
 - **Trace:** the agent's steps, from the prompt to the final answer, with what they cost
   in all at the top. "Show the raw text" under the final answer shows it exactly as the

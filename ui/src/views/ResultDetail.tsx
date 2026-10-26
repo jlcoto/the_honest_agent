@@ -18,7 +18,7 @@ import {
   toolCallsFor,
 } from '../data/derive'
 import type { GradingCall, ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
-import { Badge, Button, Card, Icon, ScoreStat } from '../ds'
+import { Badge, Button, Card, Icon, IconButton, ScoreStat } from '../ds'
 import { useNarrow } from '../useNarrow'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -106,7 +106,7 @@ function SqlCode({ sql }: { sql: string }) {
     <div ref={ref} style={{ position: 'relative', minWidth: 0 }}>
       <Code
         text={formatSql(sql)}
-        preStyle={{ whiteSpace: 'pre', wordBreak: 'normal', paddingRight: 72, paddingTop: below ? 40 : 12 }}
+        preStyle={{ whiteSpace: 'pre', wordBreak: 'normal', paddingRight: 48, paddingTop: below ? 40 : 12 }}
         render={highlight}
       />
       <CopyButton text={sql} />
@@ -123,32 +123,24 @@ function CopyButton({ text }: { text: string }) {
     return () => clearTimeout(t)
   }, [state])
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        // The clipboard needs a secure page (https or localhost); elsewhere it isn't there.
-        if (!navigator.clipboard) return setState('failed')
-        navigator.clipboard.writeText(text).then(
-          () => setState('copied'),
-          () => setState('failed'),
-        )
-      }}
-      style={{
-        position: 'absolute',
-        top: 6,
-        right: 6,
-        padding: '3px 8px',
-        border: '1px solid var(--border-1)',
-        borderRadius: 'var(--radius-xs)',
-        background: 'var(--bg-surface)',
-        cursor: 'pointer',
-        font: '500 12px/1.4 var(--font-sans)',
-        color: state === 'failed' ? 'var(--acc-wrong-ink)' : state === 'copied' ? 'var(--accent)' : 'var(--fg-2)',
-      }}
-    >
-      {state === 'copied' ? 'Copied' : state === 'failed' ? "Couldn't copy" : 'Copy'}
-    </button>
+    <span style={{ position: 'absolute', top: 6, right: 6, display: 'flex' }}>
+      <IconButton
+        icon={state === 'copied' ? 'check' : 'copy'}
+        label={state === 'copied' ? 'Copied' : state === 'failed' ? "Couldn't copy" : 'Copy query'}
+        variant="secondary"
+        size="sm"
+        active={state === 'copied'}
+        onClick={(e: MouseEvent) => {
+          e.stopPropagation()
+          // The clipboard needs a secure page (https or localhost); elsewhere it isn't there.
+          if (!navigator.clipboard) return setState('failed')
+          navigator.clipboard.writeText(text).then(
+            () => setState('copied'),
+            () => setState('failed'),
+          )
+        }}
+      />
+    </span>
   )
 }
 
