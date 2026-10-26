@@ -3,6 +3,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSPropert
 import { asLabel } from '../components/asLabel'
 import { CostInfo } from '../components/CostInfo'
 import { Markdown } from '../components/Markdown'
+import { formatSql, highlight } from '../components/Sql'
 import { PageHeader } from '../components/PageHeader'
 import {
   accuracyPasses,
@@ -39,15 +40,15 @@ const stack = (gap: number): CSSProperties => ({ display: 'flex', flexDirection:
 const COLLAPSED_LINES = 12
 
 /** A code block that collapses past 12 lines, with a fade and a "Show all N lines" toggle. */
-function Code({ text, color }: { text: string; color?: string }) {
+function Code({ text, color, preStyle, render = (t) => t }: { text: string; color?: string; preStyle?: CSSProperties; render?: (shown: string) => ReactNode }) {
   const [open, setOpen] = useState(false)
   const lines = text.split('\n')
   const long = lines.length > COLLAPSED_LINES
   return (
     <div style={{ ...stack(6), minWidth: 0 }}>
       <div style={{ position: 'relative' }}>
-        <pre style={{ ...codeBlock, color: color ?? codeBlock.color }}>
-          {long && !open ? lines.slice(0, COLLAPSED_LINES).join('\n') : text}
+        <pre style={{ ...codeBlock, color: color ?? codeBlock.color, ...preStyle }}>
+          {render(long && !open ? lines.slice(0, COLLAPSED_LINES).join('\n') : text)}
         </pre>
         {long && !open ? (
           <div
@@ -82,6 +83,72 @@ function Code({ text, color }: { text: string; color?: string }) {
         </button>
       ) : null}
     </div>
+  )
+}
+
+/** A query the agent sent, a line per clause with its keywords coloured. Lines stay whole and
+ * scroll inside the box on a narrow screen, since a wrapped line breaks names and dates. */
+function SqlCode({ sql }: { sql: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  // The Copy button sits in the top corner, beside the first line; when a line would run
+  // under it (a long query, a narrow screen), the query starts below it instead.
+  const [below, setBelow] = useState(false)
+  useLayoutEffect(() => {
+    const pre = ref.current?.querySelector('pre')
+    if (!pre) return
+    const check = () => setBelow(pre.scrollWidth > pre.clientWidth)
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(pre)
+    return () => observer.disconnect()
+  }, [sql])
+  return (
+    <div ref={ref} style={{ position: 'relative', minWidth: 0 }}>
+      <Code
+        text={formatSql(sql)}
+        preStyle={{ whiteSpace: 'pre', wordBreak: 'normal', paddingRight: 72, paddingTop: below ? 40 : 12 }}
+        render={highlight}
+      />
+      <CopyButton text={sql} />
+    </div>
+  )
+}
+
+/** Copies the query exactly as the agent sent it (not the formatted lines), to run it again. */
+function CopyButton({ text }: { text: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  useEffect(() => {
+    if (state === 'idle') return
+    const t = setTimeout(() => setState('idle'), 1500)
+    return () => clearTimeout(t)
+  }, [state])
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        // The clipboard needs a secure page (https or localhost); elsewhere it isn't there.
+        if (!navigator.clipboard) return setState('failed')
+        navigator.clipboard.writeText(text).then(
+          () => setState('copied'),
+          () => setState('failed'),
+        )
+      }}
+      style={{
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        padding: '3px 8px',
+        border: '1px solid var(--border-1)',
+        borderRadius: 'var(--radius-xs)',
+        background: 'var(--bg-surface)',
+        cursor: 'pointer',
+        font: '500 12px/1.4 var(--font-sans)',
+        color: state === 'failed' ? 'var(--acc-wrong-ink)' : state === 'copied' ? 'var(--accent)' : 'var(--fg-2)',
+      }}
+    >
+      {state === 'copied' ? 'Copied' : state === 'failed' ? "Couldn't copy" : 'Copy'}
+    </button>
   )
 }
 
@@ -565,6 +632,7 @@ function StatusDot({ error }: { error: boolean }) {
  * column. SQL a tool only generated (e.g. Cortex Analyst) wasn't sent, so it isn't listed. */
 function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
   const [open, setOpen] = useState<Set<number>>(new Set())
+  const narrow = useNarrow()
   const sent = calls.filter((c) => !c.generated)
   const toggle = (i: number) =>
     setOpen((was) => {
@@ -602,7 +670,8 @@ function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
         <p style={note}>No SQL was run for this answer.</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          {/* Fixed layout: the columns fit the card, so a long query scrolls inside its box on a phone. */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <tbody>
               {sent.map((c, i) => {
                 const sql = (parseJson(c.payload) as { sql?: string } | null)?.sql ?? c.payload
@@ -627,17 +696,21 @@ function SqlCallsCard({ calls }: { calls: ToolCallRow[] }) {
                       </td>
                       <td style={{ ...sqlCell, borderBottom: line }}>
                         <StatusDot error={!!c.is_error} />
-                        <span style={{ font: '400 12.5px/1.4 var(--font-mono)', color: 'var(--fg-1)', verticalAlign: 'middle' }}>
+                        <span style={{ font: '400 12.5px/1.4 var(--font-mono)', color: 'var(--fg-1)', verticalAlign: 'middle', overflowWrap: 'anywhere' }}>
                           {queryPreview(sql)}
                         </span>
                       </td>
                     </tr>
                     {isOpen ? (
                       <tr>
-                        <td style={{ borderBottom: i === sent.length - 1 ? 'none' : '1px solid var(--border-1)' }} />
-                        <td style={{ padding: '14px 14px 14px 0', borderBottom: i === sent.length - 1 ? 'none' : '1px solid var(--border-1)' }}>
+                        {/* On a phone the opened call takes the whole width, under its step. */}
+                        {narrow ? null : <td style={{ borderBottom: i === sent.length - 1 ? 'none' : '1px solid var(--border-1)' }} />}
+                        <td
+                          colSpan={narrow ? 2 : 1}
+                          style={{ padding: narrow ? '12px 0 14px' : '14px 14px 14px 0', borderBottom: i === sent.length - 1 ? 'none' : '1px solid var(--border-1)' }}
+                        >
                           <div style={stack(10)}>
-                            <Code text={sql} />
+                            <SqlCode sql={sql} />
                             {c.is_error && c.error ? <span style={errorText}>{c.error}</span> : null}
                             {!c.is_error && c.result_value != null ? (
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-sunken)', border: '1px solid var(--border-1)' }}>
@@ -846,7 +919,7 @@ function TraceCall({ call, open, ms, sqlCalls }: { call: Call; open: boolean; ms
       </div>
       {open && wasCut ? (
         sql != null ? (
-          <Code text={sql} />
+          <SqlCode sql={sql} />
         ) : (
           <span style={{ ...traceMono(12, 'var(--fg-3)'), whiteSpace: 'pre-wrap' }}>
             {Object.entries(input).map(([k, v]) => `${k}: ${argText(v)}`).join('\n')}

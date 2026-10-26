@@ -24,6 +24,12 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   with tables, lists, bold and code, instead of one run-on line. The Trace's final answer
   has "Show the raw text" for the text as the agent sent it. Display only: grading and
   stored results keep the raw text.
+- **The report formats the agent's SQL:** a long query sent on one line shows a line per
+  clause, with its keywords coloured, in the SQL calls card and the Trace. Only the
+  spacing changes: the words and their case stay as the agent sent them, and a query
+  already written over several lines keeps its own. "Copy" copies a query exactly as
+  sent. On a phone, an opened query now takes the card's whole width and scrolls inside
+  its box instead of being cut off.
 - **A stronger default grading model, never the agent's own.** Without `grading_model`,
   grading used the agent's model, so an agent graded its own answers. Now the default is
   a stronger model from the agent's provider, at low effort: `claude-sonnet-5-5` for
