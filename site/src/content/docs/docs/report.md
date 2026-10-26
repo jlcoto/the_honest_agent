@@ -111,8 +111,8 @@ that answer was graded, which tables it read, and the steps it took to get there
 - **Provenance:** each expected source, with the database, schema and table the agent
   read, or "not read".
 - **SQL calls:** every query the agent sent, in order, and whether it ran or failed.
-  Open one to read it: a long query sent on one line shows a line per clause, with its
-  keywords coloured; one the agent already wrote over several lines keeps its own. Only
+  Open one to read it: a long query sent on one line is laid out over several lines, with
+  its keywords coloured; one the agent already wrote over several lines keeps its own. Only
   the spacing changes, never the words or their case. The copy button copies the query exactly as
   the agent sent it, to run it again. The Trace shows queries the same way.
 - **Trace:** the agent's steps, from the prompt to the final answer, with what they cost
