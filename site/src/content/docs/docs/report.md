@@ -103,7 +103,8 @@ that answer was graded, which tables it read, and the steps it took to get there
 - **The cards:** accuracy and provenance against their thresholds, what the eval cost
   (the agent and the grading together) with the agent's tokens under it, and how many
   steps it took out of the limit.
-- **Accuracy:** what was expected and what the agent answered. For `extract_match`, the
+- **Accuracy:** what was expected and what the agent answered, formatted the way the agent
+  wrote it in markdown: tables, lists, bold and code. For `extract_match`, the
   value the grader pulled out and the difference, against the tolerance; for
   `llm_judge`, the judge's score (under the answer) and its reason. "Show the agent's full
   reply" shows the whole answer.
@@ -111,7 +112,8 @@ that answer was graded, which tables it read, and the steps it took to get there
   read, or "not read".
 - **SQL calls:** every query the agent sent, in order, and whether it ran or failed.
 - **Trace:** the agent's steps, from the prompt to the final answer, with what they cost
-  in all at the top. Expand a step to see the tool call, what it returned, and its tokens,
+  in all at the top. "Show the raw text" under the final answer shows it exactly as the
+  agent sent it, which is what the grading model read. Expand a step to see the tool call, what it returned, and its tokens,
   cost and time.
 - **Grading:** what the grading model did, for `extract_match` and `llm_judge`. "› Reply"
   opens its full reply, as it came back. Below it: how many tokens it spent thinking, its
