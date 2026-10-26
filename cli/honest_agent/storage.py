@@ -144,7 +144,7 @@ _TRACES_COLUMNS: list[tuple[str, str]] = [
     # JSON: the prompt, each model reply (text, tool_use) and each batch of
     # tool_result blocks, in the shared format derive.conversation builds.
     ("agent_trace", "varchar"),
-    # JSON: each step's tokens, duration and stop reason, and each tool call's duration
+    # JSON: each step's tokens, estimated cost, duration and stop reason, and each tool call's duration
     # (derive.step_details). NULL for rows from before the raw layer.
     ("step_details", "varchar"),
     # JSON: the grading call, for the report's Grading card (derive.grading_details): its

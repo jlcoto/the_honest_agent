@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from recorded import (
+    SETTINGS,
     claude_reply,
     definition,
     grading_call,
@@ -72,6 +73,37 @@ def test_a_claude_run_derives_its_answer_trace_tokens_and_tools(tmp_path: Path):
         (150, 10, "end_turn"),
     ]
     assert list(details["tool_ms"]) == ["t1"]
+
+
+def test_each_step_is_priced_at_the_price_the_run_saved_and_adds_up_to_the_agent_cost(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    prices = {"models": {"claude-test": {"input": 1.0, "output": 2.0, "cache_read": 0.1, "cache_write": 1.25}}}
+    record(
+        path,
+        [
+            model_call(
+                claude_reply(tool_use("t1", "query_warehouse", {"sql": SQL}), input_tokens=100, output_tokens=20)
+            ),
+            tool_call("t1", "query_warehouse", {"sql": SQL}, mcp_result("4")),
+            model_call(claude_reply(text("4"), input_tokens=150, output_tokens=10)),
+        ],
+        settings={**SETTINGS, "prices": prices},
+    )
+
+    row = _derive(path)
+
+    costs = [s["cost_usd"] for s in json.loads(row["step_details"])["steps"]]
+    assert costs == [pytest.approx((100 * 1.0 + 20 * 2.0) / 1e6), pytest.approx((150 * 1.0 + 10 * 2.0) / 1e6)]
+    assert sum(costs) == pytest.approx(row["agent_cost_usd"])
+
+
+def test_a_step_has_no_cost_when_the_run_saved_no_price(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    record(path, [model_call(claude_reply(text("4")))])
+
+    (step,) = json.loads(_derive(path)["step_details"])["steps"]
+
+    assert step["cost_usd"] is None  # unknown, not $0
 
 
 def test_an_openai_run_is_converted_to_the_same_conversation_format(tmp_path: Path):

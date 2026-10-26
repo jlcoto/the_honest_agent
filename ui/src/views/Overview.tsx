@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { CostInfo } from '../components/CostInfo'
 import { PageHeader } from '../components/PageHeader'
 import { EvalLabel } from '../components/EvalLabel'
 import {
@@ -14,9 +15,12 @@ import {
   evalTitles,
   evalsOf,
   runColumns,
+  runCost,
   runsOf,
   stripMarkdown,
   toCsv,
+  usd,
+  type Run,
 } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, IconButton, ScoreCell, ScoreStat, Select, Tabs } from '../ds'
@@ -60,6 +64,18 @@ function Empty({ children }: { children: React.ReactNode }) {
     <Card>
       <div style={{ padding: '32px 0', textAlign: 'center', font: 'var(--type-body)', color: 'var(--fg-2)' }}>{children}</div>
     </Card>
+  )
+}
+
+/** "Last eval run Oct 15, 12:47 · estimated cost $0.025 (i)"; the cost left out when the run has none. */
+function LatestRun({ run }: { run: Run }) {
+  const when = `Last eval run ${formatRunTime(run.timestamp, { year: false })}`
+  const cost = runCost(run)
+  if (cost == null) return when
+  return (
+    <>
+      {when} · <CostInfo side="bottom">estimated cost {usd(cost)}</CostInfo>
+    </>
   )
 }
 
@@ -126,7 +142,7 @@ export function Overview({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <PageHeader title="Overview" subtitle={latest ? `Last eval run ${formatRunTime(latest.timestamp, { year: false })}` : undefined}>
+      <PageHeader title="Overview" subtitle={latest ? <LatestRun run={latest} /> : undefined}>
         <Select size="sm" icon="bot" options={agents} value={agent} onChange={switchAgent} />
         <Select size="sm" icon="cpu" options={models} value={model} onChange={setModel} />
         <DateRangePicker dates={[...new Set(pairRuns.map((r) => r.date))]} value={range} onChange={setRange} />
