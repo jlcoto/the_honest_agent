@@ -41,3 +41,10 @@ there before bigger changes. The project's to-do list (`todo.md`) and
 longer-term ideas (`future-ideas.md`) live there too, not in this repo. At the end of a session, suggest `/wrap-up`
 to save decisions and learnings there. Contributors without access can
 ignore this section.
+
+## Merging and releasing
+
+A PR is merged once it's reviewed and CI passes, not held for a release. The site
+is published from the `live` branch (the latest release), not `main`, so merging
+never changes what people see. Release steps and site fixes between releases: "How
+changes reach people" and "Releasing" in `CONTRIBUTING.md`.
