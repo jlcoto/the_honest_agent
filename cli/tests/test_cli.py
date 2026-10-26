@@ -388,6 +388,18 @@ def test_each_result_stores_its_estimated_cost_at_the_prices_the_run_saved(tmp_p
     assert stored["agent_cost_usd"] == pytest.approx(row["agent_cost_usd"])
 
 
+def test_a_run_prints_each_eval_as_it_finishes_without_its_prompt(tmp_path: Path, capsys):
+    agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])
+    evals = [definition(grading_method="llm_judge", expected_answer="2297")]
+
+    _run_loop(str(tmp_path / "results.duckdb"), agent, _ScriptedJudge("not json"), evals)
+
+    out = capsys.readouterr().out
+    assert out.startswith(f"[1/1] {evals[0].eval_id} ... FAIL  accuracy 0.00 · provenance —")
+    assert f"    WARNING: {evals[0].eval_id}: {UNREADABLE_REPLY}" in out
+    assert evals[0].prompt not in out
+
+
 def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):
     path = str(tmp_path / "results.duckdb")
     agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])

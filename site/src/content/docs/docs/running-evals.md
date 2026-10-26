@@ -10,7 +10,8 @@ uv run honest-agent run
 ```
 
 `run` asks every eval's question, grades each answer, and stores the results. It prints
-each eval as it goes, then which ones fell below their thresholds:
+a line for each eval as it finishes, with its scores and how long it took, then which
+ones fell below their thresholds:
 
 ```
 Target: sales-agent (honest_agent_config.yml)
@@ -18,10 +19,10 @@ No --grading-model given; using claude-sonnet-5-5 (low effort), the default for 
 Starting eval run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 (4 evals)...
 Evaluating agent: sales-agent
 Model: claude-haiku-5-5 · grading model: claude-sonnet-5-5 (low effort)
-  - revenue_q4: 'What was our revenue in Q4 2026, net of discounts and before tax?'
-  - order_total_2026: 'What was the total price of all the orders placed in 2026?'
-  - top_segment: 'Which market segment has the most customers?'
-  - top_nations_last_year: 'Which 5 nations placed the most orders last year?'
+[1/4] revenue_q4 .............. FAIL  accuracy 0.00 · provenance 0.50  [14.9s]
+[2/4] order_total_2026 ........ FAIL  accuracy 1.00 · provenance 0.50  [9.3s]
+[3/4] top_segment ............. PASS  accuracy 1.00 · provenance —     [6.1s]
+[4/4] top_nations_last_year ... PASS  accuracy 1.00 · provenance 1.00  [21.4s]
 Wrote 4 result(s) to ./honest_agent_results/results.duckdb
 Estimated cost: $0.025 (agent $0.008 · grading $0.018)
 2/4 eval(s) below threshold this run:
@@ -30,6 +31,9 @@ Estimated cost: $0.025 (agent $0.008 · grading $0.018)
 Run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 complete. Next: `honest-agent report` / `honest-agent notify`.
 ```
 
+- **The progress bar:** in a terminal, the bottom line shows a bar with how many evals
+  are done, the run's time so far, and the eval running now with its time. It isn't
+  drawn in CI, pipes or log files, so those get only the lines above.
 - **Which agent:** `run` evaluates the config's `default_target`. `--target <name>` picks
   another one.
 - **Which model:** the target's `model`, or `--model` for one run. `--grading-model` sets

@@ -35,6 +35,11 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   each result (`effort` and `grading_effort` columns), and the report shows a model run
   at an effort as its own model, such as `claude-haiku-5-5 · high`. Run
   `honest-agent rebuild` to add the columns to older results (empty there).
+- **`run` shows its progress like dbt:** one line per eval as it finishes, with its
+  position, PASS or FAIL against its thresholds, its scores and how long it took, as in
+  `[2/16] revenue_q4 ... FAIL  accuracy 0.00 · provenance 1.00  [14.9s]`. The line no
+  longer shows the eval's prompt. In a terminal, a progress bar on the bottom line names
+  the eval running and its time; CI logs, pipes and files get only the lines.
 
 ## v0.3.1 (alpha) — 2026-10-24
 
