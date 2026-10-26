@@ -1,5 +1,8 @@
 // Follows the design system's ui_kits/dashboard/Detail.jsx.
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { asLabel } from '../components/asLabel'
+import { CostInfo } from '../components/CostInfo'
+import { Markdown } from '../components/Markdown'
 import { PageHeader } from '../components/PageHeader'
 import {
   accuracyPasses,
@@ -16,8 +19,6 @@ import {
 import type { GradingCall, ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
 import { Badge, Button, Card, Icon, ScoreStat } from '../ds'
 import { useNarrow } from '../useNarrow'
-import { asLabel } from '../components/asLabel'
-import { CostInfo } from '../components/CostInfo'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
 const codeBlock: CSSProperties = {
@@ -84,16 +85,21 @@ function Code({ text, color }: { text: string; color?: string }) {
   )
 }
 
-/** Agent text as paragraphs, Markdown stripped -- the same treatment as the mockup. */
-function Paragraphs({ text }: { text: string }) {
+/** The agent's final answer, rendered, with its raw text on demand: when a grade looks off,
+ * the raw text is what the grading model read. */
+function FinalAnswer({ text }: { text: string }) {
+  const [raw, setRaw] = useState(false)
   return (
-    <>
-      {text.split(/\n{2,}/).map((p, i) => (
-        <p key={i} style={para}>
-          {stripMarkdown(p)}
-        </p>
-      ))}
-    </>
+    <div style={stack(8)}>
+      {raw ? <pre style={codeBlock}>{text}</pre> : <Markdown text={text} />}
+      <button
+        type="button"
+        onClick={() => setRaw(!raw)}
+        style={{ all: 'unset', cursor: 'pointer', alignSelf: 'flex-start', font: 'var(--type-label)', color: 'var(--accent)' }}
+      >
+        {raw ? 'Show it formatted' : 'Show the raw text'}
+      </button>
+    </div>
   )
 }
 
@@ -201,7 +207,7 @@ function Ledger({ rows }: { rows: LedgerRow[] }) {
   )
 }
 
-const answerText = (text: string) => (text ? <Paragraphs text={text} /> : <p style={para}>(empty answer)</p>)
+const answerText = (text: string) => (text ? <Markdown text={text} /> : <p style={para}>(empty answer)</p>)
 
 /** Expected vs. the agent's answer, laid out for the grading method that scored it. */
 function AccuracyCard({ r }: { r: ResultRow }) {
@@ -977,7 +983,7 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
                   {think ? (
                     <i style={muted}>{think.thinking ? think.thinking : 'Thought before acting (hidden by the provider)'}</i>
                   ) : null}
-                  {text ? <Paragraphs text={text} /> : null}
+                  {text ? <Markdown text={text} /> : null}
                   {stats ? (
                     <span style={traceMono(12, 'var(--fg-3)')}>
                       {stats.input_tokens.toLocaleString('en-US')} in · {stats.output_tokens.toLocaleString('en-US')} out
@@ -1000,7 +1006,7 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
           {answered ? (
             <>
               <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Final answer · step {last.n}</span>
-              {said(last.blocks) ? <Paragraphs text={said(last.blocks)} /> : <p style={para}>(empty answer)</p>}
+              {said(last.blocks) ? <FinalAnswer text={said(last.blocks)} /> : <p style={para}>(empty answer)</p>}
             </>
           ) : (
             <>
