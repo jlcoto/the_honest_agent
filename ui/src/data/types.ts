@@ -16,6 +16,7 @@ export interface ResultRow {
   accuracy_score: number
   accuracy_method: string
   grading_model: string | null // grading model for extract_match/llm_judge; null for contains
+  grading_effort?: string | null // the grading model's effort; null when none was sent (provider default)
   accuracy_rationale: string | null // the judge's reason (llm_judge only)
   extracted_answer: string | null // the value extract_match compared (extract_match only)
   accuracy_tolerance: number | null // extract_match's allowed absolute difference
@@ -29,6 +30,7 @@ export interface ResultRow {
   // Every table/view the agent's counted queries read, with the database/schema each resolved to.
   queried_sources: SourceRef[] | null
   model_name: string
+  effort?: string | null // the agent model's effort; null when none was sent (provider default)
   agent_name: string | null // null for results stored before agents were recorded
   latency_ms: number | null
   steps: number | null // model calls the agent made, each with the tool calls it asked for
@@ -40,6 +42,8 @@ export interface ResultRow {
   agent_cache_write_tokens?: number | null // written to the cache (Anthropic only)
   grading_input_tokens: number | null
   grading_output_tokens: number | null
+  agent_cost_usd?: number | null // estimated; null when the model had no price
+  grading_cost_usd?: number | null
 }
 
 export interface SourceRef {
@@ -70,7 +74,7 @@ export interface GradingCall {
 }
 
 export interface StepDetails {
-  steps: { input_tokens: number; output_tokens: number; duration_ms: number | null; stop_reason: string | null }[]
+  steps: { input_tokens: number; output_tokens: number; duration_ms: number | null; stop_reason: string | null; cost_usd?: number | null }[]
   tool_ms: Record<string, number | null> // each tool call's duration, by tool_use id
 }
 

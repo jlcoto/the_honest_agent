@@ -76,6 +76,9 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("accuracy_method", "varchar"),
     # Model that graded the answer (extract_match/llm_judge); NULL for contains, which uses none.
     ("grading_model", "varchar"),
+    # The grading model's effort (low/medium/high); NULL when none was sent (the
+    # provider's default applied) or nothing was graded.
+    ("grading_effort", "varchar"),
     ("accuracy_rationale", "varchar"),  # the judge's reason (llm_judge only)
     # The value extract_match pulled from the answer and compared with expected_answer.
     ("extracted_answer", "varchar"),
@@ -93,6 +96,9 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     # statement said) -- see provenance.queried_sources.
     ("queried_sources", "struct(database varchar, schema varchar, name varchar)[]"),
     ("model_name", "varchar"),
+    # The agent model's effort (low/medium/high); NULL when none was sent, so the
+    # provider's default applied.
+    ("effort", "varchar"),
     # Which agent was evaluated: `run --agent-name`, else the name the MCP server
     # reports at connect time. NULL for rows written before this column existed.
     ("agent_name", "varchar"),
@@ -117,6 +123,10 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("agent_cache_write_tokens", "integer"),
     ("grading_input_tokens", "integer"),
     ("grading_output_tokens", "integer"),
+    # Estimated USD, from those tokens and the prices the run saved (prices.py). NULL when
+    # the model had no price, never 0; grading_cost_usd is 0 when nothing was graded by a model.
+    ("agent_cost_usd", "double"),
+    ("grading_cost_usd", "double"),
     # When the eval's last recorded call ended (run_timestamp is when it started).
     ("finished_at", "varchar"),
     # When derive.py built this row, and the honest-agent version that did; a
@@ -134,7 +144,7 @@ _TRACES_COLUMNS: list[tuple[str, str]] = [
     # JSON: the prompt, each model reply (text, tool_use) and each batch of
     # tool_result blocks, in the shared format derive.conversation builds.
     ("agent_trace", "varchar"),
-    # JSON: each step's tokens, duration and stop reason, and each tool call's duration
+    # JSON: each step's tokens, estimated cost, duration and stop reason, and each tool call's duration
     # (derive.step_details). NULL for rows from before the raw layer.
     ("step_details", "varchar"),
     # JSON: the grading call, for the report's Grading card (derive.grading_details): its

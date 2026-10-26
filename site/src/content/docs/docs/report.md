@@ -47,11 +47,20 @@ provenance isn't checked, it's the accuracy alone.
 A colour is about the score, not the threshold: an eval passes or fails by its own
 `min_score` values. "Passed thresholds" and "Below threshold" count those.
 
+## How costs are shown
+
+Each page shows what the runs cost, as stored with each result: token counts × the
+providers' published prices on the day of the run (see
+[What a run costs](/docs/running-evals/#what-a-run-costs)). They're estimates, marked with
+an (i); your provider's bill is the real figure. A run with a model that has no price, or
+from before honest-agent stored costs, shows no cost or "Not recorded".
+
 ## Overview
 
 ![The Overview page: score cards, a heatmap of scores by run, and the evals below threshold](/assets/review-overview.webp)
 
 The Overview shows one agent and one model. Pick them, and the dates, at the top right.
+Under the title: when the latest run was, and what it cost.
 
 - **The cards** show the latest run's combined, accuracy and provenance scores, each with
   the change since the previous run and a small trend, and how many evals passed their
@@ -72,14 +81,17 @@ model of the agent's most recent run; the others show their difference from it, 
 percentage points, on the evals both ran.
 
 - **Results by model** shows each model's latest run in the date range. Pick another run
-  from its menu.
+  from its menu. **Est. cost** is what that run cost, with what that comes to per eval
+  under it.
 - **Scores by model** has one column per model. Grey cells are evals that weren't in that
   model's run.
 - **Scores over time** has one row per model, with a point for its last run each day.
 
 To compare models, run the same evals with each one:
-`honest-agent run --model gpt-5.4-mini`. Keep the same `--grading-model` for every run, so
-the grading is the same and the comparison is fair.
+`honest-agent run --model gpt-6-luna`. Keep the same `--grading-model` for every run, so
+the grading is the same and the comparison is fair. Set it explicitly when you compare
+providers: the default grading model follows the agent's provider. A model run at
+different efforts shows as separate models, such as `claude-haiku-5-5 · high`.
 
 ## A result
 
@@ -88,8 +100,9 @@ the grading is the same and the comparison is fair.
 A result page shows why an eval passed or failed in a run: what the agent answered, how
 that answer was graded, which tables it read, and the steps it took to get there.
 
-- **The cards:** accuracy and provenance against their thresholds, the tokens the agent
-  used, and how many steps it took out of the limit.
+- **The cards:** accuracy and provenance against their thresholds, what the eval cost
+  (the agent and the grading together) with the agent's tokens under it, and how many
+  steps it took out of the limit.
 - **Accuracy:** what was expected and what the agent answered. For `extract_match`, the
   value the grader pulled out and the difference, against the tolerance; for
   `llm_judge`, the judge's score (under the answer) and its reason. "Show the agent's full
@@ -97,11 +110,12 @@ that answer was graded, which tables it read, and the steps it took to get there
 - **Provenance:** each expected source, with the database, schema and table the agent
   read, or "not read".
 - **SQL calls:** every query the agent sent, in order, and whether it ran or failed.
-- **Trace:** the agent's steps, from the prompt to the final answer. Expand a step to see
-  the tool call, what it returned, and its tokens and time.
+- **Trace:** the agent's steps, from the prompt to the final answer, with what they cost
+  in all at the top. Expand a step to see the tool call, what it returned, and its tokens,
+  cost and time.
 - **Grading:** what the grading model did, for `extract_match` and `llm_judge`. "› Reply"
   opens its full reply, as it came back. Below it: how many tokens it spent thinking, its
-  tokens and time, and how it stopped. A reply cut off at its token limit shows "Not
+  tokens, cost and time, and how it stopped. A reply cut off at its token limit shows "Not
   graded" and "reached the token limit". `contains` calls no model, so the card says so.
 
 For the raw records of every call, use

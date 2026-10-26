@@ -6,6 +6,35 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 ## Unreleased
 
+- **`run` estimates what the run cost:** a line after the results are written, such as
+  `Estimated cost: $0.025 (agent $0.008 · grading $0.018)`. It's token counts × the
+  providers' published prices, from a table that ships with each release, so the
+  provider's bill is the real figure. Each result stores its estimate in the new
+  `agent_cost_usd` and `grading_cost_usd` columns, at the prices of the day it ran. A
+  model with no price is named instead of counted as $0; add it under the new `prices:`
+  key in `honest_agent_config.yml`, which can also override a built-in price. `debug`
+  shows where each model's price comes from. Results from earlier runs have no cost.
+- **The report shows what runs cost:** the latest run's cost under the Overview's title,
+  an Est. cost column in Model comparison (the run's cost, and per eval), and on a
+  result page the eval's cost (in place of the Agent tokens card, with the tokens under
+  it), each step's cost in the Trace with the total at the top, and the grading call's
+  cost. Run `honest-agent rebuild` to add each step's cost to results from runs that
+  already stored a cost; earlier results show none.
+- **A stronger default grading model, never the agent's own.** Without `grading_model`,
+  grading used the agent's model, so an agent graded its own answers. Now the default is
+  a stronger model from the agent's provider, at low effort: `claude-sonnet-5-5` for
+  Claude agents, `gpt-6.1-sol` for OpenAI ones. Grades can change for runs that relied on
+  the old default; set `grading_model` to keep grading with the same model as before.
+  `run` and `debug` warn when the grading model is the agent's own model, or a lower
+  tier of the same provider (Haiku below Sonnet below Opus, Luna below Sol below Astra).
+- **The default OpenAI model is now `gpt-6-luna`** (was `gpt-5.4-mini`): about a ninth
+  of the price, and newer. Set `model: gpt-5.4-mini` to keep the old one.
+- **`effort` and `grading_effort`:** how much the agent's and the grading model think
+  (`low`, `medium` or `high`), in the config file or with `--effort` and
+  `--grading-effort`. Without `effort`, none is sent, as before. Both are stored with
+  each result (`effort` and `grading_effort` columns), and the report shows a model run
+  at an effort as its own model, such as `claude-haiku-5-5 · high`. Run
+  `honest-agent rebuild` to add the columns to older results (empty there).
 - **`run` shows its progress like dbt:** one line per eval as it finishes, with its
   position, PASS or FAIL against its thresholds, its scores and how long it took, as in
   `[2/16] revenue_q4 ... FAIL  accuracy 0.00 · provenance 1.00  [14.9s]`. The line no

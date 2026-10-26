@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 from .eval_loader import EvalDefinition
 from .grading import CUT_OFF_REPLY, Grade, score
 from .llm import OPENAI, response_cache_tokens, response_stop, response_text, response_tokens
+from .prices import Price, call_cost
 from .provenance import check_provenance
 from .raw import honest_agent_version
 from .sql_capture import extract_sql_calls
@@ -68,10 +69,10 @@ def _assistant_content(event: dict) -> list[dict]:
     ]
 
 
-def step_details(events: list[dict]) -> dict:
+def step_details(events: list[dict], price: Price | None = None) -> dict:
     """What the conversation doesn't hold, for the report's Trace: each step's (model
-    call's) tokens, duration and stop reason, in order, and each tool call's duration
-    by its tool_use id."""
+    call's) tokens, estimated cost (None without a price), duration and stop reason, in
+    order, and each tool call's duration by its tool_use id."""
     steps = []
     for event in events:
         if event["kind"] == "model_call" and event["response"] is not None:
@@ -80,6 +81,7 @@ def step_details(events: list[dict]) -> dict:
                 {
                     "input_tokens": tokens[0],
                     "output_tokens": tokens[1],
+                    "cost_usd": call_cost(price, event["provider"], event["response"]) if price else None,
                     "duration_ms": event["duration_ms"],
                     "stop_reason": response_stop(event["provider"], event["response"]),
                 }
@@ -197,6 +199,23 @@ def recorded_answer(con, result_id: str) -> tuple[str, bool]:
     return agent_answer(agent_events, json.loads(run["settings"])["max_tool_steps"])
 
 
+def _price(settings: dict, model: str) -> Price | None:
+    """The price the run saved for `model`; None when it had none (or the run is from
+    before prices were saved)."""
+    saved = (settings.get("prices") or {}).get("models", {}).get(model)
+    if saved is None:
+        return None
+    return Price.from_dict({k: v for k, v in saved.items() if k != "source"})
+
+
+def _cost(settings: dict, model: str, responses: list[tuple[str, dict]]) -> float | None:
+    """Estimated USD for these calls at the price the run saved for `model`; None without one."""
+    price = _price(settings, model)
+    if price is None:
+        return None
+    return sum(call_cost(price, provider, response) for provider, response in responses)
+
+
 def derive_result(con, result_id: str) -> Derived:
     """One result's derived rows, from its raw record alone."""
     run, evaluation, events = _read(con, result_id)
@@ -264,6 +283,7 @@ def derive_result(con, result_id: str) -> Derived:
         "accuracy_method": definition.grading_method,
         # The model that graded the answer; `contains` uses none.
         "grading_model": run["judge_model"] if grading else None,
+        "grading_effort": settings.get("grading_effort") if grading else None,
         "accuracy_rationale": grade.rationale,
         "extracted_answer": grade.extracted_answer,
         "accuracy_tolerance": definition.tolerance,
@@ -277,6 +297,7 @@ def derive_result(con, result_id: str) -> Derived:
         # No threshold for a check that didn't happen (see check_provenance).
         "provenance_min_score": definition.provenance_min_score if provenance.score is not None else None,
         "model_name": run["model"],
+        "effort": settings.get("effort"),
         "agent_name": run["agent_name"],
         "latency_ms": latency_ms,
         # One step is one model call and the tool calls it asks for.
@@ -289,11 +310,15 @@ def derive_result(con, result_id: str) -> Derived:
         "agent_cache_write_tokens": sum(t[1] for t in agent_cache),
         "grading_input_tokens": grading_tokens[0],
         "grading_output_tokens": grading_tokens[1],
+        "agent_cost_usd": _cost(settings, run["model"], agent_responses),
+        "grading_cost_usd": _cost(settings, run["judge_model"], [(grading["provider"], grading["response"])])
+        if grading
+        else 0.0,
         "derived_at": datetime.now(timezone.utc).strftime(_TIME),
         "honest_agent_version": honest_agent_version(),
         # -- traces --
         "agent_trace": json.dumps(trace),
-        "step_details": json.dumps(step_details(agent_events)),
+        "step_details": json.dumps(step_details(agent_events, _price(settings, run["model"]))),
         "grading_call": json.dumps(details) if (details := grading_details(grading)) else None,
         # -- tool_calls (expanded into one row per call by storage.py) --
         "sql_calls": sql_calls,

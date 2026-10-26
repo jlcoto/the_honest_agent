@@ -34,11 +34,28 @@ SETTINGS = {
         "run ([Storing results](/docs/storing-results/#in-cloud-storage)). Every target shares it, so one report "
         "covers every agent.",
     ),
+    "prices": (
+        "top",
+        "Prices for models the built-in table doesn't have, or to override it, by model name: `input`, "
+        "`output`, and optionally `cache_read` and `cache_write`, in USD per million tokens. See "
+        "[What a run costs](/docs/running-evals/#what-a-run-costs).",
+    ),
     "model": ("both", "The model that plays the agent. Default: chosen from the API key you have."),
     "grading_model": (
         "both",
         "The model for grading: it pulls the value out for `extract_match` and judges the answer for "
-        "`llm_judge` (`contains` uses none). Default: `model`.",
+        "`llm_judge` (`contains` uses none). Default: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` "
+        "for an OpenAI one. See [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model).",
+    ),
+    "effort": (
+        "both",
+        "How much the agent's model thinks before it answers: `low`, `medium` or `high`. Default: none is "
+        "sent, so the provider's default applies.",
+    ),
+    "grading_effort": (
+        "both",
+        "How much the grading model thinks: `low`, `medium` or `high`. Default: `low` for the default "
+        "grading model; the provider's default for one you choose.",
     ),
     "max_tool_steps": (
         "both",

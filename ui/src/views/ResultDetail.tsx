@@ -5,15 +5,19 @@ import {
   accuracyPasses,
   agentOf,
   formatRunTime,
+  modelLabel,
   pct,
   provenancePasses,
   evalTitles,
   stripMarkdown,
+  smallUsd,
   toolCallsFor,
 } from '../data/derive'
 import type { GradingCall, ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
 import { Badge, Button, Card, Icon, ScoreStat } from '../ds'
 import { useNarrow } from '../useNarrow'
+import { asLabel } from '../components/asLabel'
+import { CostInfo } from '../components/CostInfo'
 
 const mono: CSSProperties = { fontFamily: 'var(--font-mono)' }
 const codeBlock: CSSProperties = {
@@ -261,6 +265,7 @@ function AccuracyCard({ r }: { r: ResultRow }) {
             ))
           : null}
         {r.accuracy_method !== 'contains' && r.grading_model ? <Badge mono>grading model {r.grading_model}</Badge> : null}
+        {r.accuracy_method !== 'contains' && r.grading_effort ? <Badge mono>grading effort {r.grading_effort}</Badge> : null}
       </div>
     </Card>
   )
@@ -901,7 +906,9 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <h3 style={{ margin: 0, font: 'var(--type-h2)', color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>Trace</h3>
           <span style={muted}>
-            {steps.length} steps · {tokens.toLocaleString('en-US')} tokens
+            {/* no-break spaces: a wrapped line never starts with a dot or splits a number from its unit */}
+            {steps.length} steps{'\u00a0'}· {tokens.toLocaleString('en-US')}{'\u00a0'}tokens
+            {r.agent_cost_usd != null ? `\u00a0· ${smallUsd(r.agent_cost_usd)}` : ''}
           </span>
         </div>
         {shownSteps.length ? (
@@ -974,6 +981,7 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
                   {stats ? (
                     <span style={traceMono(12, 'var(--fg-3)')}>
                       {stats.input_tokens.toLocaleString('en-US')} in · {stats.output_tokens.toLocaleString('en-US')} out
+                      {stats.cost_usd != null ? ` · ${smallUsd(stats.cost_usd)}` : ''}
                       {stats.duration_ms != null ? ` · ${secs(stats.duration_ms)}` : ''}
                       {stats.stop_reason === 'tool_use' ? ' · stopped for tool calls' : stats.stop_reason === 'end_turn' ? ' · stopped for the answer' : stats.stop_reason ? ` · stopped: ${stats.stop_reason}` : ''}
                     </span>
@@ -1110,6 +1118,7 @@ function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
           ) : null}
           <span style={traceMono(12, 'var(--fg-3)')}>
             {call.input_tokens.toLocaleString('en-US')} in · {call.output_tokens.toLocaleString('en-US')} out
+            {r.grading_cost_usd != null ? ` · ${smallUsd(r.grading_cost_usd)}` : ''}
             {call.duration_ms != null ? ` · ${secs(call.duration_ms)}` : ''}
             {stop ? ` · ${stop}` : ''}
           </span>
@@ -1117,9 +1126,22 @@ function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <Badge mono>{usesModel ? `grading model ${model ?? ''}`.trim() : 'graded in code, no model call'}</Badge>
+        {usesModel && r.grading_effort ? <Badge mono>grading effort {r.grading_effort}</Badge> : null}
       </div>
     </Card>
   )
+}
+
+/** The eval's estimated cost, agent and grading, with the agent's tokens under it. */
+function CostStat({ r, tokens, fmt }: { r: ResultRow; tokens: number; fmt: (n: number | null) => string }) {
+  const label = asLabel(<CostInfo>Est. cost</CostInfo>)
+  const recorded = r.agent_input_tokens != null || r.agent_output_tokens != null
+  const tokenLine = recorded
+    ? `${tokens.toLocaleString('en-US')} agent tokens · ${fmt(r.agent_input_tokens)} in · ${fmt(r.agent_output_tokens)} out`
+    : 'Tokens not recorded'
+  const cost = r.agent_cost_usd != null && r.grading_cost_usd != null ? r.agent_cost_usd + r.grading_cost_usd : null
+  if (cost == null) return <ScoreStat label={label} format="raw" value="—" caption={`Not recorded for this run · ${tokenLine}`} />
+  return <ScoreStat label={label} format="raw" value={smallUsd(cost)} caption={tokenLine} />
 }
 
 export function ResultDetail({ data, resultId }: { data: ReportData; resultId: string }) {
@@ -1148,7 +1170,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         subtitle={
           <>
             <span style={mono}>{r.eval_id}</span> · {r.category ?? 'Uncategorized'} · {formatRunTime(r.run_timestamp)} ·{' '}
-            {agentOf(r)} · <span style={mono}>{r.model_name}</span>
+            {agentOf(r)} · <span style={mono}>{modelLabel(r)}</span>
           </>
         }
       >
@@ -1184,16 +1206,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           )}
         </Card>
         <Card>
-          {r.agent_input_tokens == null && r.agent_output_tokens == null ? (
-            <ScoreStat label="Agent tokens" format="raw" value="—" caption="Not recorded for this run" />
-          ) : (
-            <ScoreStat
-              label="Agent tokens"
-              format="raw"
-              value={tokens.toLocaleString('en-US')}
-              caption={`${fmt(r.agent_input_tokens)} in · ${fmt(r.agent_output_tokens)} out`}
-            />
-          )}
+          <CostStat r={r} tokens={tokens} fmt={fmt} />
         </Card>
         <Card>
           <StepsStat r={r} />

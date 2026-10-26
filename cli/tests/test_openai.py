@@ -59,6 +59,7 @@ def test_the_openai_judge_returns_the_response_as_is_and_it_reads_back():
     recorded = to_jsonable(response)
 
     (call,) = client.chat.completions.calls
+    assert "reasoning_effort" not in call  # none set: the provider's default
     assert call["response_format"] == {
         "type": "json_schema",
         "json_schema": {"name": "grade", "strict": True, "schema": schema},
@@ -142,6 +143,8 @@ def _invoke_run(args, env):
             "OPENAI_API_KEY": "",
             "HONEST_AGENT_MODEL": "",
             "HONEST_AGENT_GRADING_MODEL": "",
+            "HONEST_AGENT_EFFORT": "",
+            "HONEST_AGENT_GRADING_EFFORT": "",
             **env,
         },
     )
@@ -164,8 +167,9 @@ def test_without_model_an_openai_only_user_gets_the_openai_default(fake_run, in_
     result = _invoke_run([], {"OPENAI_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
-    assert (fake_run["model"], fake_run["grading_model"]) == ("gpt-5.4-mini", "gpt-5.4-mini")
-    assert "No --model given; using gpt-5.4-mini (OPENAI_API_KEY is set)" in result.output
+    assert (fake_run["model"], fake_run["grading_model"]) == ("gpt-6-luna", "gpt-6.1-sol")
+    assert fake_run["grading_effort"] == "low"
+    assert "No --model given; using gpt-6-luna (OPENAI_API_KEY is set)" in result.output
 
 
 def test_without_model_claude_is_the_default_when_both_keys_are_set(fake_run, in_tmp_dir):
@@ -229,3 +233,16 @@ def test_input_tokens_count_cached_ones_and_the_cache_split_is_kept():
     assert response_tokens(OPENAI, openai_usage) == (16100, 50)
     assert response_cache_tokens(OPENAI, openai_usage) == (14000, 0)
     assert response_cache_tokens(ANTHROPIC, {"usage": {"input_tokens": 1, "output_tokens": 1}}) == (0, 0)
+
+
+def test_the_openai_judge_and_agent_send_their_effort_as_reasoning_effort():
+    client = _fake_openai(_completion('{"score": 1.0}'))
+    schema = GRADING_SCHEMAS["llm_judge"]
+    asyncio.run(OpenAIJudge(client).complete("grade", model="gpt-6.1-sol", max_tokens=200, schema=schema, effort="low"))
+    assert client.chat.completions.calls[0]["reasoning_effort"] == "low"
+
+    openai, recorder = _fake_openai(_completion("2297")), _Recorder()
+    agent = OpenAIMCPAgentClient(_FakeMCP(), model="gpt-6-luna", tools=[], effort="high", client=openai)
+    asyncio.run(agent.run("How many?", recorder))
+    assert openai.chat.completions.calls[0]["reasoning_effort"] == "high"
+    assert recorder.calls[0][2]["effort"] == "high"

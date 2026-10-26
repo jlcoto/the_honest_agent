@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import click
@@ -26,9 +27,20 @@ from .config_file import (
 )
 from .derive import derive_result
 from .eval_loader import load_evals, nothing_selected, number_format_warnings, select_evals
-from .llm import API_KEY_ENV, default_model, provider_for
+from .llm import (
+    API_KEY_ENV,
+    DEFAULT_GRADING_EFFORT,
+    EFFORTS,
+    OPENAI,
+    default_grading_model,
+    default_model,
+    effort_unsupported,
+    looks_less_capable,
+    provider_for,
+)
+from .prices import PRICES_AS_OF, price_for
 from .raw import read_records
-from .runner import RunError, run_evals
+from .runner import RunError, run_evals, with_effort
 from .storage import (
     RESULTS_TOKEN_ENV,
     connect,
@@ -134,6 +146,82 @@ def _from_layers(ctx: click.Context, param: str, value, target: Target | None, k
             )
         return value
     return file_value
+
+
+@dataclass
+class Models:
+    """The agent's and the grading model, with their efforts, as `run` uses them."""
+
+    model: str | None  # None when no flag, file or API key names one
+    grading_model: str | None
+    effort: str | None  # None: none is sent, so the provider's default applies
+    grading_effort: str | None
+    model_defaulted: bool  # no --model or model: picked from the API key
+    grading_defaulted: bool  # no --grading-model or grading_model: the default judge
+
+
+def _resolve_models(
+    ctx: click.Context,
+    layer: Target | None,
+    model: str | None,
+    grading_model: str | None,
+    effort: str | None,
+    grading_effort: str | None,
+) -> Models:
+    """Applies the layers to the models and efforts, then the defaults: the agent's model
+    from the API key, a stronger judge from the agent's provider at low effort. Stops when
+    an effort is set for a model known to reject it."""
+    model = _from_layers(ctx, "model", model, layer)
+    model_defaulted = not model
+    model = model or default_model(os.environ)
+    grading_model = _from_layers(ctx, "grading_model", grading_model, layer)
+    grading_defaulted = not grading_model
+    if grading_defaulted and model:
+        grading_model = default_grading_model(model)
+    effort = _effort_value(_from_layers(ctx, "effort", effort, layer), "effort")
+    grading_effort = _effort_value(_from_layers(ctx, "grading_effort", grading_effort, layer), "grading_effort")
+    if grading_effort is None and grading_defaulted:
+        grading_effort = DEFAULT_GRADING_EFFORT
+    for name, value, key in ((model, effort, "effort"), (grading_model, grading_effort, "grading_effort")):
+        if name and value and effort_unsupported(name):
+            raise click.ClickException(
+                f"{name} doesn't accept an effort setting, but {key} is {value}. "
+                f"Remove {key} (--{key.replace('_', '-')}) or pick another model."
+            )
+    return Models(model, grading_model, effort, grading_effort, model_defaulted, grading_defaulted)
+
+
+def _effort_value(value: str | None, key: str) -> str | None:
+    """An effort from a flag, variable or the config file, lowercased; the file's values
+    aren't checked by Click, so they're checked here."""
+    if value is None:
+        return None
+    value = str(value).lower()
+    if value not in EFFORTS:
+        raise click.ClickException(f"{key} must be one of {', '.join(EFFORTS)}; got {value!r}.")
+    return value
+
+
+GRADING_MODEL_DOCS = "https://thehonestagent.dev/docs/writing-evals/#choosing-the-grading-model"
+
+
+def grading_model_warning(models: Models) -> str | None:
+    """A warning when the agent's model grades its own answers, or a lower tier grades it.
+    The choice stays the user's: the warning says what the research found and links it."""
+    model, grading_model = models.model, models.grading_model
+    if model is None or grading_model is None:
+        return None
+    if model == grading_model:
+        return (
+            f"The agent and the grading model are both {model}. Models tend to favour their own "
+            f"answers. More in {GRADING_MODEL_DOCS}"
+        )
+    if looks_less_capable(grading_model, model):
+        return (
+            f"The grading model {grading_model} looks less capable than the agent's {model}. A judge "
+            f"no more accurate than the model it grades gives a weaker signal. More in {GRADING_MODEL_DOCS}"
+        )
+    return None
 
 
 def _envvar(ctx: click.Context, param: str) -> str:
@@ -268,8 +356,26 @@ _model_options = _options(
         envvar="HONEST_AGENT_GRADING_MODEL",
         default=None,
         help="Model for grading: it pulls the value out of the answer for extract_match evals and judges "
-        "the answer for llm_judge ones (contains needs none). Defaults to --model. Keeping it the same "
-        "across runs keeps comparisons between agent models fair.",
+        "the answer for llm_judge ones (contains needs none). Defaults to a stronger model from the agent's "
+        "provider: claude-sonnet-5-5 for Claude agents, gpt-6.1-sol for OpenAI ones. `run` warns when it's the "
+        "agent's own model or looks less capable. Keeping it the same across runs keeps comparisons between "
+        "agent models fair.",
+    ),
+    click.option(
+        "--effort",
+        envvar="HONEST_AGENT_EFFORT",
+        type=click.Choice(EFFORTS, case_sensitive=False),
+        default=None,
+        help="How much the agent's model thinks before it answers. Without it, none is sent and the "
+        "provider's default applies. Part of what's evaluated: results are compared by model and effort.",
+    ),
+    click.option(
+        "--grading-effort",
+        envvar="HONEST_AGENT_GRADING_EFFORT",
+        type=click.Choice(EFFORTS, case_sensitive=False),
+        default=None,
+        help="How much the grading model thinks before it grades. Defaults to low for the default grading "
+        "model; a grading model you choose runs at its provider's default unless you set this.",
     ),
 )
 _mcp_options = _options(
@@ -348,6 +454,8 @@ def run(
     results_path: str | None,
     model: str | None,
     grading_model: str | None,
+    effort: str | None,
+    grading_effort: str | None,
     max_tool_steps: int,
     mcp_command: str | None,
     mcp_url: str | None,
@@ -365,8 +473,7 @@ def run(
 
     # Without targets, the file's top-level model/grading_model/max_tool_steps still apply.
     layer = chosen or (Target("config", config.shared) if config else None)
-    model = _from_layers(ctx, "model", model, layer)
-    grading_model = _from_layers(ctx, "grading_model", grading_model, layer)
+    models = _resolve_models(ctx, layer, model, grading_model, effort, grading_effort)
     max_tool_steps = _from_layers(ctx, "max_tool_steps", max_tool_steps, layer)
     evals_dir = _evals_dir(evals_dir, chosen)
     if chosen:
@@ -374,14 +481,20 @@ def run(
         named = Target(chosen.name, {"agent_name": chosen.settings.get("agent_name") or chosen.name})
         agent_name = _from_layers(ctx, "agent_name", agent_name, named)
 
-    if not model:
-        model = default_model(os.environ)
-        if model is None:
-            raise click.ClickException(
-                "No model API key set. Add ANTHROPIC_API_KEY (Claude) or OPENAI_API_KEY (GPT) to .env, or export it."
-            )
+    model, grading_model = models.model, models.grading_model
+    if model is None:
+        raise click.ClickException(
+            "No model API key set. Add ANTHROPIC_API_KEY (Claude) or OPENAI_API_KEY (GPT) to .env, or export it."
+        )
+    if models.model_defaulted:
         click.echo(f"No --model given; using {model} ({API_KEY_ENV[provider_for(model)]} is set).")
-    grading_model = grading_model or model
+    if models.grading_defaulted:
+        click.echo(
+            f"No --grading-model given; using {with_effort(grading_model, models.grading_effort)}, "
+            f"the default for {'OpenAI' if provider_for(model) == OPENAI else 'Claude'} agents."
+        )
+    if warning := grading_model_warning(models):
+        click.echo(f"WARNING: {warning}")
     providers = {provider_for(model), provider_for(grading_model)}
     missing = [API_KEY_ENV[p] for p in sorted(providers) if not os.environ.get(API_KEY_ENV[p])]
     if missing:
@@ -412,6 +525,9 @@ def run(
                 mcp_cwd=mcp_cwd,
                 mcp_env=env_names,
                 grading_model=grading_model,
+                effort=models.effort,
+                grading_effort=models.grading_effort,
+                prices=config.prices if config else None,
             )
         )
     except RunError as exc:
@@ -474,6 +590,8 @@ def debug(
     results_path: str | None,
     model: str | None,
     grading_model: str | None,
+    effort: str | None,
+    grading_effort: str | None,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -503,15 +621,29 @@ def debug(
             report.skipped(check, "the config file didn't load")
         _finish(ctx, report)
         return
-    if config is None:
-        report.ok("Config", f"no {CONFIG_FILE_NAME}; settings come from flags and environment variables")
-    else:
-        report.ok("Config", f"{debug_mod.shown(config.path)}, " + (f"target {chosen.name}" if chosen else "no targets"))
-
-    # The API keys for the model and the grading model, as `run` picks them.
+    # The models and efforts, as `run` picks them. An effort a model rejects is a setting
+    # to fix, so it fails the Config check.
     layer = chosen or (Target("config", config.shared) if config else None)
-    model = _from_layers(ctx, "model", model, layer) or default_model(os.environ)
-    grading_model = _from_layers(ctx, "grading_model", grading_model, layer) or model
+    try:
+        models = _resolve_models(ctx, layer, model, grading_model, effort, grading_effort)
+    except click.ClickException as exc:
+        report.failed("Config", exc.message)
+        models = Models(None, None, None, None, True, True)
+        model = _from_layers(ctx, "model", model, layer) or default_model(os.environ)
+        grading_model = _from_layers(ctx, "grading_model", grading_model, layer) or (
+            model and default_grading_model(model)
+        )
+    else:
+        model, grading_model = models.model, models.grading_model
+        if config is None:
+            report.ok("Config", f"no {CONFIG_FILE_NAME}; settings come from flags and environment variables")
+        else:
+            where = f"target {chosen.name}" if chosen else "no targets"
+            report.ok("Config", f"{debug_mod.shown(config.path)}, {where}")
+        if warning := grading_model_warning(models):
+            click.echo(f"{'':<24}WARNING: {warning}")
+
+    # The API keys for the model and the grading model.
     if model is None:
         missing.append(f"{API_KEY_ENV['anthropic']} or {API_KEY_ENV['openai']}")
     else:
@@ -536,7 +668,14 @@ def debug(
     if missing:
         report.failed("Variables", _not_set(missing))
     else:
-        report.ok("Variables", f"{', '.join(dict.fromkeys(needed))} set; model {model}, grading model {grading_model}")
+        report.ok(
+            "Variables",
+            f"{', '.join(dict.fromkeys(needed))} set; model {with_effort(model, models.effort)}, "
+            f"grading model {with_effort(grading_model, models.grading_effort)}",
+        )
+
+    if model is not None:
+        report.ok("Prices", price_sources(model, grading_model, config))
 
     try:
         evals_dir = _evals_dir(evals_dir, chosen)
@@ -575,6 +714,21 @@ def debug(
     except Exception as exc:
         report.failed("Results store", str(exc))
     _finish(ctx, report)
+
+
+def price_sources(model: str, grading_model: str, config: Config | None) -> str:
+    """Where each model's price comes from, for `debug`: `claude-haiku-5-5 built-in (as of
+    2026-10-25) · my-proxy-model from honest_agent_config.yml`, or that it has none."""
+    shown = []
+    for name in dict.fromkeys([model, grading_model]):
+        _, source = price_for(name, config.prices if config else None)
+        if source == "config":
+            shown.append(f"{name} from {config.path.name}")
+        elif source == "built-in":
+            shown.append(f"{name} built-in (as of {PRICES_AS_OF})")
+        else:
+            shown.append(f"{name} no price (add it under prices: in {CONFIG_FILE_NAME})")
+    return " · ".join(shown)
 
 
 def _not_set(names: list[str]) -> str:

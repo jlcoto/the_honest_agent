@@ -24,6 +24,7 @@ targets:
 | Setting | What it does |
 |---|---|
 | `default_target` | The target `run`, `debug`, `ls` and `notify` use without `--target`. |
+| `prices` | Prices for models the built-in table doesn't have, or to override it, by model name: `input`, `output`, and optionally `cache_read` and `cache_write`, in USD per million tokens. See [What a run costs](/docs/running-evals/#what-a-run-costs). |
 | `results_path` | Where results are stored: a local DuckDB file (default `./honest_agent_results/results.duckdb`) or a MotherDuck database as `md:<name>`. To keep the file in cloud storage such as S3, copy it in and out around each run ([Storing results](/docs/storing-results/#in-cloud-storage)). Every target shares it, so one report covers every agent. |
 | `targets` | One entry per agent you evaluate, by name. Each holds the target settings below. |
 
@@ -33,7 +34,9 @@ Set at the top level, a value applies to every target; a target's own value wins
 
 | Setting | What it does |
 |---|---|
-| `grading_model` | The model for grading: it pulls the value out for `extract_match` and judges the answer for `llm_judge` (`contains` uses none). Default: `model`. |
+| `effort` | How much the agent's model thinks before it answers: `low`, `medium` or `high`. Default: none is sent, so the provider's default applies. |
+| `grading_effort` | How much the grading model thinks: `low`, `medium` or `high`. Default: `low` for the default grading model; the provider's default for one you choose. |
+| `grading_model` | The model for grading: it pulls the value out for `extract_match` and judges the answer for `llm_judge` (`contains` uses none). Default: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` for an OpenAI one. See [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model). |
 | `max_tool_steps` | Steps the agent may take per question; a step is one model call and the tool calls it asks for. Default: 5. |
 | `model` | The model that plays the agent. Default: chosen from the API key you have. |
 

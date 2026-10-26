@@ -13,7 +13,28 @@ export interface Run {
   provenance: number | null
   overall: number
   passed: number
+  /** Estimated USD; null when any result has no cost (unpriced model, or a run from before costs). */
+  agentCost: number | null
+  gradingCost: number | null
 }
+
+/** The sum, or null when any value is missing: a partial total would read as the whole cost. */
+const sumOrNull = (xs: (number | null | undefined)[]) =>
+  xs.some((x) => x == null) ? null : xs.reduce<number>((s, x) => s + (x as number), 0)
+
+/** $0.025 under a dollar, $3.12 above, as the CLI prints it. */
+export function usd(amount: number): string {
+  if (amount === 0) return '$0'
+  if (amount < 0.001) return '< $0.001'
+  return amount < 1 ? `$${amount.toFixed(3)}` : `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/** One eval's or one call's cost: often under a cent, so two significant digits there ($0.00012),
+ * where `usd` would say "< $0.001"; `usd` above. */
+export const smallUsd = (amount: number) => (amount > 0 && amount < 0.01 ? `$${amount.toLocaleString('en-US', { maximumSignificantDigits: 2 })}` : usd(amount))
+
+/** A run's whole cost, agent and grading; null when either isn't known. */
+export const runCost = (run: Run) => (run.agentCost != null && run.gradingCost != null ? run.agentCost + run.gradingCost : null)
 
 export const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0)
 
@@ -47,12 +68,14 @@ export function runsOf(results: ResultRow[]): Run[] {
       timestamp,
       date: timestamp.slice(0, 10),
       agent: agentOf(rows[0]),
-      model: rows[0].model_name,
+      model: modelLabel(rows[0]),
       results: rows,
       accuracy,
       provenance,
       overall: combined(accuracy, provenance),
       passed: rows.filter(passes).length,
+      agentCost: sumOrNull(rows.map((r) => r.agent_cost_usd)),
+      gradingCost: sumOrNull(rows.map((r) => r.grading_cost_usd)),
     }
   })
   return runs.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
@@ -67,7 +90,11 @@ export function agentsOf(results: ResultRow[]): string[] {
   return results.some((r) => r.agent_name == null) ? [...named, UNKNOWN_AGENT] : named
 }
 
-export const modelsOf = (results: ResultRow[]) => [...new Set(results.map((r) => r.model_name))].sort()
+/** The agent's model as runs are grouped and compared: one model at two efforts is two
+ * series (`claude-haiku-5-5 · high`); without an effort, the provider's default ran. */
+export const modelLabel = (r: ResultRow) => (r.effort ? `${r.model_name} · ${r.effort}` : r.model_name)
+
+export const modelsOf = (results: ResultRow[]) => [...new Set(results.map(modelLabel))].sort()
 
 /** Each eval's most recent title, so runs from before a title was added still show it. */
 export function evalTitles(results: ResultRow[]): Map<string, string> {
