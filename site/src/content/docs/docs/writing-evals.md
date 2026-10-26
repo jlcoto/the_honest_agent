@@ -223,7 +223,7 @@ is enough:
 | Agent's provider | Default agent model | Default grading model |
 |---|---|---|
 | Anthropic | `claude-haiku-5-5` | `claude-sonnet-5-5`, at low effort |
-| OpenAI | `gpt-6-luna` | `gpt-6.1-sol`, at low effort |
+| OpenAI | `gpt-5.4-mini` | `gpt-6.1-sol`, at low effort |
 
 You can change both with `model` and `grading_model` (see [Models](/docs/connect/#models)).
 The choice is yours. Two findings are worth knowing when you make it:

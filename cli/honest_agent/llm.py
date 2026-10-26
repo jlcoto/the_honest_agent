@@ -18,7 +18,7 @@ _OPENAI_PREFIXES = ("gpt-", "chatgpt-", "o1", "o3", "o4")
 
 
 def provider_for(model: str) -> str:
-    """OpenAI for GPT/o-series names (gpt-6-luna, o4-mini, ...), Anthropic otherwise."""
+    """OpenAI for GPT/o-series names (gpt-5.4-mini, o4-mini, ...), Anthropic otherwise."""
     return OPENAI if model.lower().startswith(_OPENAI_PREFIXES) else ANTHROPIC
 
 
@@ -143,7 +143,37 @@ def openai_client() -> Any:
 
 
 # Used when --model isn't given: a small, cheap model from whichever provider has a key.
-DEFAULT_MODELS = {ANTHROPIC: "claude-haiku-5-5", OPENAI: "gpt-6-luna"}
+DEFAULT_MODELS = {ANTHROPIC: "claude-haiku-5-5", OPENAI: "gpt-5.4-mini"}
+
+# OpenAI's GPT-6 models can't think and call tools in one request on Chat Completions, the
+# API honest-agent uses; they need the Responses API. So they can't be the agent yet. They
+# can grade: grading calls no tools.
+_NO_AGENT_PREFIXES = ("gpt-6",)
+
+
+def agent_unsupported(model: str) -> bool:
+    """Whether `model` can't be the agent yet (see _NO_AGENT_PREFIXES)."""
+    return model.lower().startswith(_NO_AGENT_PREFIXES)
+
+
+def provider_error(exc: BaseException) -> str | None:
+    """A provider's error for a model call (rejected, unauthorized, rate-limited,
+    unreachable) as one line, or None when `exc` isn't one."""
+    kinds = []
+    for module in ("anthropic", "openai"):
+        try:
+            kinds.append(__import__(module).APIError)
+        except ImportError:
+            pass
+    if not isinstance(exc, tuple(kinds)):
+        return None
+    name = "OpenAI" if type(exc).__module__.startswith("openai") else "Anthropic"
+    body = getattr(exc, "body", None)
+    error = body.get("error", body) if isinstance(body, dict) else None
+    message = error.get("message") if isinstance(error, dict) else None
+    status = getattr(exc, "status_code", None)
+    return f"{name} {f'rejected a model call (HTTP {status})' if status else 'could not be reached'}: {message or exc}"
+
 
 # Used when --grading-model isn't given: a stronger model than the default agent, from the
 # agent's own provider (so one API key is enough). Never the agent's model by default: a
