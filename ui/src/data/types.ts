@@ -42,6 +42,8 @@ export interface ResultRow {
   agent_cache_write_tokens?: number | null // written to the cache (Anthropic only)
   grading_input_tokens: number | null
   grading_output_tokens: number | null
+  agent_cost_usd?: number | null // estimated; null when the model had no price
+  grading_cost_usd?: number | null
 }
 
 export interface SourceRef {
@@ -72,7 +74,7 @@ export interface GradingCall {
 }
 
 export interface StepDetails {
-  steps: { input_tokens: number; output_tokens: number; duration_ms: number | null; stop_reason: string | null }[]
+  steps: { input_tokens: number; output_tokens: number; duration_ms: number | null; stop_reason: string | null; cost_usd?: number | null }[]
   tool_ms: Record<string, number | null> // each tool call's duration, by tool_use id
 }
 

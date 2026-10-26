@@ -69,10 +69,10 @@ def _assistant_content(event: dict) -> list[dict]:
     ]
 
 
-def step_details(events: list[dict]) -> dict:
+def step_details(events: list[dict], price: Price | None = None) -> dict:
     """What the conversation doesn't hold, for the report's Trace: each step's (model
-    call's) tokens, duration and stop reason, in order, and each tool call's duration
-    by its tool_use id."""
+    call's) tokens, estimated cost (None without a price), duration and stop reason, in
+    order, and each tool call's duration by its tool_use id."""
     steps = []
     for event in events:
         if event["kind"] == "model_call" and event["response"] is not None:
@@ -81,6 +81,7 @@ def step_details(events: list[dict]) -> dict:
                 {
                     "input_tokens": tokens[0],
                     "output_tokens": tokens[1],
+                    "cost_usd": call_cost(price, event["provider"], event["response"]) if price else None,
                     "duration_ms": event["duration_ms"],
                     "stop_reason": response_stop(event["provider"], event["response"]),
                 }
@@ -198,13 +199,20 @@ def recorded_answer(con, result_id: str) -> tuple[str, bool]:
     return agent_answer(agent_events, json.loads(run["settings"])["max_tool_steps"])
 
 
-def _cost(settings: dict, model: str, responses: list[tuple[str, dict]]) -> float | None:
-    """Estimated USD for these calls at the price the run saved for `model`; None when it
-    had none (or the run is from before prices were saved)."""
+def _price(settings: dict, model: str) -> Price | None:
+    """The price the run saved for `model`; None when it had none (or the run is from
+    before prices were saved)."""
     saved = (settings.get("prices") or {}).get("models", {}).get(model)
     if saved is None:
         return None
-    price = Price.from_dict({k: v for k, v in saved.items() if k != "source"})
+    return Price.from_dict({k: v for k, v in saved.items() if k != "source"})
+
+
+def _cost(settings: dict, model: str, responses: list[tuple[str, dict]]) -> float | None:
+    """Estimated USD for these calls at the price the run saved for `model`; None without one."""
+    price = _price(settings, model)
+    if price is None:
+        return None
     return sum(call_cost(price, provider, response) for provider, response in responses)
 
 
@@ -310,7 +318,7 @@ def derive_result(con, result_id: str) -> Derived:
         "honest_agent_version": honest_agent_version(),
         # -- traces --
         "agent_trace": json.dumps(trace),
-        "step_details": json.dumps(step_details(agent_events)),
+        "step_details": json.dumps(step_details(agent_events, _price(settings, run["model"]))),
         "grading_call": json.dumps(details) if (details := grading_details(grading)) else None,
         # -- tool_calls (expanded into one row per call by storage.py) --
         "sql_calls": sql_calls,

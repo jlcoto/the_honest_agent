@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
+import { asLabel } from '../components/asLabel'
+import { CostInfo } from '../components/CostInfo'
 import { PageHeader } from '../components/PageHeader'
 import { SCORES_OVER_TIME_NOTE, ScoresOverTime, seriesColors } from '../components/ScoresOverTime'
-import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, meanOf, runsOf, type Run } from '../data/derive'
+import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, meanOf, runCost, runsOf, smallUsd, usd, type Run } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { AccuracyBar, Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
@@ -63,6 +65,23 @@ function Delta({ value, shared, noOverlap }: { value: number | null; shared: num
     >
       {flat ? '±0.0 pp' : `${value > 0 ? '+' : '−'}${Math.abs(value * 100).toFixed(1)} pp`}
       <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}> · {shared} shared</span>
+    </span>
+  )
+}
+
+/** The run's estimated cost, and what that comes to per eval under it. */
+function CostCell({ run, evals }: { run: Run; evals: number }) {
+  const total = runCost(run)
+  if (total == null)
+    return (
+      <span style={{ font: '400 13px var(--font-mono)', color: 'var(--fg-3)' }}>
+        — <span style={{ font: 'var(--type-small)' }}>not recorded</span>
+      </span>
+    )
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, whiteSpace: 'nowrap' }}>
+      <span style={{ font: '500 13px var(--font-mono)' }}>{usd(total)}</span>
+      <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>{smallUsd(total / evals)} per eval</span>
     </span>
   )
 }
@@ -176,7 +195,12 @@ export function Compare({
         <>
           <Card
             title="Results by model"
-            subtitle={`Differences in points vs the baseline, ${baseline}, on the evals both ran`}
+            subtitle={asLabel(
+              <span>
+                Differences in points vs the baseline, {baseline}, on the evals both ran ·{' '}
+                <CostInfo side="bottom">costs are estimates</CostInfo>
+              </span>,
+            )}
           >
             <DataTable
               rowKey="model"
@@ -245,6 +269,11 @@ export function Compare({
                       </span>
                     </span>
                   ),
+                },
+                {
+                  key: 'cost',
+                  label: 'Est. cost',
+                  render: (r: ModelRow) => <CostCell run={r.run} evals={r.latest.size} />,
                 },
                 {
                   key: 'accuracy',
