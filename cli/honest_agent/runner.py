@@ -22,7 +22,7 @@ from .eval_loader import (
     select_evals,
 )
 from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, NOT_GRADED, grading_prompt
-from .llm import OPENAI, Judge, make_judge, provider_for
+from .llm import OPENAI, Judge, make_judge, provider_error, provider_for
 from .prices import PRICES_AS_OF, price_for, usd
 from .progress import Progress
 from .raw import RunRecorder
@@ -265,7 +265,14 @@ async def run_evals(
                 effort=effort,
             )
         click.echo(f"Model: {with_effort(model, effort)} · grading model: {with_effort(grading_model, grading_effort)}")
-        rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort)
+        try:
+            rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort)
+        except Exception as exc:
+            # A provider refusing a call stops the run with its own words, not a traceback;
+            # the evals before it are already stored.
+            if (message := provider_error(exc)) is None:
+                raise
+            raise RunError(f"The run stopped: {message}") from exc
     finally:
         con.close()
         await mcp_client.__aexit__(None, None, None)

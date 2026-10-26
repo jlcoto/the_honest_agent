@@ -30,8 +30,10 @@ from .eval_loader import load_evals, nothing_selected, number_format_warnings, s
 from .llm import (
     API_KEY_ENV,
     DEFAULT_GRADING_EFFORT,
+    DEFAULT_MODELS,
     EFFORTS,
     OPENAI,
+    agent_unsupported,
     default_grading_model,
     default_model,
     effort_unsupported,
@@ -182,6 +184,12 @@ def _resolve_models(
     grading_effort = _effort_value(_from_layers(ctx, "grading_effort", grading_effort, layer), "grading_effort")
     if grading_effort is None and grading_defaulted:
         grading_effort = DEFAULT_GRADING_EFFORT
+    if model and agent_unsupported(model):
+        raise click.ClickException(
+            f"{model} can't be the agent yet: on Chat Completions, the OpenAI API honest-agent uses, GPT-6 "
+            f"models can't think and call tools in one request. Pick another agent model, such as "
+            f"{DEFAULT_MODELS[OPENAI]}. GPT-6 models can still be the grading model. More in {MODELS_DOCS}"
+        )
     for name, value, key in ((model, effort, "effort"), (grading_model, grading_effort, "grading_effort")):
         if name and value and effort_unsupported(name):
             raise click.ClickException(
@@ -203,6 +211,7 @@ def _effort_value(value: str | None, key: str) -> str | None:
 
 
 GRADING_MODEL_DOCS = "https://thehonestagent.dev/docs/writing-evals/#choosing-the-grading-model"
+MODELS_DOCS = "https://thehonestagent.dev/docs/connect/#models"
 
 
 def grading_model_warning(models: Models) -> str | None:

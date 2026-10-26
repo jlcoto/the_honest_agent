@@ -76,6 +76,13 @@ def test_debug_passes_against_the_demo_server_and_creates_nothing(demo_project):
     assert not Path("honest_agent_results").exists()
 
 
+def test_debug_fails_the_config_check_for_a_gpt6_agent(demo_project):
+    result = _debug("--model", "gpt-6-luna", OPENAI_API_KEY="test")
+
+    assert result.exit_code != 0
+    assert _lines(result.output)["Config"].startswith("FAILED   gpt-6-luna can't be the agent yet")
+
+
 def test_debug_opens_existing_results_read_only(demo_project):
     con = duckdb.connect("results.duckdb")
     con.execute("create table results (result_id varchar)")

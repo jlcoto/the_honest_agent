@@ -105,7 +105,10 @@ targets:
 
 - **`model`** runs the agent. Without one, honest-agent picks a small, cheap model from
   the key it finds: `claude-haiku-5-5` if `ANTHROPIC_API_KEY` is set, otherwise
-  `gpt-6-luna`. It prints which one it chose.
+  `gpt-5.4-mini`. It prints which one it chose.
+- **OpenAI's GPT-6 models can't be the agent yet.** honest-agent talks to OpenAI through
+  Chat Completions, where GPT-6 models can't think and call tools in one request, so
+  `run` stops before the first call. They can be the grading model, which calls no tools.
 - **The provider comes from the name:** `gpt-*`, `o3`, `o4-mini` and similar are OpenAI;
   anything else is Claude.
 - **`grading_model`** is the model for grading, for both methods that use one:

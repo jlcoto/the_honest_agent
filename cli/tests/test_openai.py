@@ -16,6 +16,7 @@ from honest_agent.llm import (
     ANTHROPIC,
     OPENAI,
     OpenAIJudge,
+    provider_error,
     provider_for,
     response_cache_tokens,
     response_text,
@@ -167,9 +168,50 @@ def test_without_model_an_openai_only_user_gets_the_openai_default(fake_run, in_
     result = _invoke_run([], {"OPENAI_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
-    assert (fake_run["model"], fake_run["grading_model"]) == ("gpt-6-luna", "gpt-6.1-sol")
+    assert (fake_run["model"], fake_run["grading_model"]) == ("gpt-5.4-mini", "gpt-6.1-sol")
     assert fake_run["grading_effort"] == "low"
-    assert "No --model given; using gpt-6-luna (OPENAI_API_KEY is set)" in result.output
+    assert "No --model given; using gpt-5.4-mini (OPENAI_API_KEY is set)" in result.output
+
+
+def test_a_gpt6_agent_stops_before_the_first_call(fake_run, in_tmp_dir):
+    result = _invoke_run(["--model", "gpt-6-luna"], {"OPENAI_API_KEY": "test"})
+
+    assert result.exit_code != 0
+    assert "gpt-6-luna can't be the agent yet" in result.output
+    assert "such as gpt-5.4-mini" in result.output
+    assert fake_run == {}  # nothing was called
+
+
+def test_a_gpt6_model_can_still_grade(fake_run, in_tmp_dir):
+    result = _invoke_run(["--model", "gpt-5.4-mini", "--grading-model", "gpt-6-luna"], {"OPENAI_API_KEY": "test"})
+
+    assert result.exit_code == 0, result.output
+    assert fake_run["grading_model"] == "gpt-6-luna"
+
+
+def test_a_providers_error_reads_as_one_line():
+    import anthropic
+    import httpx2 as httpx  # the HTTP library both SDKs use
+    import openai
+
+    request = httpx.Request("POST", "https://api.example.com/v1/chat/completions")
+    rejected = openai.BadRequestError(
+        "Error code: 400 - {...}",
+        response=httpx.Response(400, request=request),
+        body={"message": "Function tools with reasoning_effort are not supported.", "type": "invalid_request_error"},
+    )
+    unauthorized = anthropic.AuthenticationError(
+        "Error code: 401",
+        response=httpx.Response(401, request=request),
+        body={"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key"}},
+    )
+
+    assert provider_error(rejected) == (
+        "OpenAI rejected a model call (HTTP 400): Function tools with reasoning_effort are not supported."
+    )
+    assert provider_error(unauthorized) == "Anthropic rejected a model call (HTTP 401): invalid x-api-key"
+    assert provider_error(openai.APIConnectionError(request=request)).startswith("OpenAI could not be reached: ")
+    assert provider_error(ValueError("not a provider's")) is None
 
 
 def test_without_model_claude_is_the_default_when_both_keys_are_set(fake_run, in_tmp_dir):
@@ -242,7 +284,7 @@ def test_the_openai_judge_and_agent_send_their_effort_as_reasoning_effort():
     assert client.chat.completions.calls[0]["reasoning_effort"] == "low"
 
     openai, recorder = _fake_openai(_completion("2297")), _Recorder()
-    agent = OpenAIMCPAgentClient(_FakeMCP(), model="gpt-6-luna", tools=[], effort="high", client=openai)
+    agent = OpenAIMCPAgentClient(_FakeMCP(), model="gpt-5.4-mini", tools=[], effort="high", client=openai)
     asyncio.run(agent.run("How many?", recorder))
     assert openai.chat.completions.calls[0]["reasoning_effort"] == "high"
     assert recorder.calls[0][2]["effort"] == "high"
