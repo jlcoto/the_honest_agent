@@ -60,6 +60,24 @@ request to `main`. Both must pass before a PR can be merged.
 - **Look at every screen size.** After changing the landing page, the docs
   layout or the report, check it at 1440px, 768px, 390px and 320px wide.
 
+## How changes reach people
+
+- **Merge a pull request once it's reviewed and CI passes.** `main` is the next
+  version in progress: its notes go under "Unreleased" in `CHANGELOG.md`. Each
+  version has a GitHub milestone, to track what goes into it.
+- **People get changes only from a release.** The CLI is installed pinned to a
+  tag (`…the_honest_agent.git@v0.3.1`), and the Docker image is built when a `v*`
+  tag is pushed. So merging to `main` changes nothing for them.
+- **The site is published from the `live` branch, not `main`.** Cloudflare Pages
+  deploys `live` to https://thehonestagent.dev, so the docs match the latest
+  release. It deploys `main` as a preview at its own URL, to check unreleased
+  docs.
+- **A site fix that can't wait for the release** (a typo, a landing-page tweak):
+  merge it to `main` as usual, then copy it to `live`:
+  `git checkout live && git cherry-pick <commit> && git push origin live`.
+  Only for changes that are true of the released version.
+- **Release small and often:** once a few changes have landed, cut a version.
+
 ## Releasing
 
 1. Add the release's notes to `CHANGELOG.md`, breaking changes first.
@@ -68,6 +86,9 @@ request to `main`. Both must pass before a PR can be merged.
    `grep -rn 'v0\.1\.0' --exclude-dir=node_modules --exclude-dir=.git .`
    (the README, Getting started, the CI recipe, the site footer).
 4. Tag the release (`git tag -a v0.2.0`) and publish a GitHub Release.
+
+Then publish the site for the release: `git push --force origin v0.2.0:live`
+(`live` always points at the latest release, plus any site fixes copied there).
 
 ## Style
 

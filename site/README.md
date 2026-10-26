@@ -121,9 +121,11 @@ See `scripts/report-screenshots/README.md` to regenerate them.
   link to `#see-a-report` for now: they will open the real report UI,
   built from runs of `init --example`, at `/report/`.
 - Hosting: the site's address is `https://thehonestagent.dev` (the domain is on
-  Cloudflare), set as `site` in `astro.config.mjs`. `init` and the READMEs already
-  link to `/docs/team/` there, so deploy the site before a release that ships those
-  links. CI only builds it for now (`.github/workflows/site.yml`).
+  Cloudflare), set as `site` in `astro.config.mjs`. Cloudflare Pages deploys it from
+  the `live` branch, which points at the latest release, and deploys `main` as a
+  preview; CI only builds it (`.github/workflows/site.yml`). See "How changes reach
+  people" in the repository's
+  [CONTRIBUTING.md](https://github.com/jlcoto/the_honest_agent/blob/main/CONTRIBUTING.md).
 - Asset paths are root-relative (`/assets/...`). If the site is hosted under a
   sub-path (e.g. a GitHub Pages project site), set `base` in
   `astro.config.mjs` and prefix the paths.
