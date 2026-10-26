@@ -190,3 +190,22 @@ def test_without_instructions_the_tools_carry_the_cache_breakpoint():
     assert "system" not in kwargs
     assert kwargs["tools"][-1]["cache_control"] == {"type": "ephemeral"}
     assert "system" not in recorder.calls[0][2]
+
+
+def test_an_effort_is_sent_and_recorded_and_none_by_default():
+    for effort, expected in ((None, None), ("medium", {"effort": "medium"})):
+        responses = [_FakeResponse(content=[_FakeTextBlock(type="text", text="2")])]
+        messages = _FakeMessages(responses)
+        client = AnthropicMCPAgentClient(
+            _FakeMCP(),
+            model="claude-test",
+            tools=[],
+            effort=effort,
+            client=type("_FakeAnthropicClient", (), {"messages": messages})(),
+        )
+        recorder = _Recorder()
+
+        asyncio.run(client.run("What is 1+1?", recorder))
+
+        assert messages.kwargs[0].get("output_config") == expected
+        assert recorder.calls[0][2].get("effort") == effort
