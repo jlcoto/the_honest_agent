@@ -141,7 +141,7 @@
 .s-loop .code{flex:1;min-width:0;display:flex;flex-direction:column}
 .s-loop .tab{flex:none;display:flex;height:36px;background:#F5F4EC;border-bottom:1px solid var(--border-1)}
 .s-loop .tab b{font-weight:400;font-size:13px;padding:0 16px;display:flex;align-items:center;background:var(--paper);border-right:1px solid var(--border-1);border-top:2px solid var(--green-700)}
-.s-loop pre{margin:0;flex:1;overflow:hidden;padding:14px 0;font-family:var(--font-mono);font-size:13px;line-height:1.65;color:var(--fg-1)}
+.s-loop pre{margin:0;flex:1;overflow-x:auto;overflow-y:hidden;display:grid;grid-template-columns:minmax(max-content,1fr);align-content:start;padding:14px 0;font-family:var(--font-mono);font-size:13px;line-height:1.65;color:var(--fg-1)}
 .s-loop pre .l{display:block;padding-left:56px;position:relative;white-space:pre}
 .s-loop pre .l:before{content:attr(data-n);position:absolute;left:0;width:40px;text-align:right;color:#A8AEA6}
 .s-loop .k{color:#2F5D3A}.s-loop .v{color:#8A5A12}.s-loop .c{color:#8E978F;font-style:italic}.s-loop .y{color:#3A4F9A}

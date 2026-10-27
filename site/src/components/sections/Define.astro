@@ -67,7 +67,7 @@
 .s-define .yaml{display:none;max-width:var(--shot-w);aspect-ratio:1280/600;border-radius:12px;overflow:hidden;border:1px solid var(--border-1);box-shadow:0 10px 30px rgba(28,42,34,.14);background:var(--paper);flex-direction:column}
 .s-define .yt:checked ~ .shot{display:none}.s-define .yt:checked ~ .yaml{display:flex}
 .s-define .ybar{flex:none;height:34px;display:flex;align-items:center;padding:0 14px;background:#F5F4EC;border-bottom:1px solid var(--border-1);font-family:var(--font-mono);font-size:12px;color:var(--fg-3)}
-.s-define pre.ycode{margin:0;padding:14px 0;border:0;border-radius:0;background:transparent;font-family:var(--font-mono);font-size:11.5px;line-height:1.6;overflow:auto;white-space:pre;flex:1}
+.s-define pre.ycode{margin:0;padding:14px 0;border:0;border-radius:0;background:transparent;font-family:var(--font-mono);font-size:11.5px;line-height:1.6;overflow:auto;white-space:pre;flex:1;display:grid;grid-template-columns:minmax(max-content,1fr);align-content:start}
 .s-define .yl{display:block;padding-left:52px;position:relative;min-height:1.6em}
 .s-define .yl:before{content:attr(data-n);position:absolute;left:0;width:36px;text-align:right;color:#A8AEA6}
 .s-define .yl.yh{background:#E9F0DF}
