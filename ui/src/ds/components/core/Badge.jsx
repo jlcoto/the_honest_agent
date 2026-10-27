@@ -9,7 +9,9 @@ const T={
 };
 export function Badge({tone='neutral',dot,children,mono,size='md'}){
   const t=T[tone]||T.neutral;const sm=size==='sm';
-  return <span style={{display:'inline-flex',alignItems:'center',gap:sm?4:6,height:sm?18:22,padding:sm?'0 6px':'0 8px',borderRadius:'var(--radius-pill)',background:t.bg,boxShadow:t.ring?'inset 0 0 0 1px '+t.ring:undefined,color:t.fg,font:'500 '+(sm?11:12)+'px/1 '+(mono?'var(--font-mono)':'var(--font-sans)'),whiteSpace:'nowrap'}}>
-    {dot?<span style={{width:sm?5:6,height:sm?5:6,borderRadius:3,background:t.dot}}/>:null}{children}
+  // Never wider than its container: a long label ends in "…" and shows in full on hover.
+  const fullOnHover=e=>{const s=e.currentTarget.lastChild;e.currentTarget.title=s.scrollWidth>s.clientWidth?s.textContent:'';};
+  return <span onMouseEnter={fullOnHover} style={{display:'inline-flex',alignItems:'center',gap:sm?4:6,height:sm?18:22,maxWidth:'100%',minWidth:0,padding:sm?'0 6px':'0 8px',borderRadius:'var(--radius-pill)',background:t.bg,boxShadow:t.ring?'inset 0 0 0 1px '+t.ring:undefined,color:t.fg,font:'500 '+(sm?11:12)+'px/1 '+(mono?'var(--font-mono)':'var(--font-sans)'),whiteSpace:'nowrap'}}>
+    {dot?<span style={{width:sm?5:6,height:sm?5:6,borderRadius:3,background:t.dot,flex:'none'}}/>:null}<span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}}>{children}</span>
   </span>;
 }

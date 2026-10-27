@@ -66,8 +66,9 @@ Under the title: when the latest run was, and what it cost.
   the change since the previous run and a small trend, and how many evals passed their
   thresholds.
 - **Scores by eval run** has one row per eval, grouped by category, and one column per run.
-  Switch between Combined, Accuracy and Provenance at the top right. Click a cell to open
-  [that result](#a-result).
+  Switch between Combined, Accuracy and Provenance at the top right. Hover a cell for its
+  scores and what it cost: one eval in that run, a category's evals together, or the whole
+  run in the Overall row. Click a cell to open [that result](#a-result).
 - **Below threshold** lists the latest run's failing evals: their scores, what was
   expected and what the agent said, and which check failed. Export it as CSV with the
   button at the top right.
@@ -84,7 +85,7 @@ percentage points, on the evals both ran.
   from its menu. **Est. cost** is what that run cost, with what that comes to per eval
   under it.
 - **Scores by model** has one column per model. Grey cells are evals that weren't in that
-  model's run.
+  model's run. Hovering a cell shows what it cost in that run, as in the Overview.
 - **Scores over time** has one row per model, with a point for its last run each day.
 
 To compare models, run the same evals with each one:
