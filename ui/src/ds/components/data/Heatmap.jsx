@@ -10,13 +10,16 @@ const headLabel=c=>{const m=String(c).match(DATE_TIME);return m?m[1]:String(c);}
 const METRICS=[{id:'overall',label:'Combined'},{id:'accuracy',label:'Accuracy'},{id:'provenance',label:'Provenance'}];
 const MLABEL={overall:'Combined',accuracy:'Accuracy',provenance:'Provenance',values:'Score'};
 const colMean=(kids,key,n)=>Array.from({length:n},(_,i)=>mean(kids.map(k=>k[key]?k[key][i]:null)));
+const usd=c=>'$'+(c>0&&c<0.01?c.toPrecision(2):c.toFixed(2));
 
-export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Eval',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick}){
+export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Eval',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick,costLabel='Est. cost',formatCost=usd}){
   const dual=rows.length>0&&rows[0].accuracy!=null;
   const [mLocal,setMLocal]=React.useState(defaultMetric);
   const m=dual?(metric||mLocal):'values';
   const setM=id=>{setMLocal(id);onMetricChange&&onMetricChange(id);};
   const [tip,setTip]=React.useState(null);
+  const tipRef=React.useRef(null);
+  const hasCosts=rows.some(r=>r.costs);
   const [open,setOpen]=React.useState(()=>new Set(defaultExpanded));
   const toggle=g=>setOpen(s=>{const n=new Set(s);n.has(g)?n.delete(g):n.add(g);return n;});
   const n=columns.length;
@@ -26,6 +29,15 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
     if(m==='accuracy')return r.accuracy[i];
     if(m==='provenance')return r.provenance[i];
     return overallOf(r.accuracy[i],r.provenance[i]);
+  };
+  const ranAt=(r,i)=>dual?(r.accuracy[i]!=null||r.provenance[i]!=null):r.values[i]!=null;
+  // A column's cost for a row: its own, or for a group the sum of the evals that ran there
+  // (unknown if any of them has none: a partial sum would read as the whole cost).
+  const costAt=(item,i)=>{
+    if(item.kind!=='group')return item.r.costs?item.r.costs[i]??null:null;
+    let sum=0,ran=false;
+    for(const k of item.kids){if(!ranAt(k,i))continue;const c=k.costs?k.costs[i]:null;if(c==null)return null;sum+=c;ran=true;}
+    return ran?sum:null;
   };
   const summaryOf=r=>{
     if(!dual)return mean(r.values);
@@ -63,8 +75,20 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
       const below=vals.filter(x=>x<threshold).length;
       note=below+' of '+vals.length+' evals below '+Math.round(threshold*100)+'%';
     }
-    setTip({x:rc.left+rc.width/2,y:rc.top,row:r.label,col,v,b:bucketOf(v),lines,note});
+    // No cost in the summary column: it averages runs, and their costs don't average.
+    const cost=hasCosts&&i!=null&&ranAt(r,i)?costAt(item,i):undefined;
+    setTip({x:rc.left+rc.width/2,top:rc.top,bottom:rc.bottom,row:r.label,col,v,b:bucketOf(v),lines,note,cost});
   };
+
+  // Keep the tooltip on screen: centred over the cell, moved in from the edges, and below
+  // the cell when there's no room above.
+  React.useLayoutEffect(()=>{
+    const el=tipRef.current;if(!el||!tip)return;
+    const M=8,w=el.offsetWidth,h=el.offsetHeight;
+    el.style.left=Math.max(M,Math.min(tip.x-w/2,window.innerWidth-M-w))+'px';
+    el.style.top=(tip.top-8-h>=M?tip.top-8-h:tip.bottom+8)+'px';
+    el.style.visibility='visible';
+  },[tip]);
 
   const maxLen=Math.max(summaryLabel.length,...columns.map(c=>headLabel(c).length));
   const rise=Math.ceil(maxLen*7.6*0.71);
@@ -125,12 +149,13 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
       {BUCKETS.map(k=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:BUCKET_COLOR[k]}}/>{BUCKET_LABEL[k]}</span>)}
       <span style={{display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'var(--chart-empty)'}}/>No run</span>
     </div>:null}
-    {tip?<div style={{position:'fixed',left:tip.x,top:tip.y-8,transform:'translate(-50%,-100%)',zIndex:50,padding:'8px 10px',borderRadius:8,background:'var(--bg-inverse)',color:'var(--fg-inverse)',font:'400 12px/1.5 var(--font-sans)',boxShadow:'var(--shadow-2)',pointerEvents:'none',minWidth:150,whiteSpace:'nowrap'}}>
+    {tip?<div ref={tipRef} style={{position:'fixed',left:0,top:0,visibility:'hidden',zIndex:50,padding:'8px 10px',borderRadius:8,background:'var(--bg-inverse)',color:'var(--fg-inverse)',font:'400 12px/1.5 var(--font-sans)',boxShadow:'var(--shadow-2)',pointerEvents:'none',minWidth:150,maxWidth:'min(320px, calc(100vw - 16px))',overflowWrap:'anywhere'}}>
       <div style={{fontWeight:500}}>{tip.row}</div>
       <div style={{fontFamily:'var(--font-mono)',opacity:.7,fontSize:11}}>{tip.col}</div>
       <div style={{display:'flex',justifyContent:'space-between',gap:16,marginTop:4}}><span>{MLABEL[m]}</span><span style={{fontFamily:'var(--font-mono)',fontWeight:500}}>{pct(tip.v)}</span></div>
       {tip.lines.map(([k,v])=><div key={k} style={{display:'flex',justifyContent:'space-between',gap:16,opacity:.8}}><span>{k}</span><span style={{fontFamily:'var(--font-mono)'}}>{v}</span></div>)}
       <div style={{opacity:.7,marginTop:2}}>{tip.b?BUCKET_LABEL[tip.b]:'No run'}</div>
+      {tip.cost!==undefined?<div style={{display:'flex',justifyContent:'space-between',gap:16,marginTop:4,paddingTop:4,borderTop:'1px solid color-mix(in oklch,var(--fg-inverse) 20%,transparent)'}}><span>{costLabel}</span><span style={{fontFamily:'var(--font-mono)'}}>{tip.cost==null?'not recorded':formatCost(tip.cost)}</span></div>:null}
       {tip.note?<div style={{marginTop:4,paddingTop:4,borderTop:'1px solid color-mix(in oklch,var(--fg-inverse) 20%,transparent)'}}>{tip.note}</div>:null}
     </div>:null}
   </div>;

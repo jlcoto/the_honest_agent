@@ -3,7 +3,7 @@ import { asLabel } from '../components/asLabel'
 import { CostInfo } from '../components/CostInfo'
 import { PageHeader } from '../components/PageHeader'
 import { SCORES_OVER_TIME_NOTE, ScoresOverTime, seriesColors } from '../components/ScoresOverTime'
-import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, meanOf, runCost, runsOf, smallUsd, usd, type Run } from '../data/derive'
+import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, meanOf, resultsCost, runCost, runsOf, smallUsd, usd, type Run } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { AccuracyBar, Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
@@ -161,6 +161,10 @@ export function Compare({
       q,
       rows.map((m) => m.latest.get(q.eval_id)?.accuracy_score ?? null),
       rows.map((m) => m.latest.get(q.eval_id)?.provenance_score ?? null),
+      rows.map((m) => {
+        const result = m.latest.get(q.eval_id)
+        return result ? resultsCost([result]) : null
+      }),
     ),
   )
 
@@ -329,6 +333,7 @@ export function Compare({
               defaultExpanded={[...new Set(evals.map((q) => q.category))]}
               rows={heatRows}
               columns={columns}
+              formatCost={smallUsd}
               cellWidth={56}
               onCellClick={(row, column) => {
                 const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id

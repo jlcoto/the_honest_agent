@@ -8,6 +8,9 @@ export interface HeatmapRow {
   provenance?: (number | null)[];
   /** Single-metric mode: per-column score 0–1 */
   values?: (number | null)[];
+  /** Per-column cost (e.g. USD), shown in the cell's tooltip; null when not recorded. Group and
+   * total rows show the sum of the rows that ran in that column. Rows without it show no cost. */
+  costs?: (number | null)[];
 }
 /**
  * @startingPoint section="Data" subtitle="FiveThirtyEight-style eval × run score table" viewport="700x420"
@@ -45,5 +48,9 @@ export interface HeatmapProps {
   /** Bucket legend under the table; off by default */
   showLegend?: boolean;
   onCellClick?: (row: HeatmapRow, column: string, value: number | null, metric: string) => void;
+  /** Label of the tooltip's cost line, when rows carry `costs`. Default "Est. cost" */
+  costLabel?: string;
+  /** Formats a cost for the tooltip. Default "$0.0018" under a cent, "$3.12" above */
+  formatCost?: (cost: number) => string;
 }
 export declare function Heatmap(props: HeatmapProps): JSX.Element;

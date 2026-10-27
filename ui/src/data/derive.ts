@@ -121,7 +121,7 @@ export function evalsOf(results: ResultRow[], titles: Map<string, string>): Eval
 }
 
 /** Heatmap row for an eval: the title as label with the eval_id underneath, or the eval_id alone. */
-export function evalHeatRow(q: Eval, accuracy: (number | null)[], provenance: (number | null)[]) {
+export function evalHeatRow(q: Eval, accuracy: (number | null)[], provenance: (number | null)[], costs: (number | null)[]) {
   return {
     label: q.title ?? q.eval_id,
     sublabel: q.title ? q.eval_id : undefined,
@@ -129,8 +129,12 @@ export function evalHeatRow(q: Eval, accuracy: (number | null)[], provenance: (n
     eval_id: q.eval_id,
     accuracy,
     provenance,
+    costs,
   }
 }
+
+/** What results cost in all, agent and grading; null when any part isn't known. */
+export const resultsCost = (rows: ResultRow[]) => sumOrNull(rows.flatMap((r) => [r.agent_cost_usd, r.grading_cost_usd]))
 
 /** Unique heatmap column label per run; the Heatmap shows the date and reveals the rest on hover. */
 export function runColumns(runs: Run[]): string[] {

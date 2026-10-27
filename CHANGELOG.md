@@ -20,6 +20,11 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   it), each step's cost in the Trace with the total at the top, and the grading call's
   cost. Run `honest-agent rebuild` to add each step's cost to results from runs that
   already stored a cost; earlier results show none.
+- **Heatmap tooltips show what it cost and stay on screen:** hover a cell in the Overview
+  or Model comparison for the eval's cost in that run; a category row shows its evals
+  together, and the Overall row the whole run. Tooltips on the last columns are no longer
+  cut off on a tablet or phone (#71), and a long badge, such as a long grading model name,
+  ends in "…" instead of pushing the page sideways on a phone (#72).
 - **The report formats agents' answers:** answers written in markdown show as intended,
   with tables, lists, bold and code, instead of one run-on line. The Trace's final answer
   has "Show the raw text" for the text as the agent sent it. Display only: grading and

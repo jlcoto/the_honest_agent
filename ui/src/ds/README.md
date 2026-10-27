@@ -8,7 +8,8 @@ series palette (`--series-1…5`), `TrendChart` and the quiz → eval rename in
 page (`ui_kits/dashboard/Detail.jsx`, ported from `src/views/ResultDetail.tsx`)
 and the kit's quiz → eval rename on 2026-10-07; bundled fonts (`tokens/fonts/`) and
 icons (`components/core/icons.js`, used by `Icon`) on 2026-10-08; the dark `--chart-empty` (lighter, so a heatmap's
-"No run" cells show) on 2026-10-14. The project's `readme.md` holds the full guidelines
+"No run" cells show) on 2026-10-14; the `copy` icon on 2026-10-26; `Heatmap`'s tooltip
+cost line and on-screen placement, and `Badge`'s "…" for long labels, on 2026-10-27. The project's `readme.md` holds the full guidelines
 (palette roles, accuracy buckets, type, voice); follow it when building views.
 
 **Used by the site too.** `site/` (the landing page and docs) imports this folder

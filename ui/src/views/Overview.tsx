@@ -14,9 +14,11 @@ import {
   evalHeatRow,
   evalTitles,
   evalsOf,
+  resultsCost,
   runColumns,
   runCost,
   runsOf,
+  smallUsd,
   stripMarkdown,
   toCsv,
   usd,
@@ -127,15 +129,15 @@ export function Overview({
 
   const columns = runColumns(runs)
   const evals = evalsOf(runs.flatMap((r) => r.results), titles)
-  const scoreIn = (runIndex: number, evalId: string, key: 'accuracy_score' | 'provenance_score') => {
-    const rows = runs[runIndex].results.filter((r) => r.eval_id === evalId)
-    return meanOf(rows.map((r) => r[key]))
-  }
+  const resultsIn = (runIndex: number, evalId: string) => runs[runIndex].results.filter((r) => r.eval_id === evalId)
+  const scoreIn = (runIndex: number, evalId: string, key: 'accuracy_score' | 'provenance_score') =>
+    meanOf(resultsIn(runIndex, evalId).map((r) => r[key]))
   const heatRows = evals.map((q) =>
     evalHeatRow(
       q,
       runs.map((_, i) => scoreIn(i, q.eval_id, 'accuracy_score')),
       runs.map((_, i) => scoreIn(i, q.eval_id, 'provenance_score')),
+      runs.map((_, i) => resultsCost(resultsIn(i, q.eval_id))),
     ),
   )
   const categories = [...new Set(evals.map((q) => q.category))]
@@ -210,6 +212,7 @@ export function Overview({
               defaultExpanded={categories}
               rows={heatRows}
               columns={columns}
+              formatCost={smallUsd}
               onCellClick={(row, column, value) => {
                 const run = runs[columns.indexOf(column)]
                 const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id
