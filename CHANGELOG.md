@@ -16,9 +16,10 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   shows where each model's price comes from. Results from earlier runs have no cost.
 - **The report shows what runs cost:** the latest run's cost under the Overview's title,
   an Est. cost column in Model comparison (the run's cost, and per eval), and on a
-  result page the eval's cost (in place of the Agent tokens card, with the tokens under
-  it), each step's cost in the Trace with the total at the top, and the grading call's
-  cost. Run `honest-agent rebuild` to add each step's cost to results from runs that
+  result page the eval's cost (in place of the Agent tokens card), with its tokens under
+  it, the agent's and the grading's together. The Trace and Grading cards show their own
+  part on the right of their first line: tokens, cost and time. Each Trace step shows its
+  cost too. Run `honest-agent rebuild` to add each step's cost to results from runs that
   already stored a cost; earlier results show none.
 - **The report formats agents' answers:** answers written in markdown show as intended,
   with tables, lists, bold and code, instead of one run-on line. The Trace's final answer

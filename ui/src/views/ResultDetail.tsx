@@ -826,6 +826,16 @@ function ranLater(generated: ToolCallRow, sqlCalls: ToolCallRow[]): number | nul
 
 const traceMono = (size: number, color = 'var(--fg-2)'): CSSProperties => ({ font: `400 ${size}px/1.5 var(--font-mono)`, color, wordBreak: 'break-word' })
 const muted: CSSProperties = { font: 'var(--type-small)', color: 'var(--fg-3)' }
+// A card's first line with what it cost on the right; on a narrow screen the figures wrap below.
+const withStats: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '2px 16px', flexWrap: 'wrap' }
+const stats = traceMono(12, 'var(--fg-3)')
+/** Figures joined with " · ", with no-break spaces so a wrapped line never starts with a dot or splits a
+ * number from its unit. */
+const statLine = (parts: (string | null)[]) =>
+  parts
+    .filter((p): p is string => p != null)
+    .map((p) => p.replace(/ /g, '\u00a0'))
+    .join('\u00a0· ')
 const linkish: CSSProperties = { all: 'unset', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'var(--border-2)', textUnderlineOffset: 2 }
 const RAW_HEIGHT = 220
 
@@ -974,14 +984,7 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
   return (
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <h3 style={{ margin: 0, font: 'var(--type-h2)', color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>Trace</h3>
-          <span style={muted}>
-            {/* no-break spaces: a wrapped line never starts with a dot or splits a number from its unit */}
-            {steps.length} steps{'\u00a0'}· {tokens.toLocaleString('en-US')}{'\u00a0'}tokens
-            {r.agent_cost_usd != null ? `\u00a0· ${smallUsd(r.agent_cost_usd)}` : ''}
-          </span>
-        </div>
+        <h3 style={{ margin: 0, font: 'var(--type-h2)', color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>Trace</h3>
         {shownSteps.length ? (
           <button
             type="button"
@@ -994,7 +997,18 @@ function TraceCard({ r, raw, details, sqlCalls }: { r: ResultRow; raw: string | 
       </div>
       <div>
         <div style={{ ...stack(4), paddingBottom: 14, borderBottom: line }}>
-          <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Prompt</span>
+          <div style={withStats}>
+            <span style={{ font: 'var(--type-label)', color: 'var(--fg-3)' }}>Prompt</span>
+            {/* The agent's part; the Est. cost card adds the grading. */}
+            <span style={stats}>
+              {statLine([
+                `${steps.length} steps`,
+                `${tokens.toLocaleString('en-US')} tokens`,
+                r.agent_cost_usd != null ? smallUsd(r.agent_cost_usd) : null,
+                r.latency_ms != null ? secs(r.latency_ms) : null,
+              ])}
+            </span>
+          </div>
           <p style={{ ...para, fontSize: 15 }}>{typeof question === 'string' ? question.trim() : r.prompt}</p>
         </div>
         {shownSteps.map((s) => {
@@ -1102,8 +1116,8 @@ function stopWords(call: GradingCall): string | null {
   return call.stop_reason ? `stopped: ${call.stop_reason}` : null
 }
 
-/** What the grading model did: its full reply (opened like a Trace step), how much it thought, its tokens,
- * time and why it stopped. The verdict and the values it graded on stay in the Accuracy card. */
+/** What the grading model did: its tokens, cost and time, its full reply (opened like a Trace step) and how
+ * much it thought. The verdict and the values it graded on stay in the Accuracy card. */
 function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -1137,7 +1151,20 @@ function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
         </Badge>
       }
     >
-      <span style={{ ...traceMono(12.5, 'var(--fg-3)'), marginTop: -8 }}>{r.accuracy_method}</span>
+      <div style={{ ...withStats, marginTop: -8 }}>
+        <span style={traceMono(12.5, 'var(--fg-3)')}>{r.accuracy_method}</span>
+        <span style={stats}>
+          {!usesModel
+            ? 'no model call'
+            : call
+              ? statLine([
+                  `${(call.input_tokens + call.output_tokens).toLocaleString('en-US')} tokens`,
+                  r.grading_cost_usd != null ? smallUsd(r.grading_cost_usd) : null,
+                  call.duration_ms != null ? secs(call.duration_ms) : null,
+                ])
+              : null}
+        </span>
+      </div>
       {role ? <p style={{ ...para, color: 'var(--fg-2)', marginTop: -6 }}>{role}</p> : null}
       {notGraded ? <p style={{ ...para, color: 'var(--acc-mostly-ink)' }}>{r.accuracy_rationale}</p> : null}
       {!usesModel ? (
@@ -1187,12 +1214,6 @@ function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
               the provider)
             </i>
           ) : null}
-          <span style={traceMono(12, 'var(--fg-3)')}>
-            {call.input_tokens.toLocaleString('en-US')} in · {call.output_tokens.toLocaleString('en-US')} out
-            {r.grading_cost_usd != null ? ` · ${smallUsd(r.grading_cost_usd)}` : ''}
-            {call.duration_ms != null ? ` · ${secs(call.duration_ms)}` : ''}
-            {stop ? ` · ${stop}` : ''}
-          </span>
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -1203,13 +1224,15 @@ function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
   )
 }
 
-/** The eval's estimated cost, agent and grading, with the agent's tokens under it. */
-function CostStat({ r, tokens, fmt }: { r: ResultRow; tokens: number; fmt: (n: number | null) => string }) {
+/** The eval's estimated cost and tokens, the agent's and the grading's together; the Trace and Grading
+ * cards show each part. */
+function CostStat({ r }: { r: ResultRow }) {
   const label = asLabel(<CostInfo>Est. cost</CostInfo>)
   const recorded = r.agent_input_tokens != null || r.agent_output_tokens != null
-  const tokenLine = recorded
-    ? `${tokens.toLocaleString('en-US')} agent tokens · ${fmt(r.agent_input_tokens)} in · ${fmt(r.agent_output_tokens)} out`
-    : 'Tokens not recorded'
+  const tokensIn = (r.agent_input_tokens ?? 0) + (r.grading_input_tokens ?? 0)
+  const tokensOut = (r.agent_output_tokens ?? 0) + (r.grading_output_tokens ?? 0)
+  const n = (x: number) => x.toLocaleString('en-US')
+  const tokenLine = recorded ? statLine([`${n(tokensIn + tokensOut)} tokens`, `${n(tokensIn)} in`, `${n(tokensOut)} out`]) : 'Tokens not recorded'
   const cost = r.agent_cost_usd != null && r.grading_cost_usd != null ? r.agent_cost_usd + r.grading_cost_usd : null
   if (cost == null) return <ScoreStat label={label} format="raw" value="—" caption={`Not recorded for this run · ${tokenLine}`} />
   return <ScoreStat label={label} format="raw" value={smallUsd(cost)} caption={tokenLine} />
@@ -1230,9 +1253,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
   const log = data.agent_logs.find((l) => l.result_id === r.result_id)
   const details = log?.step_details ? (parseJson(log.step_details) as StepDetails | null) : null
   const grading = log?.grading_call ? (parseJson(log.grading_call) as GradingCall | null) : null
-  const tokens = (r.agent_input_tokens ?? 0) + (r.agent_output_tokens ?? 0)
   const title = evalTitles(data.results).get(r.eval_id)
-  const fmt = (n: number | null) => (n ?? 0).toLocaleString('en-US')
 
   return (
     <div style={stack(20)}>
@@ -1277,7 +1298,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           )}
         </Card>
         <Card>
-          <CostStat r={r} tokens={tokens} fmt={fmt} />
+          <CostStat r={r} />
         </Card>
         <Card>
           <StepsStat r={r} />
