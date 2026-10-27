@@ -152,11 +152,13 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
     {tip?<div ref={tipRef} style={{position:'fixed',left:0,top:0,visibility:'hidden',zIndex:50,padding:'8px 10px',borderRadius:8,background:'var(--bg-inverse)',color:'var(--fg-inverse)',font:'400 12px/1.5 var(--font-sans)',boxShadow:'var(--shadow-2)',pointerEvents:'none',minWidth:150,maxWidth:'min(320px, calc(100vw - 16px))',overflowWrap:'anywhere'}}>
       <div style={{fontWeight:500}}>{tip.row}</div>
       <div style={{fontFamily:'var(--font-mono)',opacity:.7,fontSize:11}}>{tip.col}</div>
+      {/* The scores, or "No run" for an empty cell; the cell's colour already shows its bucket. */}
+      {tip.v==null?<div style={{opacity:.7,marginTop:4}}>No run</div>:<>
       <div style={{display:'flex',justifyContent:'space-between',gap:16,marginTop:4}}><span>{MLABEL[m]}</span><span style={{fontFamily:'var(--font-mono)',fontWeight:500}}>{pct(tip.v)}</span></div>
       {tip.lines.map(([k,v])=><div key={k} style={{display:'flex',justifyContent:'space-between',gap:16,opacity:.8}}><span>{k}</span><span style={{fontFamily:'var(--font-mono)'}}>{v}</span></div>)}
-      <div style={{opacity:.7,marginTop:2}}>{tip.b?BUCKET_LABEL[tip.b]:'No run'}</div>
+      </>}
       {tip.cost!==undefined?<div style={{display:'flex',justifyContent:'space-between',gap:16,marginTop:4,paddingTop:4,borderTop:'1px solid color-mix(in oklch,var(--fg-inverse) 20%,transparent)'}}><span>{costLabel}</span><span style={{fontFamily:'var(--font-mono)'}}>{tip.cost==null?'not recorded':formatCost(tip.cost)}</span></div>:null}
-      {tip.note?<div style={{marginTop:4,paddingTop:4,borderTop:'1px solid color-mix(in oklch,var(--fg-inverse) 20%,transparent)'}}>{tip.note}</div>:null}
+      {tip.note&&tip.v!=null?<div style={{marginTop:4,paddingTop:4,borderTop:'1px solid color-mix(in oklch,var(--fg-inverse) 20%,transparent)'}}>{tip.note}</div>:null}
     </div>:null}
   </div>;
 }
