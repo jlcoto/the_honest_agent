@@ -102,8 +102,8 @@ A result page shows why an eval passed or failed in a run: what the agent answer
 that answer was graded, which tables it read, and the steps it took to get there.
 
 - **The cards:** accuracy and provenance against their thresholds, what the eval cost
-  (the agent and the grading together) with the agent's tokens under it, and how many
-  steps it took out of the limit.
+  with its tokens under it (the agent and the grading together), and how many steps it
+  took out of the limit.
 - **Accuracy:** what was expected and what the agent answered, formatted the way the agent
   wrote it in markdown: tables, lists, bold and code. For `extract_match`, the
   value the grader pulled out and the difference, against the tolerance; for
@@ -116,14 +116,14 @@ that answer was graded, which tables it read, and the steps it took to get there
   its keywords coloured; one the agent already wrote over several lines keeps its own. Only
   the spacing changes, never the words or their case. The copy button copies the query exactly as
   the agent sent it, to run it again. The Trace shows queries the same way.
-- **Trace:** the agent's steps, from the prompt to the final answer, with what they cost
-  in all at the top. "Show the raw text" under the final answer shows it exactly as the
+- **Trace:** the agent's steps, from the prompt to the final answer. Across from the
+  prompt: how many steps it took, its tokens, what they cost and how long it took. "Show the raw text" under the final answer shows it exactly as the
   agent sent it, which is what the grading model read. Expand a step to see the tool call, what it returned, and its tokens,
   cost and time.
 - **Grading:** what the grading model did, for `extract_match` and `llm_judge`. "› Reply"
-  opens its full reply, as it came back. Below it: how many tokens it spent thinking, its
-  tokens, cost and time, and how it stopped. A reply cut off at its token limit shows "Not
-  graded" and "reached the token limit". `contains` calls no model, so the card says so.
+  opens its full reply, as it came back, and how many tokens it spent thinking. Across from
+  the grading method: its tokens, what they cost and how long it took. A reply cut off at
+  its token limit shows "Not graded" and why. `contains` calls no model, so the card says so.
 
 For the raw records of every call, use
 [`honest-agent logs`](/docs/running-evals/#find-out-why-an-eval-failed).
