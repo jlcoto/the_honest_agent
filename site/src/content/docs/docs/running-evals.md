@@ -15,7 +15,7 @@ ones fell below their thresholds:
 
 ```
 Target: sales-agent (honest_agent_config.yml)
-No --grading-model given; using claude-sonnet-5-5 (low effort), the default for Claude agents.
+No --grading-model given; using claude-sonnet-5-5 (low effort), the default for Anthropic agents.
 Starting eval run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 (4 evals)...
 Evaluating agent: sales-agent
 Model: claude-haiku-5-5 · grading model: claude-sonnet-5-5 (low effort)

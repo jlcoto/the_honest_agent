@@ -99,3 +99,6 @@ Then publish the site for the release: `git push --force origin v0.2.0:live`
 - SQL is written lowercase — keywords included (`select`, `from`, `where`,
   ...), everywhere SQL appears: seed scripts, tool implementations, storage
   code, docs.
+- Name the provider (Anthropic, OpenAI) when something goes by the provider: defaults,
+  API keys, prices ("the default for Anthropic agents"). Name the model family (Claude,
+  GPT) only when it's about the models themselves.

@@ -207,7 +207,10 @@ def test_the_default_grading_model_is_a_stronger_one_at_low_effort(fake_run, in_
         "grading_model": "claude-sonnet-5-5",
     }
     assert (fake_run["effort"], fake_run["grading_effort"]) == (None, "low")
-    assert "No --grading-model given; using claude-sonnet-5-5 (low effort)" in fake_run["output"]
+    assert (
+        "No --grading-model given; using claude-sonnet-5-5 (low effort), the default for Anthropic agents."
+        in fake_run["output"]
+    )
     assert "WARNING" not in fake_run["output"]
 
 

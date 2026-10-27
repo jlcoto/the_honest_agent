@@ -41,7 +41,7 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 - **A stronger default grading model, never the agent's own.** Without `grading_model`,
   grading used the agent's model, so an agent graded its own answers. Now the default is
   a stronger model from the agent's provider, at low effort: `claude-sonnet-5-5` for
-  Claude agents, `gpt-6.1-sol` for OpenAI ones. Grades can change for runs that relied on
+  Anthropic agents, `gpt-6.1-sol` for OpenAI ones. Grades can change for runs that relied on
   the old default; set `grading_model` to keep grading with the same model as before.
   `run` and `debug` warn when the grading model is the agent's own model, or a lower
   tier of the same provider (Haiku below Sonnet below Opus, Luna below Sol below Astra).

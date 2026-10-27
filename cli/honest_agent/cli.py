@@ -366,7 +366,7 @@ _model_options = _options(
         default=None,
         help="Model for grading: it pulls the value out of the answer for extract_match evals and judges "
         "the answer for llm_judge ones (contains needs none). Defaults to a stronger model from the agent's "
-        "provider: claude-sonnet-5-5 for Claude agents, gpt-6.1-sol for OpenAI ones. `run` warns when it's the "
+        "provider: claude-sonnet-5-5 for Anthropic agents, gpt-6.1-sol for OpenAI ones. `run` warns when it's the "
         "agent's own model or looks less capable. Keeping it the same across runs keeps comparisons between "
         "agent models fair.",
     ),
@@ -500,7 +500,7 @@ def run(
     if models.grading_defaulted:
         click.echo(
             f"No --grading-model given; using {with_effort(grading_model, models.grading_effort)}, "
-            f"the default for {'OpenAI' if provider_for(model) == OPENAI else 'Claude'} agents."
+            f"the default for {'OpenAI' if provider_for(model) == OPENAI else 'Anthropic'} agents."
         )
     if warning := grading_model_warning(models):
         click.echo(f"WARNING: {warning}")
