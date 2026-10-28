@@ -4,8 +4,19 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
-## Unreleased
+## v0.4.0 (alpha) — 2026-10-28
 
+- **A stronger default grading model, never the agent's own.** Without `grading_model`,
+  grading used the agent's model, so an agent graded its own answers. Now the default is
+  a stronger model from the agent's provider, at low effort: `claude-sonnet-5-5` for
+  Anthropic agents, `gpt-6.1-sol` for OpenAI ones. Grades can change for runs that relied on
+  the old default; set `grading_model` to keep grading with the same model as before.
+  `run` and `debug` warn when the grading model is the agent's own model, or a lower
+  tier of the same provider (Haiku below Sonnet below Opus, Luna below Sol below Astra).
+- **OpenAI's GPT-6 models can't be the agent yet:** on Chat Completions, the OpenAI API
+  honest-agent uses, they can't think and call tools in one request, so `run` and
+  `debug` stop with a message before any call. They can grade (`gpt-6.1-sol` is the
+  default OpenAI grading model). The default OpenAI agent stays `gpt-5.4-mini`.
 - **`run` estimates what the run cost:** a line after the results are written, such as
   `Estimated cost: $0.025 (agent $0.008 · grading $0.018)`. It's token counts × the
   providers' published prices, from a table that ships with each release, so the
@@ -38,17 +49,6 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   already written over several lines keeps its own. A copy button copies a query exactly as
   sent. On a phone, an opened query now takes the card's whole width and scrolls inside
   its box instead of being cut off.
-- **A stronger default grading model, never the agent's own.** Without `grading_model`,
-  grading used the agent's model, so an agent graded its own answers. Now the default is
-  a stronger model from the agent's provider, at low effort: `claude-sonnet-5-5` for
-  Anthropic agents, `gpt-6.1-sol` for OpenAI ones. Grades can change for runs that relied on
-  the old default; set `grading_model` to keep grading with the same model as before.
-  `run` and `debug` warn when the grading model is the agent's own model, or a lower
-  tier of the same provider (Haiku below Sonnet below Opus, Luna below Sol below Astra).
-- **OpenAI's GPT-6 models can't be the agent yet:** on Chat Completions, the OpenAI API
-  honest-agent uses, they can't think and call tools in one request, so `run` and
-  `debug` stop with a message before any call. They can grade (`gpt-6.1-sol` is the
-  default OpenAI grading model). The default OpenAI agent stays `gpt-5.4-mini`.
 - **A provider rejecting a call stops the run with one line,** such as
   `The run stopped: OpenAI rejected a model call (HTTP 401): Incorrect API key provided…`,
   instead of a Python traceback. The evals before it are stored.
