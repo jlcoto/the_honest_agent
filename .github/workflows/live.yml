@@ -1,0 +1,24 @@
+name: Live site
+
+# Publishing a GitHub Release moves the live branch to the release's commit, and
+# Cloudflare Pages deploys live to https://thehonestagent.dev. --force because site fixes
+# cherry-picked to live since the last release aren't in main's history; the release
+# has them through main.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  live:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Move live to the release
+        run: git push --force origin HEAD:refs/heads/live
