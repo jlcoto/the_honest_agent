@@ -113,7 +113,7 @@ prices:
   each model's price comes from, so a typo shows up before you spend anything:
 
   ```
-  Prices         OK       claude-haiku-5-5 built-in (as of 2026-10-25) · my-proxy-model from honest_agent_config.yml
+  Prices         OK       claude-haiku-5-5 built-in (as of 2026-10-28) · my-proxy-model from honest_agent_config.yml
   ```
 
 ### Check first

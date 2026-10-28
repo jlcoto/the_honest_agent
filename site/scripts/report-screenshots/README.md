@@ -22,6 +22,9 @@ is captured from the real report UI with the sample data in `sample-data/`.
    current markup, so adjust them if the sections change.
 5. Copy `out/*.webp` and `out/define-*.png` to `public/assets/`.
 
+`add_costs.py` added the v0.4.0 fields (costs, the grading call, step costs) to the
+sample data; the data here already has them.
+
 `rename.py` is the one-off rename that turned the 1997/1995 evals into
 `revenue_q4` ("Revenue in Q4 2026") and `order_total_2026`. The sample data here
 has already been renamed (the data before it is in git history).

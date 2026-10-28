@@ -66,7 +66,7 @@ request to `main`. Both must pass before a PR can be merged.
   version in progress: its notes go under "Unreleased" in `CHANGELOG.md`. Each
   version has a GitHub milestone, to track what goes into it.
 - **People get changes only from a release.** The CLI is installed pinned to a
-  tag (`…the_honest_agent.git@v0.3.1`), and the Docker image is built when a `v*`
+  tag (`…the_honest_agent.git@v0.4.0`), and the Docker image is built when a `v*`
   tag is pushed. So merging to `main` changes nothing for them.
 - **The site is published from the `live` branch, not `main`.** Cloudflare Pages
   deploys `live` to https://thehonestagent.dev, so the docs match the latest
