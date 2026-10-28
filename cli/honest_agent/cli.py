@@ -727,7 +727,7 @@ def debug(
 
 def price_sources(model: str, grading_model: str, config: Config | None) -> str:
     """Where each model's price comes from, for `debug`: `claude-haiku-5-5 built-in (as of
-    2026-10-25) · my-proxy-model from honest_agent_config.yml`, or that it has none."""
+    2026-10-28) · my-proxy-model from honest_agent_config.yml`, or that it has none."""
     shown = []
     for name in dict.fromkeys([model, grading_model]):
         _, source = price_for(name, config.prices if config else None)
