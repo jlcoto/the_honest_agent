@@ -89,10 +89,15 @@ request to `main`. Both must pass before a PR can be merged.
 4. Replace the old tag (e.g. `v0.1.0`) everywhere users copy an install line:
    `grep -rn 'v0\.1\.0' --exclude-dir=node_modules --exclude-dir=.git .`
    (the README, Getting started, the CI recipe, the site footer).
-5. Tag the release (`git tag -a v0.2.0`) and publish a GitHub Release.
+5. After the merge, tag the merge commit (`git tag -a v0.2.0 -m v0.2.0`) and push the
+   tag: the Docker workflow checks that the tag matches the version.
+6. Publish a GitHub Release for the tag. That publishes the site too: the "Live site"
+   workflow moves `live` to the release (`live` always points at the latest release,
+   plus any site fixes copied there).
 
-Then publish the site for the release: `git push --force origin v0.2.0:live`
-(`live` always points at the latest release, plus any site fixes copied there).
+If the workflow fails, move `live` by hand:
+`git push --force origin 'v0.2.0^{commit}:refs/heads/live'`. The `^{commit}` matters: a
+tag made with `-a` can't be pushed to a branch as it is.
 
 ## Style
 
