@@ -1,0 +1,102 @@
+---
+import { Logo } from '@ds';
+import Base from '../layouts/Base.astro';
+import Footer from '../components/sections/Footer.astro';
+
+// Posts live on Substack; this page lists them, newest first.
+const posts = [
+  {
+    title: "Hillclimbing: Improve Your Data Agent's Accuracy with evals",
+    date: '2026-10-27',
+    summary:
+      'How to improve a data agent one step at a time: set a baseline with evals, find where it fails, change one thing, and measure again. With some help from Miley Cyrus.',
+    url: 'https://blog.thegroundlayer.io/p/hillclimbing-evals-data-agents',
+    image: '/assets/blog/hillclimbing-evals.webp',
+    alt: 'The robot mascot with a backpack and walking stick, hiking up a green hill toward a flag at the top.',
+  },
+  {
+    title: 'The Honest Agent: Put trust into your AI analytics',
+    date: '2026-10-15',
+    summary:
+      'Why I built The Honest Agent: test whether your AI analytics agent gives the right answers from the right sources, and review every run in a report.',
+    url: 'https://blog.thegroundlayer.io/p/the-honest-agent-put-trust-into-your',
+    image: '/assets/blog/the-honest-agent-launch.webp',
+    alt: "The report's Overview, with scores and a heatmap of eval runs, and the robot mascot waving in front of it.",
+  },
+];
+const fmt = (d: string) =>
+  new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+---
+<Base
+  title="Blog · The Honest Agent"
+  description="Posts about evals for agentic analytics: how to test an AI analytics agent, and how to make it more accurate."
+>
+  <div class="s-blog">
+    <nav class="nav">
+      <a class="home" href="/" aria-label="The Honest Agent"><Logo markSrc="/assets/robot.png" size={40} /></a>
+      <div class="links">
+        <a href="/docs/">Docs</a>
+        <a href="/blog/" aria-current="page">Blog</a>
+        <a href="https://github.com/jlcoto/the_honest_agent">GitHub</a>
+      </div>
+    </nav>
+    <main class="body">
+      <h1>Blog</h1>
+      <p class="sub">Posts about evals for agentic analytics, published on Substack.</p>
+      <ol class="posts">
+        {posts.map((p) => (
+          <li>
+            <article>
+              <a class="cover" href={p.url} tabindex="-1" aria-hidden="true"><img src={p.image} alt={p.alt} width="800" height="450" loading="lazy" decoding="async" /></a>
+              <div class="text">
+              <time datetime={p.date}>{fmt(p.date)}</time>
+              <h2><a href={p.url}>{p.title}</a></h2>
+              <p>{p.summary}</p>
+              <a class="more" href={p.url}>Read on Substack →</a>
+              </div>
+            </article>
+          </li>
+        ))}
+      </ol>
+    </main>
+  </div>
+  <Footer />
+</Base>
+
+<style>
+.s-blog{background:linear-gradient(180deg,#FFFFFF 0,#EEF0E8 480px);color:var(--fg-1);font-family:var(--font-sans);font-size:15px;line-height:1.5}
+.nav{max-width:1240px;margin:0 auto;padding:20px 32px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 24px}
+.home{display:inline-flex;text-decoration:none;color:var(--fg-1)}
+.links{display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px}
+.links a{color:var(--fg-2);text-decoration:none;font-weight:500}
+.links a:hover,.links a[aria-current]{color:var(--fg-1)}
+.body{max-width:960px;margin:0 auto;padding:32px 32px 72px}
+h1{margin:0 0 10px;font-family:var(--font-display);font-weight:500;font-size:44px;line-height:1.08;letter-spacing:-.02em}
+.sub{margin:0 0 28px;font-size:18px;color:var(--fg-2)}
+.posts{list-style:none;margin:0;padding:0;display:grid;grid-auto-rows:1fr;gap:12px}
+.posts li{display:flex}
+.posts article{flex:1}
+article{background:var(--paper);border:1px solid #D9DDD2;border-radius:14px;padding:14px;display:grid;grid-template-columns:320px 1fr;gap:24px;align-items:center}
+.cover{display:block;border-radius:10px;overflow:hidden;border:1px solid #E3E6DC}
+.cover img{display:block;width:100%;height:auto}
+.text{padding:4px 8px 4px 0}
+time{font-family:var(--font-mono);font-size:13px;color:var(--fg-3)}
+h2{margin:6px 0 8px;font-family:var(--font-display);font-weight:500;font-size:24px;line-height:1.2;letter-spacing:-.01em}
+h2 a{color:var(--fg-1);text-decoration:none}
+h2 a:hover{text-decoration:underline;text-underline-offset:4px}
+article p{margin:0 0 14px;color:var(--fg-2)}
+.more{color:var(--green-700);font-weight:500;text-decoration:none}
+.more:hover{text-decoration:underline;text-underline-offset:3px}
+@media (max-width:900px){
+ .nav{padding:16px}
+ .body{padding:20px 16px 56px}
+ h1{font-size:34px}
+ .sub{font-size:16px;margin-bottom:20px}
+ article{grid-template-columns:260px 1fr;gap:18px;padding:12px}
+ h2{font-size:21px}
+}
+@media (max-width:640px){
+ article{grid-template-columns:1fr;gap:14px}
+ .text{padding:0 4px 4px}
+}
+</style>
