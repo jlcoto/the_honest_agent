@@ -48,7 +48,10 @@ export default defineConfig({
         { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
         { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://thehonestagent.dev/assets/og.png' } },
       ],
-      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/jlcoto/the_honest_agent' }],
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/jlcoto/the_honest_agent' },
+        { icon: 'x.com', label: 'X', href: 'https://x.com/ev_honestagent' },
+      ],
       editLink: { baseUrl: 'https://github.com/jlcoto/the_honest_agent/edit/main/site/' },
       sidebar: [
         { label: 'Overview', link: '/docs/' },
