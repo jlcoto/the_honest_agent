@@ -5,6 +5,12 @@ updates:
     directory: /cli
     schedule:
       interval: weekly
+    # Stay on the Python minor the dependencies ship wheels for (duckdb had none for 3.15,
+    # so the image build failed). Patch updates still come through via the digest; bump
+    # the minor by hand when the wheels exist.
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
