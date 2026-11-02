@@ -33,7 +33,7 @@ async def _two_evals(progress: Progress):
         progress.start("revenue_q4")
         progress.finish(_row(), ["revenue_q4 hit the step limit without a final answer."])
         progress.start("top_segment")
-        progress.fail([])
+        progress.error("top_segment", "RuntimeError: overloaded", [])
 
 
 def test_without_a_terminal_only_the_lines_print_with_warnings_under_their_eval(capsys):
@@ -43,7 +43,7 @@ def test_without_a_terminal_only_the_lines_print_with_warnings_under_their_eval(
     lines = out.splitlines()
     assert lines[0].startswith("[1/2] revenue_q4 .... PASS")
     assert lines[1] == "    WARNING: revenue_q4 hit the step limit without a final answer."
-    assert lines[2].startswith("[2/2] top_segment ... ERROR")
+    assert lines[2].startswith("[2/2] top_segment ... ERROR  RuntimeError: overloaded  [")
     assert err == ""
 
 

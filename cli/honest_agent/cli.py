@@ -885,7 +885,7 @@ def rebuild(ctx: click.Context, results_path: str | None, run_id: str | None):
     """Re-derive results, SQL calls and traces from the raw record of past runs, after a
     change to how honest-agent scores or reads them. Calls no model: it costs nothing and
     uses each run's own settings and eval definitions. Runs recorded before honest-agent
-    kept raw records, and evals stopped by an error, are left as they are."""
+    kept raw records are left as they are."""
     from .raw import has_raw_layer
 
     results_path = _results_path(ctx, results_path)
@@ -895,13 +895,8 @@ def rebuild(ctx: click.Context, results_path: str | None, run_id: str | None):
     try:
         if not has_raw_layer(con):
             raise click.ClickException("This results file has no raw records yet; nothing to rebuild.")
-        # An eval stopped by an error has nothing to derive, as during the run.
-        clauses = ["not exists (select 1 from raw.events v where v.result_id = e.result_id and v.kind = 'eval_error')"]
-        params = []
-        if run_id:
-            clauses.append("e.run_id = ?")
-            params.append(run_id)
-        query = f"select e.result_id from raw.evals e where {' and '.join(clauses)} order by e.started_at"
+        where, params = ("where e.run_id = ? ", [run_id]) if run_id else ("", [])
+        query = f"select e.result_id from raw.evals e {where}order by e.started_at"
         result_ids = [row[0] for row in con.execute(query, params).fetchall()]
         for result_id in result_ids:
             write_derived(con, [derive_result(con, result_id).row])

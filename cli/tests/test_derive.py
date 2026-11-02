@@ -329,7 +329,7 @@ def test_rebuild_uses_the_settings_the_run_had(tmp_path: Path):
     assert _derive(path)["sql_calls"] == []
 
 
-def test_an_eval_stopped_by_an_error_has_nothing_to_derive(tmp_path: Path):
+def test_an_eval_stopped_by_an_error_derives_a_row_without_scores(tmp_path: Path):
     path = str(tmp_path / "results.duckdb")
     record(path, [model_call(claude_reply(text("4")))])
     con = connect(path)
@@ -338,11 +338,14 @@ def test_an_eval_stopped_by_an_error_has_nothing_to_derive(tmp_path: Path):
 
         stopped = EvalRecorder(con, "r1")
         stopped._seq = 1
-        stopped.eval_error(RuntimeError("judge unreachable"))
-        with pytest.raises(ValueError, match="stopped with an error"):
-            derive_result(con, "r1")
+        stopped.eval_error("RuntimeError: judge unreachable")
+        row = derive_result(con, "r1").row
     finally:
         con.close()
+    assert row["status"] == "error"
+    assert row["accuracy_score"] is None and row["provenance_score"] is None
+    assert row["accuracy_rationale"] == "[honest-agent error] The eval stopped: RuntimeError: judge unreachable"
+    assert row["agent_answer"] == "4"
 
 
 def test_rebuild_locates_bare_names_with_the_defaults_the_run_had(tmp_path: Path):

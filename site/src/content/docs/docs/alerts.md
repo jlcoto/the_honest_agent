@@ -64,8 +64,10 @@ Accuracy 1.00 (min 0.8)  ·  Provenance 0.50 (min 0.7)
 Open the report · honest-agent
 ```
 
-Each failing eval shows its title, id and scores against their thresholds. A message
-lists up to 20 failing evals, and counts the rest.
+Each failing eval shows its title, id and scores against their thresholds. An eval that
+stopped with an error (a provider or MCP failure) shows `Error:` and the reason instead,
+and the headline counts it apart, as in "3 of 4 evals failed: 2 below threshold, 1
+stopped with an error". A message lists up to 20 failing evals, and counts the rest.
 
 ## Link the alert to your report
 

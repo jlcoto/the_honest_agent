@@ -6,7 +6,7 @@ import urllib.request
 from typing import Any
 
 from .storage import read_latest_run_results
-from .thresholds import failing_rows
+from .thresholds import error_reason, failing_rows, is_error
 
 # Slack allows 50 blocks per message; the rest of the failures are counted, not listed.
 _MAX_LISTED = 20
@@ -45,12 +45,20 @@ def alert_message(
     rows: list[dict[str, Any]], failures: list[dict[str, Any]], report_url: str | None = None
 ) -> dict[str, Any]:
     """The Slack message for one run's failing evals: which agent and model, when, and each
-    failure's scores. `text` is what notifications and the sidebar show."""
+    failure's scores, or its error. `text` is what notifications and the sidebar show."""
     first = rows[0]
     agent = _escape(first["agent_name"] or "unknown agent")
     model = _escape(first["model_name"] or "unknown model")
     started = min(r["run_timestamp"] for r in rows)[:16]
-    headline = f"{len(failures)} of {len(rows)} evals below threshold"
+    errored = sum(1 for f in failures if is_error(f))
+    below = len(failures) - errored
+    of = f"{len(failures)} of {len(rows)} evals"
+    if not errored:
+        headline = f"{of} below threshold"
+    elif not below:
+        headline = f"{of} stopped with an error"
+    else:
+        headline = f"{of} failed: {below} below threshold, {errored} stopped with an error"
     blocks = [
         {"type": "header", "text": {"type": "plain_text", "text": f"🔴 {headline}"}},
         _context(f"*{agent}* · {model} · run started {started} UTC"),
@@ -60,10 +68,14 @@ def alert_message(
         title = _escape(f["eval_title"] or f["eval_id"])
         if report_url:
             title = f"<{_result_link(report_url, f['result_id'])}|{title}>"
-        scores = [f"Accuracy *{f['accuracy_score']:.2f}* (min {f['accuracy_min_score']})"]
-        if f["provenance_score"] is not None:
-            scores.append(f"Provenance *{f['provenance_score']:.2f}* (min {f['provenance_min_score']})")
-        text = f"*{title}*  `{_escape(f['eval_id'])}`\n" + "  ·  ".join(scores)
+        if is_error(f):
+            detail = f"Error: {_escape(error_reason(f))}"
+        else:
+            scores = [f"Accuracy *{f['accuracy_score']:.2f}* (min {f['accuracy_min_score']})"]
+            if f["provenance_score"] is not None:
+                scores.append(f"Provenance *{f['provenance_score']:.2f}* (min {f['provenance_min_score']})")
+            detail = "  ·  ".join(scores)
+        text = f"*{title}*  `{_escape(f['eval_id'])}`\n{detail}"
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
     if len(failures) > _MAX_LISTED:
         blocks.append(_context(f"…and {len(failures) - _MAX_LISTED} more"))
@@ -83,7 +95,7 @@ def notify_on_failures(
 
     failures = failing_rows(rows)
     if not failures:
-        print(f"No evals below threshold in the latest run{whose} -- nothing to notify.")
+        print(f"No evals below threshold or stopped by an error in the latest run{whose} -- nothing to notify.")
         return
 
     _post_to_slack(webhook_url, alert_message(rows, failures, report_url))

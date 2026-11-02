@@ -10,14 +10,15 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from recorded import claude_reply, definition, model_call, record, text, tool_call, tool_use
+from recorded import claude_reply, definition, mcp_result, model_call, record, text, tool_call, tool_use
 
 import honest_agent.cli as cli_mod
 from honest_agent.cli import main
 from honest_agent.grading import UNREADABLE_REPLY
 from honest_agent.raw import RunRecorder, read_records
-from honest_agent.runner import eval_loop, resolve_agent_name
+from honest_agent.runner import eval_loop, failure_summary, resolve_agent_name
 from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
+from honest_agent.thresholds import EVAL_ERROR, failing_rows
 
 SQL = "select count(*) from agent_quiz_demo.public.orders"
 
@@ -421,20 +422,94 @@ class _FailingJudge:
         raise RuntimeError("the grading API is down")
 
 
-def test_an_eval_that_fails_is_recorded_before_the_run_stops(tmp_path: Path):
+def test_an_eval_whose_grading_fails_is_stored_as_an_error(tmp_path: Path, capsys):
     path = str(tmp_path / "results.duckdb")
     agent = _ScriptedAgent([model_call(claude_reply(text("2297")))])
     evals = [definition(grading_method="llm_judge", expected_answer="2297")]
 
-    try:
-        _run_loop(path, agent, _FailingJudge(), evals)
-        raise AssertionError("expected the failing grading call to stop the run")
-    except RuntimeError:
-        pass
+    (row,) = _run_loop(path, agent, _FailingJudge(), evals)
 
     (rec,) = read_records(path)
     assert [e["kind"] for e in rec["events"]] == ["model_call", "grading_call", "eval_error"]
-    assert read_all_results(path) == []
+    assert rec["events"][-1]["error"] == "RuntimeError: the grading API is down"
+    (stored,) = read_all_results(path)
+    assert stored["status"] == row["status"] == "error"
+    assert stored["accuracy_score"] is None and stored["provenance_score"] is None
+    assert stored["accuracy_rationale"] == f"{EVAL_ERROR}RuntimeError: the grading API is down"
+    # The agent finished, so its answer and the cost of its calls are kept.
+    assert stored["agent_answer"] == "2297"
+    assert stored["agent_input_tokens"] == 10
+    assert "ERROR  RuntimeError: the grading API is down" in capsys.readouterr().out
+
+
+class _AgentFailingOn:
+    """Answers every eval with `2297`, except the one whose prompt is `fail`: there it
+    queries once, then its next model call raises, as a provider outage would."""
+
+    async def run(self, prompt, record):
+        calls = [model_call(claude_reply(text("2297")))]
+        if prompt == "fail":
+            calls = [
+                model_call(claude_reply(tool_use("t1", "query_warehouse", {"sql": "select 1 from orders"}))),
+                tool_call("t1", "query_warehouse", {"sql": "select 1 from orders"}, mcp_result("1")),
+            ]
+        for kind, provider, request, response in calls:
+            await record.call(kind, provider, request, _returns(response))
+        if prompt == "fail":
+            await record.call("model_call", "anthropic", {"model": "claude-test"}, _raises(RuntimeError("overloaded")))
+
+
+async def _raises(exc):
+    raise exc
+
+
+def test_an_eval_that_errors_doesnt_stop_the_run(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    evals = [
+        definition(eval_id="q1", prompt="p", expected_answer="2297"),
+        definition(eval_id="q2", prompt="fail", expected_answer="2297", expected_sources=["orders"]),
+        definition(eval_id="q3", prompt="p", expected_answer="2297"),
+    ]
+
+    rows = _run_loop(path, _AgentFailingOn(), _ScriptedJudge("unused"), evals)
+
+    assert [r["status"] for r in rows] == ["graded", "error", "graded"]
+    assert [r["accuracy_score"] for r in rows] == [1.0, None, 1.0]
+    assert len(read_records(path)) == 3
+    errored = rows[1]
+    assert errored["agent_answer"] is None and not errored["hit_step_limit"]
+    assert errored["steps"] == 1  # the call that failed isn't a step
+    # What it read before the error is still recorded, without a provenance score.
+    assert errored["provenance_score"] is None and errored["provenance_min_score"] is None
+    assert [s["name"] for s in errored["queried_sources"]] == ["orders"]
+
+
+def test_the_run_summary_lists_errors_before_evals_below_threshold(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    evals = [
+        definition(eval_id="q1", prompt="p", expected_answer="2297"),
+        definition(eval_id="q2", prompt="fail"),
+        definition(eval_id="q3", prompt="p", expected_answer="wrong"),
+    ]
+    rows = _run_loop(path, _AgentFailingOn(), _ScriptedJudge("unused"), evals)
+
+    assert failure_summary(rows, failing_rows(rows)) == [
+        "1/3 eval(s) stopped with an error this run:",
+        "  - q2: RuntimeError: overloaded",
+        "1/3 eval(s) below threshold this run:",
+        "  - q3: accuracy 0.00 < 0.8",
+    ]
+
+
+def test_rebuild_keeps_errored_evals(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    _run_loop(path, _AgentFailingOn(), _ScriptedJudge("unused"), [definition(prompt="fail")])
+
+    result = CliRunner().invoke(main, ["rebuild", "--results-path", path])
+
+    assert result.exit_code == 0, result.output
+    assert "Rebuilt 1 result(s)" in result.output
+    assert read_all_results(path)[0]["status"] == "error"
 
 
 _LS_EVALS = """

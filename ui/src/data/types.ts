@@ -11,9 +11,9 @@ export interface ResultRow {
   category: string | null
   tags: string[] | null
   expected_answer: string
-  agent_answer: string
+  agent_answer: string | null // null when the eval stopped with an error before answering
   tools_used: string[] | null
-  accuracy_score: number
+  accuracy_score: number | null // null when the eval stopped with an error (status 'error')
   accuracy_method: string
   grading_model: string | null // grading model for extract_match/llm_judge; null for contains
   grading_effort?: string | null // the grading model's effort; null when none was sent (provider default)
@@ -33,6 +33,9 @@ export interface ResultRow {
   effort?: string | null // the agent model's effort; null when none was sent (provider default)
   agent_name: string | null // null for results stored before agents were recorded
   latency_ms: number | null
+  // 'graded', or 'error' when an exception stopped the eval: no scores, the reason in
+  // accuracy_rationale. null for results stored before this column (all graded).
+  status?: string | null
   steps: number | null // model calls the agent made, each with the tool calls it asked for
   max_steps: number | null // the run's max_tool_steps
   hit_step_limit: boolean | null // used every step and was still asking for tools: no answer
