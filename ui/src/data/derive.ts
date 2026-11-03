@@ -277,11 +277,3 @@ export function passedRunsLines(rows: ResultRow[], check: Check): [string, strin
   const { passed, of } = checkCounts(rows, check)
   return of ? [['Runs passed', `${passed} / ${of}`]] : null
 }
-
-/** A category's summary cell line: its evals that met the tab's min score in every run they ran. */
-export function passedEveryRunLines(rows: ResultRow[], check: Check): [string, string][] | null {
-  const byEval = new Map<string, ResultRow[]>()
-  for (const r of rows) byEval.set(r.eval_id, [...(byEval.get(r.eval_id) ?? []), r])
-  const counts = [...byEval.values()].map((evalRows) => checkCounts(evalRows, check)).filter((c) => c.of > 0)
-  return counts.length ? [['Passed every run', `${counts.filter((c) => c.passed === c.of).length} / ${counts.length}`]] : null
-}

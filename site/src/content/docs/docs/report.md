@@ -82,7 +82,7 @@ Under the title: when the latest run was.
   Switch between Accuracy and Provenance at the top right. Hover a cell for its score and
   what it cost: one eval in that run, or a category's evals together, with how many of
   them passed that check. The **Overall** column averages every run, and shows how many
-  runs an eval passed in, or how many of a category's evals passed in every run. The **Passed** row at the bottom is coloured
+  runs an eval passed in. The **Passed** row at the bottom is coloured
   by the run's pass rate for that check; hover it for the count. A grey cell is an eval
   that wasn't in that run, or stopped with an error. Click a cell to open
   [that result](#a-result).

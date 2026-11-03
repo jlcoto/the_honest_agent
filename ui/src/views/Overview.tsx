@@ -15,7 +15,6 @@ import {
   meanOf,
   modelsOf,
   passedCell,
-  passedEveryRunLines,
   passedRunsLines,
   passes,
   pct,
@@ -248,12 +247,9 @@ export function Overview({
               totalsLabel="Passed"
               totals={runs.map((run) => passedCell(run.results, metric))}
               totalsSummary={passedCell(runs.flatMap((run) => run.results), metric)}
-              groupLines={(group, i) => {
-                const inGroup = (results: ResultRow[]) => results.filter((r) => categoryOf.get(r.eval_id) === group)
-                return i == null
-                  ? passedEveryRunLines(inGroup(runs.flatMap((run) => run.results)), metric)
-                  : passedLines(inGroup(runs[i].results), metric)
-              }}
+              groupLines={(group, i) =>
+                i == null ? null : passedLines(runs[i].results.filter((r) => categoryOf.get(r.eval_id) === group), metric)
+              }
               rowLines={(row, i) => {
                 if (i != null) return null
                 const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id
