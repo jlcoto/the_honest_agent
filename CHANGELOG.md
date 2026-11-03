@@ -6,6 +6,13 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 ## Unreleased
 
+- **A tool call that takes longer than 120 seconds is stopped,** and the agent gets an
+  error result saying so, so it can try a lighter query or answer. Before, a server that
+  never answered could hang the run for good (six hours in GitHub Actions). Change it with
+  `tool_timeout`, at the top level or on a target, or `--tool-timeout`; the run records it.
+- **Fixed: a remote server with a bearer token cut off any tool call slower than 5
+  seconds** and dropped the connection, so every later call in the run failed. It now gets
+  the same limits as a server without a token.
 - **An eval that errors no longer stops the run.** When a provider call fails (overloaded,
   rate-limited, a wrong API key) or the MCP connection drops during an eval, `run` prints
   `ERROR` with the reason on that eval's line and goes on to the next one. Before, the run

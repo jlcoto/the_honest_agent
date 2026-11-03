@@ -55,6 +55,9 @@ Run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 complete. Next: `honest-agent report` /
   without a final answer". Raise it with `max_tool_steps` in the config, at the top level
   or on a target, or with `--max-tool-steps` for one run (see
   [Other target settings](/docs/connect/#other-target-settings)).
+- **Tool timeout:** a tool call that takes longer than 120 seconds is stopped. The agent
+  gets an error result saying so, like a failed query, and can try again or answer; the
+  eval goes on. Raise it with `tool_timeout`, or `--tool-timeout` for one run.
 
 :::caution[Each run costs money]
 Every eval calls the model, and the grading methods `extract_match` and `llm_judge` call

@@ -40,6 +40,7 @@ from .llm import (
     looks_less_capable,
     provider_for,
 )
+from .mcp_client import DEFAULT_TOOL_TIMEOUT
 from .prices import PRICES_AS_OF, price_for
 from .raw import read_records
 from .runner import RunError, run_evals, with_effort
@@ -444,6 +445,13 @@ _mcp_options = _options(
     "If the model still wants to call tools when this is hit, that eval fails with a clear error "
     "instead of silently returning an empty answer.",
 )
+@click.option(
+    "--tool-timeout",
+    type=click.IntRange(min=1),
+    default=DEFAULT_TOOL_TIMEOUT,
+    help="Seconds a tool call may take before it's stopped. The agent gets an error result "
+    "saying so and can try again or answer; the run goes on.",
+)
 @_mcp_options
 @click.option(
     "--agent-name",
@@ -466,6 +474,7 @@ def run(
     effort: str | None,
     grading_effort: str | None,
     max_tool_steps: int,
+    tool_timeout: int,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -480,10 +489,13 @@ def run(
     if chosen:
         click.echo(f"Target: {chosen.name} ({config.path})")
 
-    # Without targets, the file's top-level model/grading_model/max_tool_steps still apply.
+    # Without targets, the file's top-level model/grading_model/max_tool_steps/tool_timeout still apply.
     layer = chosen or (Target("config", config.shared) if config else None)
     models = _resolve_models(ctx, layer, model, grading_model, effort, grading_effort)
     max_tool_steps = _from_layers(ctx, "max_tool_steps", max_tool_steps, layer)
+    tool_timeout = _from_layers(ctx, "tool_timeout", tool_timeout, layer)
+    if tool_timeout < 1:
+        raise click.ClickException(f"tool_timeout in {CONFIG_FILE_NAME} must be at least 1 second; got {tool_timeout}.")
     evals_dir = _evals_dir(evals_dir, chosen)
     if chosen:
         # A target names the agent: its agent_name, else the target's own name.
@@ -521,6 +533,7 @@ def run(
                 results_path=_results_path(ctx, results_path),
                 model=model,
                 max_tool_steps=max_tool_steps,
+                tool_timeout=tool_timeout,
                 mcp_command=mcp_command,
                 mcp_url=mcp_url,
                 mcp_bearer_token=mcp_bearer_token,

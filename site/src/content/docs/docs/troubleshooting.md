@@ -17,6 +17,7 @@ server and the results store, without calling a model, and says what's wrong.
 | `serve` says a folder `isn't an honest-agent report folder` | `serve` only publishes a folder `report` wrote, so it can't expose other files (like `.env`). Run `honest-agent report` first, or pass its folder with `--out`. |
 | `Address already in use` from `serve` | Another program uses the port: `serve --port 8001`. |
 | `honest-agent didn't run this SQL: it contains a ... statement` | The agent sent SQL that isn't a read, so it wasn't run. honest-agent never lets an agent change the warehouse, temp tables included. |
+| `honest-agent stopped this tool call: it took longer than 120s` | A query took longer than the tool timeout. If your warehouse is just slow, raise `tool_timeout` on the target (in seconds). |
 | `... hit the step limit without a final answer` | The agent needed more steps than allowed: raise `max_tool_steps` on the target (default 5), for example to 10. |
 
 To see what happened in a run, call by call, use
