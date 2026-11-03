@@ -112,6 +112,13 @@ grant select on all semantic views in schema <database>.<schema> to role honest_
 views or semantic views created later, repeat them with `future` instead of `all`, e.g.
 `grant select on future tables in schema ...`.
 
+### Long-running queries
+
+honest-agent stops waiting for a query after `tool_timeout` (120 seconds by default), and
+the agent gets an error saying so. It asks the server to stop the query too, but can't
+make sure the query stops in the warehouse. Make sure Snowflake ends long-running
+queries; Snowflake's docs cover how to set a query timeout.
+
 ## 3. Add a network policy
 
 Snowflake issues and accepts a PAT for a service user only if the user has a
@@ -290,12 +297,16 @@ create mcp server <mcp_database>.<mcp_schema>.<mcp_server>
         description: "Run read-only SQL queries against the <database> database."
         config:
           read_only: true
+          query_timeout: 120
     $$;
 ```
 
 - **`read_only: true`** makes the tool run only reads. It's Snowflake's default; setting it
   says so in the spec.
 - **`warehouse:`** under `config` picks the warehouse, instead of the user's default.
+- **`query_timeout:`** under `config` is a Snowflake setting: the maximum time in seconds
+  for query execution, in Snowflake's words. It's separate from honest-agent's
+  `tool_timeout`.
 - The tool's `description` is what the model reads to decide when to use it.
 
 Then follow the steps above, from step 1.

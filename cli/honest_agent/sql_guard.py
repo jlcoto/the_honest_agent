@@ -83,6 +83,10 @@ def refusal(sql: str) -> str | None:
     return None
 
 
+# How a call stopped by tool_timeout starts, in the error result the agent gets (derive.py counts them).
+TIMED_OUT = "honest-agent stopped this tool call: it took longer than"
+
+
 class ReadOnlySQL:
     """Stands in for the connected MCP client in the agent loops: SQL that only reads goes
     through to the server, anything else comes back as an error result without running; so
@@ -113,9 +117,7 @@ class ReadOnlySQL:
                 if exc.code != REQUEST_TIMEOUT:
                     raise
                 # The SDK has asked the server to stop the call; the connection stays open.
-                reason = (
-                    f"honest-agent stopped this tool call: it took longer than {self._tool_timeout:g}s (tool_timeout)."
-                )
+                reason = f"{TIMED_OUT} {self._tool_timeout:g}s (tool_timeout)."
         return error_result(reason)
 
 

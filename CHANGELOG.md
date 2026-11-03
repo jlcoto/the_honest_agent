@@ -6,6 +6,9 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 ## Unreleased
 
+- **A tool call stopped by `tool_timeout` is named under its eval's line** in `run`'s
+  output, so a fail caused by a slow warehouse doesn't look like a wrong answer. The eval
+  is still graded: a slow query can be the agent's own doing.
 - **A tool call that takes longer than 120 seconds is stopped,** and the agent gets an
   error result saying so, so it can try a lighter query or answer. Before, a server that
   never answered could hang the run for good (six hours in GitHub Actions). Change it with

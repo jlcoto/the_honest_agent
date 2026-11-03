@@ -23,6 +23,7 @@ from .eval_loader import (
 )
 from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, NOT_GRADED, grading_prompt
 from .llm import OPENAI, Judge, make_judge, provider_error, provider_for
+from .mcp_client import DEFAULT_TOOL_TIMEOUT
 from .prices import PRICES_AS_OF, price_for, usd
 from .progress import Progress
 from .raw import RunRecorder
@@ -44,6 +45,7 @@ async def eval_loop(
     recorder: RunRecorder,
     con,
     grading_effort: str | None = None,
+    tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
 ) -> list[dict]:
     """Runs and grades each eval, recording every call as it returns (raw layer), then
     derives the eval's results from that record and writes them before the next one."""
@@ -100,6 +102,9 @@ async def eval_loop(
             write_derived(con, [derived.row])
             if (derived.row.get("accuracy_rationale") or "").startswith(NOT_GRADED):
                 warnings.append(f"{definition.eval_id}: {derived.row['accuracy_rationale']}")
+            if derived.timed_out:
+                calls = "1 tool call was" if derived.timed_out == 1 else f"{derived.timed_out} tool calls were"
+                warnings.append(f"{definition.eval_id}: {calls} stopped after {tool_timeout}s (tool_timeout).")
             for sql in derived.unparsed:
                 warnings.append(f"couldn't parse this SQL, so it doesn't count toward provenance: {sql[:80]!r}")
             progress.finish(derived.row, warnings)
@@ -307,7 +312,9 @@ async def run_evals(
                 effort=effort,
             )
         click.echo(f"Model: {with_effort(model, effort)} · grading model: {with_effort(grading_model, grading_effort)}")
-        rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort)
+        rows = await eval_loop(
+            agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort, tool_timeout
+        )
     finally:
         con.close()
         await mcp_client.__aexit__(None, None, None)

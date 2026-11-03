@@ -57,7 +57,11 @@ Run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 complete. Next: `honest-agent report` /
   [Other target settings](/docs/connect/#other-target-settings)).
 - **Tool timeout:** a tool call that takes longer than 120 seconds is stopped. The agent
   gets an error result saying so, like a failed query, and can try again or answer; the
-  eval goes on. Raise it with `tool_timeout`, or `--tool-timeout` for one run.
+  eval goes on, and a warning under its line says a call was stopped. Raise it with
+  `tool_timeout`, or `--tool-timeout` for one run. honest-agent also asks the server to
+  stop the query, but whether it does is up to the server: one that doesn't lets the query
+  finish in the warehouse. On Snowflake, see
+  [Long-running queries](/docs/connect/snowflake/#long-running-queries).
 
 :::caution[Each run costs money]
 Every eval calls the model, and the grading methods `extract_match` and `llm_judge` call
