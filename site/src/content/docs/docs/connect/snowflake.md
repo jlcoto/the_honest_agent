@@ -297,12 +297,16 @@ create mcp server <mcp_database>.<mcp_schema>.<mcp_server>
         description: "Run read-only SQL queries against the <database> database."
         config:
           read_only: true
+          query_timeout: 120
     $$;
 ```
 
 - **`read_only: true`** makes the tool run only reads. It's Snowflake's default; setting it
   says so in the spec.
 - **`warehouse:`** under `config` picks the warehouse, instead of the user's default.
+- **`query_timeout:`** under `config` is a Snowflake setting: the maximum time in seconds
+  for query execution, in Snowflake's words. It's separate from honest-agent's
+  `tool_timeout`.
 - The tool's `description` is what the model reads to decide when to use it.
 
 Then follow the steps above, from step 1.
