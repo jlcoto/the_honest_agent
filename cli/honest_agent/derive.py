@@ -20,6 +20,7 @@ from .prices import Price, call_cost
 from .provenance import check_provenance
 from .raw import honest_agent_version
 from .sql_capture import extract_sql_calls
+from .thresholds import EVAL_ERROR
 
 _TIME = "%Y-%m-%d %H:%M:%S"
 
@@ -219,18 +220,23 @@ def _cost(settings: dict, model: str, responses: list[tuple[str, dict]]) -> floa
 def derive_result(con, result_id: str) -> Derived:
     """One result's derived rows, from its raw record alone."""
     run, evaluation, events = _read(con, result_id)
-    if any(e["kind"] == "eval_error" for e in events):
-        raise ValueError(f"Result {result_id} stopped with an error; it has nothing to derive")
+    error = next((e["error"] for e in events if e["kind"] == "eval_error"), None)
     settings = json.loads(run["settings"])
     definition = EvalDefinition(**json.loads(evaluation["definition"]))
 
     agent_events = [e for e in events if e["kind"] in ("model_call", "tool_call")]
     answer, hit_step_limit = agent_answer(agent_events, settings["max_tool_steps"])
+    if error is not None and hit_step_limit:
+        # Stopped mid-loop, not out of steps: there's no answer (an error while grading keeps it).
+        answer, hit_step_limit = None, False
     trace = conversation(definition.prompt, agent_events)
 
-    grading = next((e for e in events if e["kind"] == "grading_call"), None)
+    # A grading call that failed has no reply; the eval stopped there with an error.
+    grading = next((e for e in events if e["kind"] == "grading_call" and e["response"] is not None), None)
     reply = response_text(grading["provider"], grading["response"]) if grading else None
-    if grading and cut_off(grading):
+    if error is not None:
+        grade = Grade(None, f"{EVAL_ERROR}{error}", None)
+    elif grading and cut_off(grading):
         grade = Grade(0.0, f"{CUT_OFF_REPLY}{_limit(grading)}", None)
     else:
         grade = score(
@@ -253,6 +259,9 @@ def derive_result(con, result_id: str) -> Derived:
         settings.get("default_database"),
         settings.get("default_schema"),
     )
+    if error is not None:
+        # No score for an eval that didn't finish, but the sources it read are still a record.
+        provenance = provenance._replace(score=None)
 
     agent_responses = [
         (e["provider"], e["response"]) for e in agent_events if e["kind"] == "model_call" and e["response"] is not None
@@ -300,8 +309,9 @@ def derive_result(con, result_id: str) -> Derived:
         "effort": settings.get("effort"),
         "agent_name": run["agent_name"],
         "latency_ms": latency_ms,
-        # One step is one model call and the tool calls it asks for.
-        "steps": sum(1 for e in agent_events if e["kind"] == "model_call"),
+        # One step is one model call and the tool calls it asks for; a call that failed (the
+        # eval stopped with an error) isn't one.
+        "steps": len(agent_responses),
         "max_steps": settings["max_tool_steps"],
         "hit_step_limit": hit_step_limit,
         "agent_input_tokens": sum(t[0] for t in agent_tokens),
@@ -314,6 +324,7 @@ def derive_result(con, result_id: str) -> Derived:
         "grading_cost_usd": _cost(settings, run["judge_model"], [(grading["provider"], grading["response"])])
         if grading
         else 0.0,
+        "status": "graded" if error is None else "error",
         "derived_at": datetime.now(timezone.utc).strftime(_TIME),
         "honest_agent_version": honest_agent_version(),
         # -- traces --

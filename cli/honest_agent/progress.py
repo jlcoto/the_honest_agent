@@ -48,8 +48,10 @@ def eval_line(position: int, total: int, eval_id: str, id_width: int, row: dict[
     return f"{_lead(position, total, eval_id, id_width)} {outcome}  {scores}  [{duration(seconds)}]"
 
 
-def error_line(position: int, total: int, eval_id: str, id_width: int, seconds: float) -> str:
-    return f"{_lead(position, total, eval_id, id_width)} {click.style('ERROR', fg='red')}  [{duration(seconds)}]"
+def error_line(position: int, total: int, eval_id: str, id_width: int, message: str, seconds: float) -> str:
+    """`[2/16] revenue_q4 ...... ERROR  Anthropic rejected a model call (HTTP 529): Overloaded  [3.1s]`."""
+    lead = _lead(position, total, eval_id, id_width)
+    return f"{lead} {click.style('ERROR', fg='red')}  {message}  [{duration(seconds)}]"
 
 
 def _lead(position: int, total: int, eval_id: str, id_width: int) -> str:
@@ -98,9 +100,11 @@ class Progress:
         self._current = None  # no bar until the next eval starts, so it never names this one
         self.echo("\n".join([line, *(f"    WARNING: {w}" for w in warnings)]))
 
-    def fail(self, warnings: list[str]) -> None:
-        """Prints the eval that raised; the run stops after it."""
-        line = error_line(self.done + 1, self.total, self._current or "?", self._id_width, self._elapsed())
+    def error(self, eval_id: str, message: str, warnings: list[str]) -> None:
+        """Prints the eval that stopped with an error; the run goes on to the next one."""
+        self.done += 1
+        line = error_line(self.done, self.total, eval_id, self._id_width, message, self._elapsed())
+        self._current = None
         self.echo("\n".join([line, *(f"    WARNING: {w}" for w in warnings)]))
 
     def echo(self, text: str) -> None:

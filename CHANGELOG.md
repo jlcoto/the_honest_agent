@@ -4,6 +4,27 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
+## Unreleased
+
+- **An eval that errors no longer stops the run.** When a provider call fails (overloaded,
+  rate-limited, a wrong API key) or the MCP connection drops during an eval, `run` prints
+  `ERROR` with the reason on that eval's line and goes on to the next one. Before, the run
+  stopped there and the remaining evals never ran. The errored eval is stored as a result
+  without scores: the new `status` column in `results` says `graded` or `error`, and its
+  `accuracy_rationale` holds the reason. At the end, `run` lists the errored evals before
+  those below threshold, and exits 1 when there is any of either.
+- **Errors are left out of the scores, not counted as 0.** An outage says nothing about
+  the agent, so the report's averages, Model comparison and Scores over time use graded
+  evals only. Errored evals show in Below threshold with an Error badge and their reason,
+  their result page says why the eval stopped, and their heatmap cell is grey. Passed
+  thresholds counts graded evals, with the errors named under it.
+- **`notify` alerts on errored evals too,** with the reason in place of the scores, so a
+  run that broke halfway reaches Slack. Before, a run that stopped early could send
+  nothing.
+- **`rebuild` now re-derives evals that stopped with an error,** as error results; it
+  used to skip them. Run `honest-agent rebuild` once to add the evals that stopped earlier
+  runs to your report.
+
 ## v0.4.0 (alpha) — 2026-10-28
 
 - **A stronger default grading model, never the agent's own.** Without `grading_model`,

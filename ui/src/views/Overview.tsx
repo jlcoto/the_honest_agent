@@ -5,8 +5,10 @@ import { EvalLabel } from '../components/EvalLabel'
 import {
   accuracyPasses,
   agentsOf,
+  errorReason,
   formatRunDate,
   formatRunTime,
+  isError,
   meanOf,
   modelsOf,
   passes,
@@ -49,7 +51,7 @@ function downloadCsv(filename: string, rows: ResultRow[], titles: Map<string, st
       r.accuracy_min_score,
       r.provenance_score,
       r.provenance_min_score,
-      [accuracyPasses(r) ? null : 'accuracy', provenancePasses(r) ? null : 'provenance'].filter(Boolean).join('+'),
+      isError(r) ? 'error' : [accuracyPasses(r) ? null : 'accuracy', provenancePasses(r) ? null : 'provenance'].filter(Boolean).join('+'),
       r.accuracy_method,
       r.expected_answer,
       r.agent_answer,
@@ -70,6 +72,39 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 /** "Last eval run Oct 15, 12:47 · estimated cost $0.025 (i)"; the cost left out when the run has none. */
+/** "2 below min score · 1 stopped with an error": errored evals have no scores, so they're
+ * counted apart from the graded ones the stat shows. */
+function passedCaption(run: Run) {
+  const below = run.graded - run.passed
+  const parts = [below ? `${below} below min score` : 'None below min score']
+  if (run.errored) parts.push(`${run.errored} stopped with an error`)
+  return parts.join(' · ')
+}
+
+/** "3 evals failed accuracy or provenance min score · 1 stopped with an error". */
+function failingSummary(run: Run) {
+  const below = run.graded - run.passed
+  const failed = `${below} ${below === 1 ? 'eval' : 'evals'} failed accuracy or provenance min score`
+  return run.errored ? `${failed} · ${run.errored} stopped with an error` : failed
+}
+
+/** The Overall or Accuracy card: the latest run's score, its change since the run before,
+ * and a sparkline; runs where every eval stopped with an error have no score. */
+function RunScore({ label, runs, pick }: { label: string; runs: Run[]; pick: (run: Run) => number | null }) {
+  const value = pick(runs[runs.length - 1])
+  const before = runs.length > 1 ? pick(runs[runs.length - 2]) : null
+  if (value == null) return <ScoreStat label={label} format="raw" value="—" caption="Every eval stopped with an error" />
+  return (
+    <ScoreStat
+      label={label}
+      value={value}
+      delta={before != null ? value - before : undefined}
+      caption={runs.length > 1 ? undefined : 'First run in this range'}
+      spark={runs.map(pick).filter((v): v is number => v != null)}
+    />
+  )
+}
+
 function LatestRun({ run }: { run: Run }) {
   const when = `Last eval run ${formatRunTime(run.timestamp, { year: false })}`
   const cost = runCost(run)
@@ -157,24 +192,11 @@ export function Overview({
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 16 }}>
-            <Card>
-              <ScoreStat
-                label="Overall"
-                value={latest.overall}
-                delta={previous ? latest.overall - previous.overall : undefined}
-                caption={previous ? undefined : 'First run in this range'}
-                spark={runs.map((r) => r.overall)}
-              />
-            </Card>
-            <Card>
-              <ScoreStat
-                label="Accuracy"
-                value={latest.accuracy}
-                delta={previous ? latest.accuracy - previous.accuracy : undefined}
-                caption={previous ? undefined : 'First run in this range'}
-                spark={runs.map((r) => r.accuracy)}
-              />
-            </Card>
+            {(['overall', 'accuracy'] as const).map((key) => (
+              <Card key={key}>
+                <RunScore label={key === 'overall' ? 'Overall' : 'Accuracy'} runs={runs} pick={(r) => r[key]} />
+              </Card>
+            ))}
             <Card>
               {latest.provenance == null ? (
                 <ScoreStat label="Provenance" format="raw" value="Not checked" caption="No eval in this run expects sources" />
@@ -191,9 +213,9 @@ export function Overview({
             <Card>
               <ScoreStat
                 label="Passed thresholds"
-                value={`${latest.passed} / ${latest.results.length}`}
+                value={`${latest.passed} / ${latest.graded}`}
                 format="raw"
-                caption={failing.length ? `${failing.length} below min score` : 'None below min score'}
+                caption={passedCaption(latest)}
               />
             </Card>
           </div>
@@ -224,7 +246,7 @@ export function Overview({
 
           <Card
             title="Below threshold"
-            subtitle={`Latest eval run, ${formatRunDate(latest.timestamp)} · ${failing.length} ${failing.length === 1 ? 'eval' : 'evals'} failed accuracy or provenance min score`}
+            subtitle={`Latest eval run, ${formatRunDate(latest.timestamp)} · ${failingSummary(latest)}`}
             actions={
               <IconButton
                 icon="download"
@@ -277,7 +299,9 @@ export function Overview({
                     key: 'agent_answer',
                     label: 'Agent said',
                     render: (r: ResultRow) => (
-                      <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>{answerPreview(r.agent_answer)}</span>
+                      <span style={{ font: 'var(--type-small)', color: 'var(--fg-2)' }}>
+                        {isError(r) ? errorReason(r) : answerPreview(r.agent_answer ?? '')}
+                      </span>
                     ),
                   },
                   {
@@ -289,12 +313,17 @@ export function Overview({
                       <span
                         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                       >
-                        {accuracyPasses(r) ? null : (
-                          <Badge tone={toneOf(r.accuracy_score)} dot>
+                        {isError(r) ? (
+                          <Badge tone="wrong" dot>
+                            Error
+                          </Badge>
+                        ) : null}
+                        {isError(r) || accuracyPasses(r) ? null : (
+                          <Badge tone={toneOf(r.accuracy_score ?? 0)} dot>
                             Accuracy
                           </Badge>
                         )}
-                        {provenancePasses(r) ? null : (
+                        {isError(r) || provenancePasses(r) ? null : (
                           <Badge tone={toneOf(r.provenance_score ?? 0)} dot>
                             Provenance
                           </Badge>

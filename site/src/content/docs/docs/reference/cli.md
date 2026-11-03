@@ -95,7 +95,7 @@ honest-agent notify [OPTIONS]
 
 ## `rebuild`
 
-Re-derive results, SQL calls and traces from the raw record of past runs, after a change to how honest-agent scores or reads them. Calls no model: it costs nothing and uses each run's own settings and eval definitions. Runs recorded before honest-agent kept raw records, and evals stopped by an error, are left as they are.
+Re-derive results, SQL calls and traces from the raw record of past runs, after a change to how honest-agent scores or reads them. Calls no model: it costs nothing and uses each run's own settings and eval definitions. Runs recorded before honest-agent kept raw records are left as they are.
 
 ```bash
 honest-agent rebuild [OPTIONS]

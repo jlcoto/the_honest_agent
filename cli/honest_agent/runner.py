@@ -28,7 +28,7 @@ from .progress import Progress
 from .raw import RunRecorder
 from .sql_guard import ReadOnlySQL
 from .storage import connect, write_derived
-from .thresholds import failing_rows
+from .thresholds import error_reason, failing_rows, is_error
 
 
 class RunError(Exception):
@@ -88,9 +88,15 @@ async def eval_loop(
                     )
                 derived = derive_result(con, result_id)
             except Exception as exc:
-                record.eval_error(exc)
-                progress.fail(warnings)
-                raise
+                # One eval's failure (a provider or MCP error) never stops the run: it's
+                # stored as an errored result, without scores, and the next eval runs.
+                message = error_message(exc)
+                record.eval_error(message)
+                derived = derive_result(con, result_id)
+                write_derived(con, [derived.row])
+                progress.error(definition.eval_id, message, warnings)
+                rows.append(derived.row)
+                continue
             write_derived(con, [derived.row])
             if (derived.row.get("accuracy_rationale") or "").startswith(NOT_GRADED):
                 warnings.append(f"{definition.eval_id}: {derived.row['accuracy_rationale']}")
@@ -99,6 +105,35 @@ async def eval_loop(
             progress.finish(derived.row, warnings)
             rows.append(derived.row)
     return rows
+
+
+def failure_summary(rows: list[dict], failures: list[dict]) -> list[str]:
+    """The end of `run`'s output: the evals that stopped with an error, then those below
+    threshold, each with why; or that every eval met its thresholds."""
+    if not failures:
+        return ["All evals met their thresholds."]
+    lines = []
+    errored = [f for f in failures if is_error(f)]
+    if errored:
+        lines.append(f"{len(errored)}/{len(rows)} eval(s) stopped with an error this run:")
+        lines += [f"  - {f['eval_id']}: {error_reason(f)}" for f in errored]
+    below = [f for f in failures if not is_error(f)]
+    if below:
+        lines.append(f"{len(below)}/{len(rows)} eval(s) below threshold this run:")
+        for f in below:
+            bits = []
+            if not f["accuracy_pass"]:
+                bits.append(f"accuracy {f['accuracy_score']:.2f} < {f['accuracy_min_score']}")
+            if not f["provenance_pass"]:
+                bits.append(f"provenance {f['provenance_score']:.2f} < {f['provenance_min_score']}")
+            lines.append(f"  - {f['eval_id']}: {', '.join(bits)}")
+    return lines
+
+
+def error_message(exc: BaseException) -> str:
+    """Why an eval stopped, as one line: a provider's own words when it refused or
+    couldn't be reached, else the exception's type and message."""
+    return provider_error(exc) or f"{type(exc).__name__}: {exc}"
 
 
 def with_effort(model: str, effort: str | None) -> str:
@@ -167,7 +202,7 @@ async def run_evals(
     prices: dict[str, dict[str, float]] | None = None,
 ) -> int:
     """Runs the selected evals and stores the results; returns how many fell below
-    their thresholds (`run` exits 1 when any did)."""
+    their thresholds or stopped with an error (`run` exits 1 when any did)."""
     try:
         definitions = load_evals(evals_dir)
     except ValueError as exc:
@@ -265,14 +300,7 @@ async def run_evals(
                 effort=effort,
             )
         click.echo(f"Model: {with_effort(model, effort)} · grading model: {with_effort(grading_model, grading_effort)}")
-        try:
-            rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort)
-        except Exception as exc:
-            # A provider refusing a call stops the run with its own words, not a traceback;
-            # the evals before it are already stored.
-            if (message := provider_error(exc)) is None:
-                raise
-            raise RunError(f"The run stopped: {message}") from exc
+        rows = await eval_loop(agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort)
     finally:
         con.close()
         await mcp_client.__aexit__(None, None, None)
@@ -281,17 +309,8 @@ async def run_evals(
     click.echo(cost_line(rows, model, grading_model))
 
     failures = failing_rows(rows)
-    if failures:
-        click.echo(f"{len(failures)}/{len(rows)} eval(s) below threshold this run:")
-        for f in failures:
-            bits = []
-            if not f["accuracy_pass"]:
-                bits.append(f"accuracy {f['accuracy_score']:.2f} < {f['accuracy_min_score']}")
-            if not f["provenance_pass"]:
-                bits.append(f"provenance {f['provenance_score']:.2f} < {f['provenance_min_score']}")
-            click.echo(f"  - {f['eval_id']}: {', '.join(bits)}")
-    else:
-        click.echo("All evals met their thresholds.")
+    for line in failure_summary(rows, failures):
+        click.echo(line)
 
     click.echo(f"Run {run_id} complete. Next: `honest-agent report` / `honest-agent notify`.")
     return len(failures)

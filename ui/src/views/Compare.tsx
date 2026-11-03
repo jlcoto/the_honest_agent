@@ -3,7 +3,7 @@ import { asLabel } from '../components/asLabel'
 import { CostInfo } from '../components/CostInfo'
 import { PageHeader } from '../components/PageHeader'
 import { SCORES_OVER_TIME_NOTE, ScoresOverTime, seriesColors } from '../components/ScoresOverTime'
-import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, meanOf, resultsCost, runCost, runsOf, smallUsd, usd, type Run } from '../data/derive'
+import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, resultsCost, runCost, runsOf, smallUsd, usd, type Run } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
 import { AccuracyBar, Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
@@ -15,6 +15,13 @@ const METRICS = [
   { id: 'provenance', label: 'Provenance' },
 ]
 
+/** "8 of 10 passed · 2 below min score · 1 stopped with an error": errored evals have no
+ * scores, so the bar shows the graded ones and the errors are named apart. */
+function passedTitle(run: Run) {
+  const title = `${run.passed} of ${run.graded} passed · ${run.graded - run.passed} below min score`
+  return run.errored ? `${title} · ${run.errored} stopped with an error` : title
+}
+
 interface ModelRow {
   model: string
   isBaseline: boolean
@@ -25,7 +32,8 @@ interface ModelRow {
   isLatest: boolean
   /** The selected run's results by eval_id. */
   latest: Map<string, ResultRow>
-  accuracy: number
+  /** The selected run's averages over its graded evals (null: none was graded). */
+  accuracy: number | null
   provenance: number | null
   dAccuracy: number | null
   dProvenance: number | null
@@ -127,7 +135,6 @@ export function Compare({
     const models = [...runsByModel.keys()].sort((x, y) => Number(y === baseline) - Number(x === baseline) || x.localeCompare(y))
     const rows: ModelRow[] = models.map((model) => {
       const latest = resultsOf(model)
-      const results = [...latest.values()]
       const shared = [...latest.keys()].filter((q) => base.has(q))
       // Over evals both runs scored; provenance that either side didn't check is left out.
       const sharedDelta = (key: 'accuracy_score' | 'provenance_score') => {
@@ -142,8 +149,8 @@ export function Compare({
         run: selectedRun(model),
         isLatest: selectedRun(model) === runsByModel.get(model)![0],
         latest,
-        accuracy: mean(results.map((r) => r.accuracy_score)),
-        provenance: meanOf(results.map((r) => r.provenance_score)),
+        accuracy: selectedRun(model).accuracy,
+        provenance: selectedRun(model).provenance,
         dAccuracy: sharedDelta('accuracy_score'),
         dProvenance: sharedDelta('provenance_score'),
         shared: shared.length,
@@ -306,11 +313,11 @@ export function Compare({
                   render: (r: ModelRow) => (
                     <span
                       style={{ display: 'block', padding: '6px 0' }}
-                      title={`${r.passed} of ${r.latest.size} passed · ${r.latest.size - r.passed} below min score`}
+                      title={passedTitle(r.run)}
                     >
                       {/* pointerEvents off so the bar's own segment titles ("Correct"/"Wrong") don't replace this one. */}
                       <span style={{ display: 'block', pointerEvents: 'none' }}>
-                        <AccuracyBar counts={{ correct: r.passed, wrong: r.latest.size - r.passed }} height={8} />
+                        <AccuracyBar counts={{ correct: r.passed, wrong: r.run.graded - r.passed }} height={8} />
                       </span>
                     </span>
                   ),
@@ -320,7 +327,7 @@ export function Compare({
           </Card>
           <Card
             title="Scores by model"
-            subtitle="Each model's selected run · grey cells: not in that run · click a cell to see the answer"
+            subtitle="Each model's selected run · grey cells: not in that run, or stopped with an error · click a cell to see the answer"
             actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
           >
             <Heatmap

@@ -8,11 +8,16 @@ export interface Run {
   agent: string
   model: string
   results: ResultRow[]
-  accuracy: number
-  /** null when no result in the run had provenance checked. */
+  /** Averages over the graded evals; null when every eval stopped with an error. */
+  accuracy: number | null
+  /** null when no graded result in the run had provenance checked. */
   provenance: number | null
-  overall: number
+  overall: number | null
+  /** Evals that met both thresholds, out of `graded`. */
   passed: number
+  /** Evals that were graded; the others stopped with an error and have no scores. */
+  graded: number
+  errored: number
   /** Estimated USD; null when any result has no cost (unpriced model, or a run from before costs). */
   agentCost: number | null
   gradingCost: number | null
@@ -48,21 +53,31 @@ export function meanOf(xs: (number | null)[]): number | null {
 const combined = (accuracy: number, provenance: number | null) =>
   provenance == null ? accuracy : (accuracy + provenance) / 2
 
+/** An eval that stopped with an error (a provider or MCP failure): no scores, so it's left
+ * out of every average, and counts as failing (as in cli/honest_agent/thresholds.py). */
+export const isError = (r: ResultRow) => r.status === 'error'
+/** Why an errored eval stopped, without the rationale's prefix. */
+export const errorReason = (r: ResultRow) => (r.accuracy_rationale ?? '').replace(/^\[honest-agent error\] The eval stopped: /, '')
+
 // Same rule as cli/honest_agent/thresholds.py, so the report agrees with `honest-agent notify`.
-export const accuracyPasses = (r: ResultRow) => r.accuracy_min_score == null || r.accuracy_score >= r.accuracy_min_score
+export const accuracyPasses = (r: ResultRow) =>
+  !isError(r) && (r.accuracy_min_score == null || (r.accuracy_score ?? 0) >= r.accuracy_min_score)
 export const provenancePasses = (r: ResultRow) =>
-  r.provenance_score == null || r.provenance_min_score == null || r.provenance_score >= r.provenance_min_score
+  !isError(r) && (r.provenance_score == null || r.provenance_min_score == null || r.provenance_score >= r.provenance_min_score)
 export const passes = (r: ResultRow) => accuracyPasses(r) && provenancePasses(r)
 
-export const overallOf = (r: ResultRow) => combined(r.accuracy_score, r.provenance_score)
+/** Combined score; null for an errored eval. */
+export const overallOf = (r: ResultRow) => (r.accuracy_score == null ? null : combined(r.accuracy_score, r.provenance_score))
 
 export function runsOf(results: ResultRow[]): Run[] {
   const byRun = new Map<string, ResultRow[]>()
   for (const r of results) byRun.set(r.run_id, [...(byRun.get(r.run_id) ?? []), r])
   const runs = [...byRun.entries()].map(([run_id, rows]) => {
     const timestamp = rows.map((r) => r.run_timestamp).sort()[0].slice(0, 16)
-    const accuracy = mean(rows.map((r) => r.accuracy_score))
-    const provenance = meanOf(rows.map((r) => r.provenance_score))
+    // Averages over graded evals only: an outage says nothing about the agent.
+    const graded = rows.filter((r) => !isError(r))
+    const accuracy = meanOf(graded.map((r) => r.accuracy_score))
+    const provenance = meanOf(graded.map((r) => r.provenance_score))
     return {
       run_id,
       timestamp,
@@ -72,8 +87,10 @@ export function runsOf(results: ResultRow[]): Run[] {
       results: rows,
       accuracy,
       provenance,
-      overall: combined(accuracy, provenance),
+      overall: accuracy == null ? null : combined(accuracy, provenance),
       passed: rows.filter(passes).length,
+      graded: graded.length,
+      errored: rows.length - graded.length,
       agentCost: sumOrNull(rows.map((r) => r.agent_cost_usd)),
       gradingCost: sumOrNull(rows.map((r) => r.grading_cost_usd)),
     }

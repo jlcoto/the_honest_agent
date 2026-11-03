@@ -64,13 +64,16 @@ Under the title: when the latest run was, and what it cost.
 
 - **The cards** show the latest run's combined, accuracy and provenance scores, each with
   the change since the previous run and a small trend, and how many evals passed their
-  thresholds.
+  thresholds. Evals that stopped with an error (a provider or MCP failure) have no scores:
+  they're left out of the averages and named under Passed thresholds.
 - **Scores by eval run** has one row per eval, grouped by category, and one column per run.
   Switch between Combined, Accuracy and Provenance at the top right. Hover a cell for its
   scores and what it cost: one eval in that run, a category's evals together, or the whole
-  run in the Overall row. Click a cell to open [that result](#a-result).
+  run in the Overall row. A grey cell is an eval that wasn't in that run, or stopped with
+  an error. Click a cell to open [that result](#a-result).
 - **Below threshold** lists the latest run's failing evals: their scores, what was
-  expected and what the agent said, and which check failed. Export it as CSV with the
+  expected and what the agent said, and which check failed. An eval that stopped with an
+  error is listed with an Error badge and the reason in place of the answer. Export it as CSV with the
   button at the top right.
 
 ## Model comparison
@@ -85,7 +88,7 @@ percentage points, on the evals both ran.
   from its menu. **Est. cost** is what that run cost, with what that comes to per eval
   under it.
 - **Scores by model** has one column per model. Grey cells are evals that weren't in that
-  model's run. Hovering a cell shows what it cost in that run, as in the Overview.
+  model's run, or that stopped with an error. Hovering a cell shows what it cost in that run, as in the Overview.
 - **Scores over time** has one row per model, with a point for its last run each day.
 
 To compare models, run the same evals with each one:
