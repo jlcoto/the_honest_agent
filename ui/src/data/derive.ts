@@ -270,3 +270,18 @@ export function failingNote(rows: ResultRow[], check: Check) {
   const { passed, of } = checkCounts(rows, check)
   return of ? `${of - passed} of ${evalCount(of)} below ${check} min score` : null
 }
+
+/** An eval's summary cell note: "Passed accuracy in 3 of 4 runs", errored runs left out. */
+export function passedRunsNote(rows: ResultRow[], check: Check) {
+  const { passed, of } = checkCounts(rows, check)
+  return of ? `Passed ${check} in ${passed} of ${of} ${of === 1 ? 'run' : 'runs'}` : null
+}
+
+/** A category's summary cell note: "1 of 3 evals failed accuracy in at least one run". */
+export function failedAnyRunNote(rows: ResultRow[], check: Check) {
+  const byEval = new Map<string, ResultRow[]>()
+  for (const r of rows) byEval.set(r.eval_id, [...(byEval.get(r.eval_id) ?? []), r])
+  const counts = [...byEval.values()].map((evalRows) => checkCounts(evalRows, check)).filter((c) => c.of > 0)
+  const failed = counts.filter((c) => c.passed < c.of).length
+  return counts.length ? `${failed} of ${evalCount(counts.length)} failed ${check} in at least one run` : null
+}

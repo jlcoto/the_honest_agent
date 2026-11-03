@@ -81,7 +81,9 @@ Under the title: when the latest run was.
 - **Scores by eval run** has one row per eval, grouped by category, and one column per run.
   Switch between Accuracy and Provenance at the top right. Hover a cell for its score and
   what it cost: one eval in that run, or a category's evals together, with how many of
-  them fell below that check's `min_score`. The **Passed** row at the bottom is coloured
+  them fell below that check's `min_score`. The **Overall** column averages every run, and
+  says how many runs an eval passed in, or how many of a category's evals failed in at
+  least one. The **Passed** row at the bottom is coloured
   by the run's pass rate for that check; hover it for the count. A grey cell is an eval
   that wasn't in that run, or stopped with an error. Click a cell to open
   [that result](#a-result).

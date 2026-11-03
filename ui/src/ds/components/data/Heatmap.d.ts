@@ -57,6 +57,8 @@ export interface HeatmapProps {
   totalsSummary?: HeatmapTotal | null;
   /** A group cell's tooltip note, in place of "2 of 4 evals below 80%"; `column` is null for the summary column. Return null for no note. */
   groupNote?: (group: string, column: number | null) => string | null;
+  /** An eval row cell's tooltip note (none by default); `column` is null for the summary column. Return null for no note. */
+  rowNote?: (row: HeatmapRow, column: number | null) => string | null;
   /** Uppercase header over the row labels */
   rowHeader?: string;
   cellWidth?: number;

@@ -12,7 +12,7 @@ const MLABEL={overall:'Combined',accuracy:'Accuracy',provenance:'Provenance',val
 const colMean=(kids,key,n)=>Array.from({length:n},(_,i)=>mean(kids.map(k=>k[key]?k[key][i]:null)));
 const usd=c=>'$'+(c>0&&c<0.01?c.toPrecision(2):c.toFixed(2));
 
-export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Eval',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick,costLabel='Est. cost',formatCost=usd,totals:totalCells,totalsSummary,groupNote}){
+export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Eval',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick,costLabel='Est. cost',formatCost=usd,totals:totalCells,totalsSummary,groupNote,rowNote}){
   const dual=rows.length>0&&rows[0].accuracy!=null;
   const [mLocal,setMLocal]=React.useState(defaultMetric);
   const m=dual?(metric||mLocal):'values';
@@ -71,6 +71,7 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
     }
     let note=null;
     if(item.kind==='group'&&groupNote&&item.g!=null)note=groupNote(item.g,i);
+    else if(item.kind!=='group'&&rowNote)note=rowNote(r,i);
     else if(item.kind==='group'){
       const vals=item.kids.map(k=>i==null?summaryOf(k):valueAt(k,i)).filter(x=>x!=null);
       const below=vals.filter(x=>x<threshold).length;
