@@ -129,8 +129,9 @@ function CostCard({ runs }: { runs: Run[] }) {
       label={label}
       format="raw"
       value={usd(cost)}
-      delta={before != null ? cost - before : undefined}
-      formatDelta={(d) => (d === 0 ? '±$0' : `${d > 0 ? '+' : '−'}${smallUsd(Math.abs(d))}`)}
+      // Changes under a cent read as no change; the rest in whole cents.
+      delta={before == null ? undefined : Math.abs(cost - before) < 0.01 ? 0 : cost - before}
+      formatDelta={(d) => (d === 0 ? '±$0' : `${d > 0 ? '+' : '−'}$${Math.abs(d).toFixed(2)}`)}
       lowerIsBetter
       caption={runs.length > 1 ? undefined : 'First run in this range'}
       spark={costs.length > 1 ? costs : undefined}
