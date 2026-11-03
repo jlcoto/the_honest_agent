@@ -61,7 +61,7 @@ Run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 complete. Next: `honest-agent report` /
   `tool_timeout`, or `--tool-timeout` for one run. honest-agent also asks the server to
   stop the query, but whether it does is up to the server: one that doesn't lets the query
   finish in the warehouse. On Snowflake, see
-  [Stop slow queries in Snowflake too](/docs/connect/snowflake/#stop-slow-queries-in-snowflake-too).
+  [Slow queries keep running in Snowflake](/docs/connect/snowflake/#slow-queries-keep-running-in-snowflake).
 
 :::caution[Each run costs money]
 Every eval calls the model, and the grading methods `extract_match` and `llm_judge` call

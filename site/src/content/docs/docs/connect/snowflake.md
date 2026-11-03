@@ -112,18 +112,12 @@ grant select on all semantic views in schema <database>.<schema> to role honest_
 views or semantic views created later, repeat them with `future` instead of `all`, e.g.
 `grant select on future tables in schema ...`.
 
-### Stop slow queries in Snowflake too
+### Slow queries keep running in Snowflake
 
 honest-agent stops waiting for a query after `tool_timeout` (120 seconds by default), and
 the agent gets an error saying so. Snowflake's server doesn't support MCP's message asking
 it to stop, so the query goes on running in the warehouse, and costs credits, until it
-finishes. To have Snowflake end it at the same point, set a statement timeout on the user:
-
-```sql
-alter user honest_agent_svc set statement_timeout_in_seconds = 120;
-```
-
-If you raise `tool_timeout`, raise this to match.
+finishes, or until a timeout set in Snowflake ends it.
 
 ## 3. Add a network policy
 
