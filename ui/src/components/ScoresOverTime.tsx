@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { formatRunDate, formatRunTime, pct, type Check, type Run } from '../data/derive'
 
 const METRIC_LABEL: Record<Check, string> = { accuracy: 'Accuracy', provenance: 'Provenance' }
@@ -58,6 +58,17 @@ export function ScoresOverTime({
   colors: Map<string, string>
 }) {
   const [tip, setTip] = useState<{ x: number; y: number; body: ReactNode } | null>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
+  // Centred over the point, then moved in from the screen's edges, so a point near a side keeps its tooltip on
+  // screen (on a phone the chart is narrower than the tooltip).
+  useLayoutEffect(() => {
+    const el = tipRef.current
+    if (!el) return
+    el.style.marginLeft = '0px'
+    const { left, right } = el.getBoundingClientRect()
+    const M = 8
+    el.style.marginLeft = `${left < M ? M - left : right > window.innerWidth - M ? window.innerWidth - M - right : 0}px`
+  }, [tip])
   const days = [...new Set(runs.map((r) => r.date))].sort()
   const slot = (W - LEFT - RIGHT) / Math.max(days.length, 1)
   const x = (day: number) => LEFT + (day + 0.5) * slot
@@ -144,6 +155,7 @@ export function ScoresOverTime({
       </svg>
       {tip ? (
         <div
+          ref={tipRef}
           role="tooltip"
           style={{
             position: 'absolute',
@@ -157,7 +169,8 @@ export function ScoresOverTime({
             background: 'var(--bg-inverse)',
             color: 'var(--fg-inverse)',
             font: '400 12px/1.45 var(--font-sans)',
-            whiteSpace: 'nowrap',
+            width: 'max-content',
+            maxWidth: 'min(320px, calc(100vw - 16px))',
             boxShadow: 'var(--shadow-2)',
           }}
         >

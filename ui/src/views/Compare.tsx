@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { asLabel } from '../components/asLabel'
 import { CostInfo } from '../components/CostInfo'
+import { InfoLabel } from '../components/InfoLabel'
 import { PageHeader } from '../components/PageHeader'
 import { SCORES_OVER_TIME_NOTE, ScoresOverTime, seriesColors } from '../components/ScoresOverTime'
 import {
@@ -97,7 +98,7 @@ function Delta({ value, shared, noOverlap }: { value: number | null; shared: num
   )
 }
 
-/** A Passed cell: the count, the rate under it, and the difference from the baseline; the errors under Passed. */
+/** A Passed cell: the count, the rate under it, and the difference from the baseline. */
 function PassCell({ row, pass, unchecked }: { row: ModelRow; pass: PassKey; unchecked?: string }) {
   const { passed, of, delta } = row.counts[pass]
   const sub = { font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }
@@ -114,9 +115,6 @@ function PassCell({ row, pass, unchecked }: { row: ModelRow; pass: PassKey; unch
       </span>
       <span style={sub}>{pct(passed / of)}</span>
       <Delta value={delta} shared={row.shared} noOverlap={row.noOverlap} />
-      {pass === 'passed' && row.run.errored ? (
-        <span style={{ font: '400 12px var(--font-sans)', color: 'var(--acc-wrong-ink)' }}>{row.run.errored} stopped with an error</span>
-      ) : null}
     </span>
   )
 }
@@ -325,6 +323,12 @@ export function Compare({
                         {r.latest.size} {r.latest.size === 1 ? 'eval' : 'evals'}
                         {r.isLatest ? '' : ' · older run'}
                       </span>
+                      {/* Under the run, not a count: it's the same for every Passed column and would push one out of line. */}
+                      {r.run.errored ? (
+                        <span style={{ font: '400 12px var(--font-sans)', color: 'var(--acc-wrong-ink)' }}>
+                          {r.run.errored} stopped with an error
+                        </span>
+                      ) : null}
                     </span>
                   ),
                 },
@@ -374,25 +378,15 @@ export function Compare({
           </Card>
           <Card
             title="Scores over time"
-            subtitle="One row per model · each point is the model's last run that day"
-            actions={
-              <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-                <Tabs items={CHECKS} value={trendMetric} onChange={(id) => setTrendMetric(id as Check)} />
-                <Tooltip
-                  side="bottom"
-                  content={<span style={{ display: 'block', width: 260, whiteSpace: 'normal' }}>{SCORES_OVER_TIME_NOTE}</span>}
-                >
-                  <span
-                    role="img"
-                    aria-label={SCORES_OVER_TIME_NOTE}
-                    tabIndex={0}
-                    style={{ display: 'inline-flex', color: 'var(--fg-3)', cursor: 'help' }}
-                  >
-                    <Icon name="info" size={16} />
-                  </span>
-                </Tooltip>
-              </span>
-            }
+            subtitle={asLabel(
+              <span>
+                One row per model · each point is the model's last{' '}
+                <InfoLabel note={SCORES_OVER_TIME_NOTE} side="bottom">
+                  run that day
+                </InfoLabel>
+              </span>,
+            )}
+            actions={<Tabs items={CHECKS} value={trendMetric} onChange={(id) => setTrendMetric(id as Check)} />}
           >
             {/* All runs in the date range, regardless of the Run dropdowns: this card is the history. */}
             <ScoresOverTime
