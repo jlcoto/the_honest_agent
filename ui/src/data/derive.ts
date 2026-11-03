@@ -265,23 +265,23 @@ export function passedCell(rows: ResultRow[], check: Check) {
   return { value: of ? passed / of : null, title: `Passed ${check}`, label: 'Pass rate', lines }
 }
 
-/** A category cell's note: "1 of 3 evals below accuracy min score", by the same rule as `run` and `notify`. */
-export function failingNote(rows: ResultRow[], check: Check) {
+/** A category cell's tooltip line: evals that met the tab's min score in that run, by the same rule as `run`
+ * and `notify`. */
+export function passedLines(rows: ResultRow[], check: Check): [string, string][] | null {
   const { passed, of } = checkCounts(rows, check)
-  return of ? `${of - passed} of ${evalCount(of)} below ${check} min score` : null
+  return of ? [['Passed', `${passed} / ${of}`]] : null
 }
 
-/** An eval's summary cell note: "Passed accuracy in 3 of 4 runs", errored runs left out. */
-export function passedRunsNote(rows: ResultRow[], check: Check) {
+/** An eval's summary cell line: the runs it met the tab's min score in, errored runs left out. */
+export function passedRunsLines(rows: ResultRow[], check: Check): [string, string][] | null {
   const { passed, of } = checkCounts(rows, check)
-  return of ? `Passed ${check} in ${passed} of ${of} ${of === 1 ? 'run' : 'runs'}` : null
+  return of ? [['Runs passed', `${passed} / ${of}`]] : null
 }
 
-/** A category's summary cell note: "1 of 3 evals failed accuracy in at least one run". */
-export function failedAnyRunNote(rows: ResultRow[], check: Check) {
+/** A category's summary cell line: its evals that met the tab's min score in every run they ran. */
+export function passedEveryRunLines(rows: ResultRow[], check: Check): [string, string][] | null {
   const byEval = new Map<string, ResultRow[]>()
   for (const r of rows) byEval.set(r.eval_id, [...(byEval.get(r.eval_id) ?? []), r])
   const counts = [...byEval.values()].map((evalRows) => checkCounts(evalRows, check)).filter((c) => c.of > 0)
-  const failed = counts.filter((c) => c.passed < c.of).length
-  return counts.length ? `${failed} of ${evalCount(counts.length)} failed ${check} in at least one run` : null
+  return counts.length ? [['Passed every run', `${counts.filter((c) => c.passed === c.of).length} / ${counts.length}`]] : null
 }

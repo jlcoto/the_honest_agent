@@ -55,10 +55,10 @@ export interface HeatmapProps {
   totals?: (HeatmapTotal | null)[];
   /** The bottom row's cell in the summary column, when `totals` is given */
   totalsSummary?: HeatmapTotal | null;
-  /** A group cell's tooltip note, in place of "2 of 4 evals below 80%"; `column` is null for the summary column. Return null for no note. */
-  groupNote?: (group: string, column: number | null) => string | null;
-  /** An eval row cell's tooltip note (none by default); `column` is null for the summary column. Return null for no note. */
-  rowNote?: (row: HeatmapRow, column: number | null) => string | null;
+  /** [label, value] lines for a group cell's tooltip, under its score, in place of "2 of 4 evals below 80%"; `column` is null for the summary column. Return null for none. */
+  groupLines?: (group: string, column: number | null) => [string, string][] | null;
+  /** [label, value] lines for an eval row cell's tooltip, under its score (none by default); `column` is null for the summary column. */
+  rowLines?: (row: HeatmapRow, column: number | null) => [string, string][] | null;
   /** Uppercase header over the row labels */
   rowHeader?: string;
   cellWidth?: number;

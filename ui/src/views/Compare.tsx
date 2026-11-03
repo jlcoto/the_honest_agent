@@ -11,7 +11,7 @@ import {
   evalHeatRow,
   evalTitles,
   evalsOf,
-  failingNote,
+  passedLines,
   formatRunTime,
   isError,
   passedCell,
@@ -354,8 +354,8 @@ export function Compare({
               showSummary={false}
               totalsLabel="Passed"
               totals={rows.map((m) => passedCell(m.run.results, metric))}
-              groupNote={(group, i) =>
-                i == null ? null : failingNote(rows[i].run.results.filter((r) => categoryOf.get(r.eval_id) === group), metric)
+              groupLines={(group, i) =>
+                i == null ? null : passedLines(rows[i].run.results.filter((r) => categoryOf.get(r.eval_id) === group), metric)
               }
               rowHeader="Eval"
               rowLabelWidth={narrow ? 150 : 360}

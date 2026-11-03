@@ -7,8 +7,7 @@ import {
   CHECKS,
   accuracyPasses,
   agentsOf,
-  failedAnyRunNote,
-  failingNote,
+  passedLines,
   errorReason,
   formatRunDate,
   formatRunTime,
@@ -16,7 +15,8 @@ import {
   meanOf,
   modelsOf,
   passedCell,
-  passedRunsNote,
+  passedEveryRunLines,
+  passedRunsLines,
   passes,
   pct,
   provenancePasses,
@@ -248,16 +248,16 @@ export function Overview({
               totalsLabel="Passed"
               totals={runs.map((run) => passedCell(run.results, metric))}
               totalsSummary={passedCell(runs.flatMap((run) => run.results), metric)}
-              groupNote={(group, i) => {
+              groupLines={(group, i) => {
                 const inGroup = (results: ResultRow[]) => results.filter((r) => categoryOf.get(r.eval_id) === group)
                 return i == null
-                  ? failedAnyRunNote(inGroup(runs.flatMap((run) => run.results)), metric)
-                  : failingNote(inGroup(runs[i].results), metric)
+                  ? passedEveryRunLines(inGroup(runs.flatMap((run) => run.results)), metric)
+                  : passedLines(inGroup(runs[i].results), metric)
               }}
-              rowNote={(row, i) => {
+              rowLines={(row, i) => {
                 if (i != null) return null
                 const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id
-                return passedRunsNote(runs.flatMap((run) => run.results.filter((r) => r.eval_id === evalId)), metric)
+                return passedRunsLines(runs.flatMap((run) => run.results.filter((r) => r.eval_id === evalId)), metric)
               }}
               rowHeader="Eval"
               rowLabelWidth={narrow ? 150 : 360}
