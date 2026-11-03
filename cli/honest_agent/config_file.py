@@ -48,7 +48,7 @@ CONFIG_FILE_NAME = "honest_agent_config.yml"
 EXAMPLE_CONFIG_FILE_NAME = "honest_agent_config.example.yml"
 
 # Settings any target can set, or the top level can set for every target.
-_SHARED_KEYS = {"model", "grading_model", "effort", "grading_effort", "max_tool_steps"}
+_SHARED_KEYS = {"model", "grading_model", "effort", "grading_effort", "max_tool_steps", "tool_timeout"}
 _TOP_LEVEL_KEYS = _SHARED_KEYS | {"results_path", "default_target", "targets", "prices"}
 # results_path stays top-level only: every agent's results go in one file, so one report
 # covers every agent.
@@ -65,7 +65,7 @@ _TARGET_KEYS = _SHARED_KEYS | {
     "default_schema",
 }
 _PATH_KEYS = {"results_path", "evals_dir"}
-_INT_KEYS = {"max_tool_steps"}
+_INT_KEYS = {"max_tool_steps", "tool_timeout"}
 
 # dbt's `{{ env_var('NAME') }}` / `{{ env_var('NAME', 'default') }}`, single or double quotes.
 _ENV_VAR = re.compile(r"""\{\{\s*env_var\(\s*(['"])([A-Za-z_][A-Za-z0-9_]*)\1\s*(?:,\s*(['"])(.*?)\3\s*)?\)\s*\}\}""")

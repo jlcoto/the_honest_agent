@@ -184,6 +184,7 @@ async def run_evals(
     results_path: str,
     model: str,
     max_tool_steps: int,
+    tool_timeout: int,
     mcp_command: str | None,
     mcp_url: str | None,
     mcp_bearer_token: str | None,
@@ -227,7 +228,12 @@ async def run_evals(
         click.echo(f"    WARNING: {warning}")
 
     mcp_client = build_mcp_client(
-        command=mcp_command, url=mcp_url, bearer_token=mcp_bearer_token, cwd=mcp_cwd, env_names=mcp_env
+        command=mcp_command,
+        url=mcp_url,
+        bearer_token=mcp_bearer_token,
+        cwd=mcp_cwd,
+        env_names=mcp_env,
+        tool_timeout=tool_timeout,
     )
     # Deliberately split from the eval loop below: a failure *here* means
     # the MCP handshake itself never completed (wrong token, unreachable
@@ -262,6 +268,7 @@ async def run_evals(
             judge_model=grading_model,  # the raw layer's column keeps its first name
             settings={
                 "max_tool_steps": max_tool_steps,
+                "tool_timeout": tool_timeout,
                 "max_tokens": None if openai_agent else MAX_TOKENS,
                 "mcp": {"url": mcp_url} if mcp_url else {"command": mcp_command},
                 "ignore_tools": ignore_tools,
@@ -277,7 +284,7 @@ async def run_evals(
         )
         # SQL that isn't a read never reaches the server (sql_guard.py).
         sql_fields = {tool: field for d in definitions for tool, field in d.sql_fields.items()}
-        tool_caller = ReadOnlySQL(connected, sql_fields, ignore_tools)
+        tool_caller = ReadOnlySQL(connected, sql_fields, ignore_tools, tool_timeout)
         if openai_agent:
             from .openai_agent_runner import OpenAIMCPAgentClient
 

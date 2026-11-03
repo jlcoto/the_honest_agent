@@ -29,6 +29,7 @@ targets:
     bearer_token_env: MOTHERDUCK_TOKEN
     evals_dir: evals_motherduck
     max_tool_steps: 10
+    tool_timeout: 300
     ignore_tools: [list_shares]
 """
 
@@ -72,6 +73,7 @@ def test_the_default_target_runs_without_any_flags(project, monkeypatch, fake_ru
     assert run["results_path"] == str(project / "out" / "results.duckdb")
     assert run["model"] == "claude-haiku-4-5"
     assert run["max_tool_steps"] == 5
+    assert run["tool_timeout"] == 120
     assert run["agent_name"] == "demo"
 
 
@@ -85,6 +87,7 @@ def test_a_named_target_brings_its_own_settings(project, monkeypatch, fake_run):
     assert run["mcp_bearer_token"] == "md-token"
     assert run["evals_dir"] == project / "evals_motherduck"
     assert run["max_tool_steps"] == 10
+    assert run["tool_timeout"] == 300
     assert run["ignore_tools"] == ["list_shares"]
     assert run["agent_name"] == "motherduck"
 
@@ -319,6 +322,15 @@ def test_a_non_number_written_in_the_file_is_shown(tmp_path: Path):
 
     with pytest.raises(ConfigError, match="must be a whole number; got 'lots'"):
         load_config(tmp_path / "honest_agent_config.yml").target("t")
+
+
+def test_a_tool_timeout_under_one_second_is_refused(project, fake_run):
+    (project / "honest_agent_config.yml").write_text("tool_timeout: 0\ntargets:\n  t: {mcp_command: x}\n")
+
+    result, _ = _run(fake_run)
+
+    assert result.exit_code != 0
+    assert "tool_timeout in honest_agent_config.yml must be at least 1 second; got 0." in result.output
 
 
 def test_only_env_var_templates_are_supported(tmp_path: Path):
