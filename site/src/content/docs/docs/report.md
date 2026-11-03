@@ -41,11 +41,22 @@ Every score is from 0% to 100%, and coloured by how close it is to right:
 | Orange | 40% to 75% |
 | Red | below 40% |
 
-The **Combined** score is the average of accuracy and provenance. For an eval whose
-provenance isn't checked, it's the accuracy alone.
-
 A colour is about the score, not the threshold: an eval passes or fails by its own
-`min_score` values. "Passed thresholds" and "Below threshold" count those.
+`min_score` values.
+
+## How passes are counted
+
+An eval **passes** when it meets its accuracy `min_score` and its provenance `min_score`,
+the same rule `run` and `notify` use. An eval that expects no sources has no provenance
+check, so it passes on accuracy alone. The report leads with these counts:
+
+- **Passed:** evals that passed both checks.
+- **Passed accuracy:** evals that met their accuracy `min_score`.
+- **Passed provenance:** evals that met their provenance `min_score`, out of the evals
+  that expect sources.
+
+Evals that stopped with an error (a provider or MCP failure) have no scores, so they're
+left out of every count and named apart: "2 stopped with an error".
 
 ## How costs are shown
 
@@ -62,15 +73,17 @@ from before honest-agent stored costs, shows no cost or "Not recorded".
 The Overview shows one agent and one model. Pick them, and the dates, at the top right.
 Under the title: when the latest run was, and what it cost.
 
-- **The cards** show the latest run's combined, accuracy and provenance scores, each with
-  the change since the previous run and a small trend, and how many evals passed their
-  thresholds. Evals that stopped with an error (a provider or MCP failure) have no scores:
-  they're left out of the averages and named under Passed thresholds.
+- **The cards** show the latest run's Passed, Passed accuracy and Passed provenance
+  (see [How passes are counted](#how-passes-are-counted)): the count, the change in
+  evals since the previous run, the percentage, and a small trend of the percentage.
+  Hover the (i) next to Passed for the rule.
 - **Scores by eval run** has one row per eval, grouped by category, and one column per run.
-  Switch between Combined, Accuracy and Provenance at the top right. Hover a cell for its
-  scores and what it cost: one eval in that run, a category's evals together, or the whole
-  run in the Overall row. A grey cell is an eval that wasn't in that run, or stopped with
-  an error. Click a cell to open [that result](#a-result).
+  Switch between Accuracy and Provenance at the top right. Hover a cell for its score and
+  what it cost: one eval in that run, or a category's evals together, with how many of
+  them fell below that check's `min_score`. The **Passed** row at the bottom is coloured
+  by the run's pass rate for that check; hover it for the count. A grey cell is an eval
+  that wasn't in that run, or stopped with an error. Click a cell to open
+  [that result](#a-result).
 - **Below threshold** lists the latest run's failing evals: their scores, what was
   expected and what the agent said, and which check failed. An eval that stopped with an
   error is listed with an Error badge and the reason in place of the answer. Export it as CSV with the
@@ -82,14 +95,16 @@ Under the title: when the latest run was, and what it cost.
 
 Model comparison shows how different models do as the same agent. The baseline is the
 model of the agent's most recent run; the others show their difference from it, in
-percentage points, on the evals both ran.
+evals passed, on the evals both ran.
 
 - **Results by model** shows each model's latest run in the date range. Pick another run
   from its menu. **Est. cost** is what that run cost, with what that comes to per eval
-  under it.
-- **Scores by model** has one column per model. Grey cells are evals that weren't in that
+  under it. Passed, Passed accuracy and Passed provenance are counted as on the Overview.
+- **Scores by model** has one column per model, with the same Accuracy and Provenance
+  tabs and Passed row as the Overview. Grey cells are evals that weren't in that
   model's run, or that stopped with an error. Hovering a cell shows what it cost in that run, as in the Overview.
-- **Scores over time** has one row per model, with a point for its last run each day.
+- **Scores over time** has one row per model, with a point for its last run each day:
+  its average accuracy or provenance score. Hover a point for how many evals passed.
 
 To compare models, run the same evals with each one:
 `honest-agent run --model gpt-5.4-mini`. Keep the same `--grading-model` for every run, so

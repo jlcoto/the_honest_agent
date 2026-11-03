@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { formatRunDate, formatRunTime, pct, type Run } from '../data/derive'
+import { formatRunDate, formatRunTime, pct, type Check, type Run } from '../data/derive'
 
-type Metric = 'overall' | 'accuracy' | 'provenance'
-const METRIC_LABEL: Record<Metric, string> = { overall: 'Combined', accuracy: 'Accuracy', provenance: 'Provenance' }
+const METRIC_LABEL: Record<Check, string> = { accuracy: 'Accuracy', provenance: 'Provenance' }
 
 /**
  * The design system's series palette, assigned by first appearance: each model takes the next --series color the
@@ -49,7 +48,7 @@ export function ScoresOverTime({
 }: {
   runs: Run[]
   models: string[]
-  metric: Metric
+  metric: Check
   colors: Map<string, string>
 }) {
   const [tip, setTip] = useState<{ x: number; y: number; body: ReactNode } | null>(null)
@@ -121,7 +120,7 @@ export function ScoresOverTime({
                           {p.run.results.length === 1 ? 'eval' : 'evals'}
                           {p.runsThatDay > 1 ? ` · last of ${p.runsThatDay} runs that day` : ''}
                           <br />
-                          {METRIC_LABEL[metric]} {pct(p.value)} · {p.run.passed}/{p.run.results.length} passed thresholds
+                          {METRIC_LABEL[metric]} {pct(p.value)} · {p.run.passed} / {p.run.graded} passed
                         </>
                       ),
                     })

@@ -6,6 +6,14 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 ## Unreleased
 
+- **The report leads with how many evals passed.** The Overview's cards are now Passed,
+  Passed accuracy and Passed provenance: the count, its change in evals since the last
+  run, and the percentage. The Combined score is gone everywhere: it averaged accuracy
+  with provenance, which is often 100%, so it read far higher than the share of evals the
+  agent got right. The heatmaps open on Accuracy, and their bottom row is now Passed,
+  coloured by the run's pass rate. Model comparison counts passes too, and its
+  differences from the baseline are in evals. Passed provenance and the Provenance tab's
+  Passed row count only evals that expect sources.
 - **A tool call stopped by `tool_timeout` is named under its eval's line** in `run`'s
   output, so a fail caused by a slow warehouse doesn't look like a wrong answer. The eval
   is still graded: a slow query can be the agent's own doing.
