@@ -3,6 +3,12 @@ import { formatRunDate, formatRunTime, pct, type Check, type Run } from '../data
 
 const METRIC_LABEL: Record<Check, string> = { accuracy: 'Accuracy', provenance: 'Provenance' }
 
+/** "12 / 25 passed accuracy": the evals that met the tab's min score, out of those it checks. */
+const passedOf = (run: Run, check: Check) =>
+  check === 'accuracy'
+    ? `${run.accuracyPassed} / ${run.graded} passed accuracy`
+    : `${run.provenancePassed} / ${run.provenanceChecked} passed provenance`
+
 /**
  * The design system's series palette, assigned by first appearance: each model takes the next --series color the
  * first time it ever ran (across all agents) and keeps it, so a model's color never changes between screens and a
@@ -120,7 +126,7 @@ export function ScoresOverTime({
                           {p.run.results.length === 1 ? 'eval' : 'evals'}
                           {p.runsThatDay > 1 ? ` · last of ${p.runsThatDay} runs that day` : ''}
                           <br />
-                          {METRIC_LABEL[metric]} {pct(p.value)} · {p.run.passed} / {p.run.graded} passed
+                          {METRIC_LABEL[metric]} {pct(p.value)} · {passedOf(p.run, metric)}
                         </>
                       ),
                     })
