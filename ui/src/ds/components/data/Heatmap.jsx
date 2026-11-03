@@ -156,9 +156,10 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
       {BUCKETS.map(k=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:BUCKET_COLOR[k]}}/>{BUCKET_LABEL[k]}</span>)}
       <span style={{display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'var(--chart-empty)'}}/>No run</span>
     </div>:null}
-    {tip?<div ref={tipRef} style={{position:'fixed',left:0,top:0,visibility:'hidden',zIndex:50,padding:'8px 10px',borderRadius:8,background:'var(--bg-inverse)',color:'var(--fg-inverse)',font:'400 12px/1.5 var(--font-sans)',boxShadow:'var(--shadow-2)',pointerEvents:'none',minWidth:150,maxWidth:'min(320px, calc(100vw - 16px))',overflowWrap:'anywhere'}}>
+    {tip?<div ref={tipRef} style={{position:'fixed',left:0,top:0,visibility:'hidden',zIndex:50,padding:'8px 10px',borderRadius:8,background:'var(--bg-inverse)',color:'var(--fg-inverse)',font:'400 12px/1.5 var(--font-sans)',boxShadow:'var(--shadow-2)',pointerEvents:'none',width:'min(260px, calc(100vw - 16px))',overflowWrap:'anywhere'}}>
       <div style={{fontWeight:500}}>{tip.row}</div>
       <div style={{fontFamily:'var(--font-mono)',opacity:.7,fontSize:11}}>{tip.col}</div>
+      {/* A fixed width, so the scores stay put from row to row; a long title wraps. */}
       {/* The scores, or "No run" for an empty cell; the cell's colour already shows its bucket. */}
       {/* A page-supplied totals cell can have lines without a value (nothing it checks ran). */}
       {tip.v==null&&!tip.custom?<div style={{opacity:.7,marginTop:4}}>No run</div>:<>
