@@ -20,6 +20,7 @@ from .prices import Price, call_cost
 from .provenance import check_provenance
 from .raw import honest_agent_version
 from .sql_capture import extract_sql_calls
+from .sql_guard import TIMED_OUT
 from .thresholds import EVAL_ERROR
 
 _TIME = "%Y-%m-%d %H:%M:%S"
@@ -28,6 +29,7 @@ _TIME = "%Y-%m-%d %H:%M:%S"
 class Derived(NamedTuple):
     row: dict  # one `results` row + its trace and SQL calls, the shape storage.write_derived takes
     unparsed: list[str]  # SQL that couldn't be parsed, so it didn't count toward provenance
+    timed_out: int  # tool calls stopped by tool_timeout
 
 
 def _wants_tools(event: dict) -> bool:
@@ -193,6 +195,13 @@ def _read(con, result_id: str) -> tuple[dict, dict, list[dict]]:
     return run, evaluation, events
 
 
+def _timed_out(event: dict) -> bool:
+    """Whether this is a tool call that tool_timeout stopped (sql_guard.py)."""
+    if event["kind"] != "tool_call" or not event["response"]:
+        return False
+    return any((block.get("text") or "").startswith(TIMED_OUT) for block in event["response"].get("content") or [])
+
+
 def recorded_answer(con, result_id: str) -> tuple[str, bool]:
     """The agent's answer as recorded so far, for `run` to grade: (answer, ran out of steps)."""
     run, _, events = _read(con, result_id)
@@ -334,4 +343,4 @@ def derive_result(con, result_id: str) -> Derived:
         # -- tool_calls (expanded into one row per call by storage.py) --
         "sql_calls": sql_calls,
     }
-    return Derived(row, provenance.unparsed)
+    return Derived(row, provenance.unparsed, sum(_timed_out(e) for e in agent_events))

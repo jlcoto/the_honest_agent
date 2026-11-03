@@ -17,6 +17,7 @@ from honest_agent.cli import main
 from honest_agent.grading import UNREADABLE_REPLY
 from honest_agent.raw import RunRecorder, read_records
 from honest_agent.runner import eval_loop, failure_summary, resolve_agent_name
+from honest_agent.sql_guard import TIMED_OUT
 from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
 from honest_agent.thresholds import EVAL_ERROR, failing_rows
 
@@ -415,6 +416,26 @@ def test_an_unreadable_grading_reply_fails_only_that_eval(tmp_path: Path):
     assert rows[0]["accuracy_rationale"].startswith(UNREADABLE_REPLY)
     (rec,) = read_records(path)
     assert [e["kind"] for e in rec["events"]] == ["model_call", "grading_call"]
+
+
+def test_a_tool_call_stopped_by_the_timeout_is_named_under_the_eval(tmp_path: Path, capsys):
+    sql = {"sql": "select count(*) from orders"}
+    stopped = mcp_result(f"{TIMED_OUT} 120s (tool_timeout).", is_error=True)
+    agent = _ScriptedAgent(
+        [
+            model_call(claude_reply(tool_use("t1", "query_warehouse", sql))),
+            tool_call("t1", "query_warehouse", sql, stopped),
+            model_call(claude_reply(text("I couldn't get the data."))),
+        ]
+    )
+    evals = [definition(expected_answer="2297")]
+
+    (row,) = _run_loop(str(tmp_path / "results.duckdb"), agent, _ScriptedJudge("unused"), evals)
+
+    # The agent answered, so it's graded like any wrong answer; the warning says why.
+    assert row["status"] == "graded" and row["accuracy_score"] == 0.0
+    out = capsys.readouterr().out
+    assert f"    WARNING: {evals[0].eval_id}: 1 tool call was stopped after 120s (tool_timeout)." in out
 
 
 class _FailingJudge:
