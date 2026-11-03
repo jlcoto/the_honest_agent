@@ -77,7 +77,7 @@ Under the title: when the latest run was.
   (see [How passes are counted](#how-passes-are-counted)): the count, the change in
   evals since the previous run, the percentage, and a small trend of the percentage.
   Hover the (i) next to Passed for the rule. **Est. cost** is what the latest run cost,
-  its change since the previous run, what that comes to per eval, and a small trend.
+  its change since the previous run, and a small trend.
 - **Scores by eval run** has one row per eval, grouped by category, and one column per run.
   Switch between Accuracy and Provenance at the top right. Hover a cell for its score and
   what it cost: one eval in that run, or a category's evals together, with how many of

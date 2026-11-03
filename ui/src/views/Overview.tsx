@@ -110,8 +110,8 @@ function PassCard({ label, runs, count, unchecked }: { label: ReactNode; runs: R
   )
 }
 
-/** The latest run's estimated cost, its change since the run before (a rise in red), what it comes to per eval,
- * and the cost over the runs as a sparkline, scaled from 0 to the dearest run. */
+/** The latest run's estimated cost, its change since the run before (a rise in red), and the cost over the runs
+ * as a sparkline, scaled from 0 to the dearest run. */
 function CostCard({ runs }: { runs: Run[] }) {
   const label = (
     <InfoLabel note={COST_NOTE} side="bottom">
@@ -124,7 +124,6 @@ function CostCard({ runs }: { runs: Run[] }) {
     return <ScoreStat label={label} format="raw" value="Not recorded" caption="A model without a price, or a run from before costs" />
   const before = runs.length > 1 ? runCost(runs[runs.length - 2]) : null
   const costs = runs.map(runCost).filter((c): c is number => c != null)
-  const perEval = `${smallUsd(cost / latest.results.length)} per eval`
   return (
     <ScoreStat
       label={label}
@@ -133,7 +132,7 @@ function CostCard({ runs }: { runs: Run[] }) {
       delta={before != null ? cost - before : undefined}
       formatDelta={(d) => (d === 0 ? '±$0' : `${d > 0 ? '+' : '−'}${smallUsd(Math.abs(d))}`)}
       lowerIsBetter
-      caption={runs.length > 1 ? perEval : `First run in this range · ${perEval}`}
+      caption={runs.length > 1 ? undefined : 'First run in this range'}
       spark={costs.length > 1 ? costs : undefined}
       sparkRange={[0, Math.max(...costs)]}
     />

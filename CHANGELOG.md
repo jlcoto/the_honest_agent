@@ -8,8 +8,8 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 - **The report leads with how many evals passed.** The Overview's cards are now Passed,
   Passed accuracy and Passed provenance: the count, its change in evals since the last
-  run, and the percentage. A fourth card, Est. cost, shows the run's cost, its change
-  and the cost per eval; it was a line under the title before. The Combined score is gone everywhere: it averaged accuracy
+  run, and the percentage. A fourth card, Est. cost, shows the run's cost and its
+  change; it was a line under the title before. The Combined score is gone everywhere: it averaged accuracy
   with provenance, which is often 100%, so it read far higher than the share of evals the
   agent got right. The heatmaps open on Accuracy, and their bottom row is now Passed,
   coloured by the run's pass rate. Model comparison counts passes too, and its
