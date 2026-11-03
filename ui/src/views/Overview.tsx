@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { CostInfo } from '../components/CostInfo'
+import { COST_NOTE } from '../components/CostInfo'
 import { InfoLabel } from '../components/InfoLabel'
 import { PageHeader } from '../components/PageHeader'
 import { EvalLabel } from '../components/EvalLabel'
@@ -110,14 +110,33 @@ function PassCard({ label, runs, count, unchecked }: { label: ReactNode; runs: R
   )
 }
 
-function LatestRun({ run }: { run: Run }) {
-  const when = `Last eval run ${formatRunTime(run.timestamp, { year: false })}`
-  const cost = runCost(run)
-  if (cost == null) return when
+/** The latest run's estimated cost, its change since the run before (a rise in red), what it comes to per eval,
+ * and the cost over the runs as a sparkline, scaled from 0 to the dearest run. */
+function CostCard({ runs }: { runs: Run[] }) {
+  const label = (
+    <InfoLabel note={COST_NOTE} side="bottom">
+      Est. cost
+    </InfoLabel>
+  )
+  const latest = runs[runs.length - 1]
+  const cost = runCost(latest)
+  if (cost == null)
+    return <ScoreStat label={label} format="raw" value="Not recorded" caption="A model without a price, or a run from before costs" />
+  const before = runs.length > 1 ? runCost(runs[runs.length - 2]) : null
+  const costs = runs.map(runCost).filter((c): c is number => c != null)
+  const perEval = `${smallUsd(cost / latest.results.length)} per eval`
   return (
-    <>
-      {when} · <CostInfo side="bottom">estimated cost {usd(cost)}</CostInfo>
-    </>
+    <ScoreStat
+      label={label}
+      format="raw"
+      value={usd(cost)}
+      delta={before != null ? cost - before : undefined}
+      formatDelta={(d) => (d === 0 ? '±$0' : `${d > 0 ? '+' : '−'}${smallUsd(Math.abs(d))}`)}
+      lowerIsBetter
+      caption={runs.length > 1 ? perEval : `First run in this range · ${perEval}`}
+      spark={costs.length > 1 ? costs : undefined}
+      sparkRange={[0, Math.max(...costs)]}
+    />
   )
 }
 
@@ -184,7 +203,7 @@ export function Overview({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <PageHeader title="Overview" subtitle={latest ? <LatestRun run={latest} /> : undefined}>
+      <PageHeader title="Overview" subtitle={latest ? `Last eval run ${formatRunTime(latest.timestamp, { year: false })}` : undefined}>
         <Select size="sm" icon="bot" options={agents} value={agent} onChange={switchAgent} />
         <Select size="sm" icon="cpu" options={models} value={model} onChange={setModel} />
         <DateRangePicker dates={[...new Set(pairRuns.map((r) => r.date))]} value={range} onChange={setRange} />
@@ -210,6 +229,9 @@ export function Overview({
                 count={PROVENANCE_PASSED}
                 unchecked="No eval in this run expects sources"
               />
+            </Card>
+            <Card>
+              <CostCard runs={runs} />
             </Card>
           </div>
 

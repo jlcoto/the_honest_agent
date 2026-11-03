@@ -71,12 +71,13 @@ from before honest-agent stored costs, shows no cost or "Not recorded".
 ![The Overview page: score cards, a heatmap of scores by run, and the evals below threshold](/assets/review-overview.webp)
 
 The Overview shows one agent and one model. Pick them, and the dates, at the top right.
-Under the title: when the latest run was, and what it cost.
+Under the title: when the latest run was.
 
 - **The cards** show the latest run's Passed, Passed accuracy and Passed provenance
   (see [How passes are counted](#how-passes-are-counted)): the count, the change in
   evals since the previous run, the percentage, and a small trend of the percentage.
-  Hover the (i) next to Passed for the rule.
+  Hover the (i) next to Passed for the rule. **Est. cost** is what the latest run cost,
+  its change since the previous run, what that comes to per eval, and a small trend.
 - **Scores by eval run** has one row per eval, grouped by category, and one column per run.
   Switch between Accuracy and Provenance at the top right. Hover a cell for its score and
   what it cost: one eval in that run, or a category's evals together, with how many of
