@@ -117,8 +117,7 @@ views or semantic views created later, repeat them with `future` instead of `all
 honest-agent stops waiting for a query after `tool_timeout` (120 seconds by default), and
 the agent gets an error saying so. It asks the server to stop the query too, but can't
 make sure the query stops in the warehouse. Make sure Snowflake ends long-running
-queries: for how to set a query timeout, see
-[Snowflake's docs](https://docs.snowflake.com/en/sql-reference/parameters#statement-timeout-in-seconds).
+queries; Snowflake's docs cover how to set a query timeout.
 
 ## 3. Add a network policy
 
