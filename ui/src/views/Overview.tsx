@@ -1,17 +1,23 @@
-import { useMemo, useState } from 'react'
-import { CostInfo } from '../components/CostInfo'
+import { useMemo, useState, type ReactNode } from 'react'
+import { COST_NOTE } from '../components/CostInfo'
+import { InfoLabel } from '../components/InfoLabel'
 import { PageHeader } from '../components/PageHeader'
 import { EvalLabel } from '../components/EvalLabel'
 import {
+  CHECKS,
   accuracyPasses,
   agentsOf,
+  passedLines,
   errorReason,
   formatRunDate,
   formatRunTime,
   isError,
   meanOf,
   modelsOf,
+  passedCell,
+  passedRunsLines,
   passes,
+  pct,
   provenancePasses,
   evalHeatRow,
   evalTitles,
@@ -24,6 +30,7 @@ import {
   stripMarkdown,
   toCsv,
   usd,
+  type Check,
   type Run,
 } from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
@@ -31,11 +38,8 @@ import { Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, IconButton, Sco
 import { navigate } from '../router'
 import { useNarrow } from '../useNarrow'
 
-const METRICS = [
-  { id: 'overall', label: 'Combined' },
-  { id: 'accuracy', label: 'Accuracy' },
-  { id: 'provenance', label: 'Provenance' },
-]
+const PASSED_NOTE =
+  "Evals that met both their accuracy and provenance min scores. An eval with no provenance min score only needs accuracy. Evals that stopped with an error aren't counted."
 
 const toneOf = (s: number) => (s >= 0.95 ? 'correct' : s >= 0.75 ? 'mostly' : s >= 0.4 ? 'partly' : 'wrong')
 const openResult = (r: ResultRow) => navigate({ name: 'result', resultId: r.result_id })
@@ -71,16 +75,6 @@ function Empty({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** "Last eval run Oct 15, 12:47 · estimated cost $0.025 (i)"; the cost left out when the run has none. */
-/** "2 below min score · 1 stopped with an error": errored evals have no scores, so they're
- * counted apart from the graded ones the stat shows. */
-function passedCaption(run: Run) {
-  const below = run.graded - run.passed
-  const parts = [below ? `${below} below min score` : 'None below min score']
-  if (run.errored) parts.push(`${run.errored} stopped with an error`)
-  return parts.join(' · ')
-}
-
 /** "3 evals failed accuracy or provenance min score · 1 stopped with an error". */
 function failingSummary(run: Run) {
   const below = run.graded - run.passed
@@ -88,31 +82,62 @@ function failingSummary(run: Run) {
   return run.errored ? `${failed} · ${run.errored} stopped with an error` : failed
 }
 
-/** The Overall or Accuracy card: the latest run's score, its change since the run before,
- * and a sparkline; runs where every eval stopped with an error have no score. */
-function RunScore({ label, runs, pick }: { label: string; runs: Run[]; pick: (run: Run) => number | null }) {
-  const value = pick(runs[runs.length - 1])
-  const before = runs.length > 1 ? pick(runs[runs.length - 2]) : null
-  if (value == null) return <ScoreStat label={label} format="raw" value="—" caption="Every eval stopped with an error" />
+type PassCount = (run: Run) => { passed: number; of: number }
+const PASSED: PassCount = (r) => ({ passed: r.passed, of: r.graded })
+const ACCURACY_PASSED: PassCount = (r) => ({ passed: r.accuracyPassed, of: r.graded })
+const PROVENANCE_PASSED: PassCount = (r) => ({ passed: r.provenancePassed, of: r.provenanceChecked })
+
+/** A Passed card: the latest run's count big, its change in evals since the run before and its rate under it,
+ * and the rate over the runs as a sparkline (a rate, so runs with more or fewer evals stay comparable).
+ * Errored evals aren't counted; the card names them. */
+function PassCard({ label, runs, count, unchecked }: { label: ReactNode; runs: Run[]; count: PassCount; unchecked?: string }) {
+  const latest = runs[runs.length - 1]
+  const { passed, of } = count(latest)
+  const alert = latest.errored ? `${latest.errored} stopped with an error` : undefined
+  if (latest.graded === 0) return <ScoreStat label={label} format="raw" value="—" caption="Every eval stopped with an error" />
+  if (of === 0) return <ScoreStat label={label} format="raw" value="Not checked" caption={unchecked} alert={alert} />
+  const before = runs.length > 1 ? count(runs[runs.length - 2]) : null
+  const rates = runs.map(count).flatMap((c) => (c.of ? [c.passed / c.of] : []))
   return (
     <ScoreStat
       label={label}
-      value={value}
-      delta={before != null ? value - before : undefined}
-      caption={runs.length > 1 ? undefined : 'First run in this range'}
-      spark={runs.map(pick).filter((v): v is number => v != null)}
+      format="count"
+      value={`${passed} / ${of}`}
+      delta={before?.of ? passed - before.passed : undefined}
+      caption={before ? pct(passed / of) : `First run in this range · ${pct(passed / of)}`}
+      alert={alert}
+      spark={rates.length > 1 ? rates : undefined}
     />
   )
 }
 
-function LatestRun({ run }: { run: Run }) {
-  const when = `Last eval run ${formatRunTime(run.timestamp, { year: false })}`
-  const cost = runCost(run)
-  if (cost == null) return when
+/** The latest run's estimated cost, its change since the run before (a rise in red), and the cost over the runs
+ * as a sparkline, scaled from 0 to the dearest run. */
+function CostCard({ runs }: { runs: Run[] }) {
+  const label = (
+    <InfoLabel note={COST_NOTE} side="bottom">
+      Est. cost
+    </InfoLabel>
+  )
+  const latest = runs[runs.length - 1]
+  const cost = runCost(latest)
+  if (cost == null)
+    return <ScoreStat label={label} format="raw" value="Not recorded" caption="A model without a price, or a run from before costs" />
+  const before = runs.length > 1 ? runCost(runs[runs.length - 2]) : null
+  const costs = runs.map(runCost).filter((c): c is number => c != null)
   return (
-    <>
-      {when} · <CostInfo side="bottom">estimated cost {usd(cost)}</CostInfo>
-    </>
+    <ScoreStat
+      label={label}
+      format="raw"
+      value={usd(cost)}
+      // Changes under a cent read as no change; the rest in whole cents.
+      delta={before == null ? undefined : Math.abs(cost - before) < 0.01 ? 0 : cost - before}
+      formatDelta={(d) => (d === 0 ? '±$0' : `${d > 0 ? '+' : '−'}$${Math.abs(d).toFixed(2)}`)}
+      lowerIsBetter
+      caption={runs.length > 1 ? undefined : 'First run in this range'}
+      spark={costs.length > 1 ? costs : undefined}
+      sparkRange={[0, Math.max(...costs)]}
+    />
   )
 }
 
@@ -139,7 +164,7 @@ export function Overview({
   const model = models.includes(modelPick) ? modelPick : (agentRuns.at(-1)?.model ?? '')
   const pairRuns = agentRuns.filter((r) => r.model === model)
   const [range, setRange] = useState(() => ({ from: allDates[0], to: allDates[allDates.length - 1] }))
-  const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
+  const [metric, setMetric] = useState<Check>('accuracy')
 
   const switchAgent = (next: string) => {
     setAgent(next)
@@ -159,7 +184,6 @@ export function Overview({
   }
 
   const latest = runs[runs.length - 1]
-  const previous = runs[runs.length - 2]
   const failing = latest ? latest.results.filter((r) => !passes(r)) : []
 
   const columns = runColumns(runs)
@@ -176,10 +200,11 @@ export function Overview({
     ),
   )
   const categories = [...new Set(evals.map((q) => q.category))]
+  const categoryOf = new Map(evals.map((q) => [q.eval_id, q.category]))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <PageHeader title="Overview" subtitle={latest ? <LatestRun run={latest} /> : undefined}>
+      <PageHeader title="Overview" subtitle={latest ? `Last eval run ${formatRunTime(latest.timestamp, { year: false })}` : undefined}>
         <Select size="sm" icon="bot" options={agents} value={agent} onChange={switchAgent} />
         <Select size="sm" icon="cpu" options={models} value={model} onChange={setModel} />
         <DateRangePicker dates={[...new Set(pairRuns.map((r) => r.date))]} value={range} onChange={setRange} />
@@ -192,42 +217,44 @@ export function Overview({
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 16 }}>
-            {(['overall', 'accuracy'] as const).map((key) => (
-              <Card key={key}>
-                <RunScore label={key === 'overall' ? 'Overall' : 'Accuracy'} runs={runs} pick={(r) => r[key]} />
-              </Card>
-            ))}
             <Card>
-              {latest.provenance == null ? (
-                <ScoreStat label="Provenance" format="raw" value="Not checked" caption="No eval in this run expects sources" />
-              ) : (
-                <ScoreStat
-                  label="Provenance"
-                  value={latest.provenance}
-                  delta={previous?.provenance != null ? latest.provenance - previous.provenance : undefined}
-                  caption={previous ? undefined : 'First run in this range'}
-                  spark={runs.map((r) => r.provenance).filter((v): v is number => v != null)}
-                />
-              )}
+              <PassCard label={<InfoLabel note={PASSED_NOTE} side="bottom">Passed</InfoLabel>} runs={runs} count={PASSED} />
             </Card>
             <Card>
-              <ScoreStat
-                label="Passed thresholds"
-                value={`${latest.passed} / ${latest.graded}`}
-                format="raw"
-                caption={passedCaption(latest)}
+              <PassCard label="Passed accuracy" runs={runs} count={ACCURACY_PASSED} />
+            </Card>
+            <Card>
+              <PassCard
+                label="Passed provenance"
+                runs={runs}
+                count={PROVENANCE_PASSED}
+                unchecked="No eval in this run expects sources"
               />
+            </Card>
+            <Card>
+              <CostCard runs={runs} />
             </Card>
           </div>
 
           <Card
             title="Scores by eval run"
             subtitle="Click a cell to see that answer"
-            actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
+            actions={<Tabs items={CHECKS} value={metric} onChange={(id) => setMetric(id as Check)} />}
           >
             <Heatmap
               metric={metric}
               showToggle={false}
+              totalsLabel="Passed"
+              totals={runs.map((run) => passedCell(run.results, metric))}
+              totalsSummary={passedCell(runs.flatMap((run) => run.results), metric)}
+              groupLines={(group, i) =>
+                i == null ? null : passedLines(runs[i].results.filter((r) => categoryOf.get(r.eval_id) === group), metric)
+              }
+              rowLines={(row, i) => {
+                if (i != null) return null
+                const evalId = (row as ReturnType<typeof evalHeatRow>).eval_id
+                return passedRunsLines(runs.flatMap((run) => run.results.filter((r) => r.eval_id === evalId)), metric)
+              }}
               rowHeader="Eval"
               rowLabelWidth={narrow ? 150 : 360}
               groupBy="category"

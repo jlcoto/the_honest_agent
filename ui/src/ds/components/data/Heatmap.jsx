@@ -12,7 +12,7 @@ const MLABEL={overall:'Combined',accuracy:'Accuracy',provenance:'Provenance',val
 const colMean=(kids,key,n)=>Array.from({length:n},(_,i)=>mean(kids.map(k=>k[key]?k[key][i]:null)));
 const usd=c=>'$'+(c>0&&c<0.01?c.toPrecision(2):c.toFixed(2));
 
-export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Eval',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick,costLabel='Est. cost',formatCost=usd}){
+export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricChange,showToggle,showSummary=true,summaryLabel='Overall',rowHeader='Eval',groupBy,groupLabel,defaultExpanded=[],threshold=0.8,showTotals=true,totalsLabel='Overall',cellWidth=40,cellHeight=36,rowLabelWidth=220,showLegend=false,onCellClick,costLabel='Est. cost',formatCost=usd,totals:totalCells,totalsSummary,groupLines,rowLines}){
   const dual=rows.length>0&&rows[0].accuracy!=null;
   const [mLocal,setMLocal]=React.useState(defaultMetric);
   const m=dual?(metric||mLocal):'values';
@@ -70,7 +70,10 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
       lines.push(['Accuracy',pct(a)],['Provenance',pct(p)]);
     }
     let note=null;
-    if(item.kind==='group'){
+    // Lines the page adds under the score (a pass count); without them, a group gets the threshold note.
+    const extra=item.kind==='group'?(groupLines&&item.g!=null?groupLines(item.g,i):null):(rowLines?rowLines(r,i):null);
+    if(extra)lines.push(...extra);
+    else if(item.kind==='group'&&!groupLines){
       const vals=item.kids.map(k=>i==null?summaryOf(k):valueAt(k,i)).filter(x=>x!=null);
       const below=vals.filter(x=>x<threshold).length;
       note=below+' of '+vals.length+' evals below '+Math.round(threshold*100)+'%';
@@ -78,6 +81,12 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
     // No cost in the summary column: it averages runs, and their costs don't average.
     const cost=hasCosts&&i!=null&&ranAt(r,i)?costAt(item,i):undefined;
     setTip({x:rc.left+rc.width/2,top:rc.top,bottom:rc.bottom,row:r.label,col,v,b:bucketOf(v),lines,note,cost});
+  };
+  // A totals cell the page supplied: its own value, value label and lines in the tooltip.
+  const showTotal=(e,cell,col,i)=>{
+    const rc=e.currentTarget.getBoundingClientRect();
+    const cost=hasCosts&&i!=null&&cell&&cell.value!=null?costAt(totals,i):undefined;
+    setTip({x:rc.left+rc.width/2,top:rc.top,bottom:rc.bottom,row:(cell&&cell.title)||totalsLabel,col,v:cell?cell.value:null,valueLabel:cell?cell.label:undefined,lines:(cell&&cell.lines)||[],custom:!!cell,note:null,cost});
   };
 
   // Keep the tooltip on screen: centred over the cell, moved in from the edges, and below
@@ -140,8 +149,8 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
           <td style={{position:'sticky',left:0,zIndex:1,background:'var(--bg-surface)',minWidth:rowLabelWidth,maxWidth:rowLabelWidth,height:cellHeight+GAP,padding:GAP+'px 12px 0',verticalAlign:'middle'}}>
             <div style={{font:'700 14px/1.25 var(--font-sans)',color:'var(--fg-1)'}}>{totalsLabel}</div>
           </td>
-          {columns.map((_,ci)=><td key={ci} style={{padding:GAP+'px 0 0 '+(ci===0?2:0)+'px',...(ci===0?{backgroundImage:axG,backgroundRepeat:'no-repeat',backgroundSize:'2px calc(100% - '+GAP+'px)',backgroundPosition:'left bottom'}:{})}}>{box(valueAt(totals.r,ci),e=>show(e,totals,columns[ci],ci))}</td>)}
-          {showSummary?<td style={{padding:GAP+'px 0 0 '+GAP+'px'}}>{box(summaryOf(totals.r),e=>show(e,totals,summaryLabel,null))}</td>:null}
+          {columns.map((_,ci)=><td key={ci} style={{padding:GAP+'px 0 0 '+(ci===0?2:0)+'px',...(ci===0?{backgroundImage:axG,backgroundRepeat:'no-repeat',backgroundSize:'2px calc(100% - '+GAP+'px)',backgroundPosition:'left bottom'}:{})}}>{totalCells?box(totalCells[ci]?totalCells[ci].value:null,e=>showTotal(e,totalCells[ci],columns[ci],ci)):box(valueAt(totals.r,ci),e=>show(e,totals,columns[ci],ci))}</td>)}
+          {showSummary?<td style={{padding:GAP+'px 0 0 '+GAP+'px'}}>{totalCells?box(totalsSummary?totalsSummary.value:null,e=>showTotal(e,totalsSummary,summaryLabel,null)):box(summaryOf(totals.r),e=>show(e,totals,summaryLabel,null))}</td>:null}
         </tr></tfoot>:null}
       </table>
     </div>
@@ -149,12 +158,14 @@ export function Heatmap({rows,columns,metric,defaultMetric='overall',onMetricCha
       {BUCKETS.map(k=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:BUCKET_COLOR[k]}}/>{BUCKET_LABEL[k]}</span>)}
       <span style={{display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'var(--chart-empty)'}}/>No run</span>
     </div>:null}
-    {tip?<div ref={tipRef} style={{position:'fixed',left:0,top:0,visibility:'hidden',zIndex:50,padding:'8px 10px',borderRadius:8,background:'var(--bg-inverse)',color:'var(--fg-inverse)',font:'400 12px/1.5 var(--font-sans)',boxShadow:'var(--shadow-2)',pointerEvents:'none',minWidth:150,maxWidth:'min(320px, calc(100vw - 16px))',overflowWrap:'anywhere'}}>
+    {tip?<div ref={tipRef} style={{position:'fixed',left:0,top:0,visibility:'hidden',zIndex:50,padding:'8px 10px',borderRadius:8,background:'var(--bg-inverse)',color:'var(--fg-inverse)',font:'400 12px/1.5 var(--font-sans)',boxShadow:'var(--shadow-2)',pointerEvents:'none',width:'min(260px, calc(100vw - 16px))',overflowWrap:'anywhere'}}>
       <div style={{fontWeight:500}}>{tip.row}</div>
       <div style={{fontFamily:'var(--font-mono)',opacity:.7,fontSize:11}}>{tip.col}</div>
+      {/* A fixed width, so the scores stay put from row to row; a long title wraps. */}
       {/* The scores, or "No run" for an empty cell; the cell's colour already shows its bucket. */}
-      {tip.v==null?<div style={{opacity:.7,marginTop:4}}>No run</div>:<>
-      <div style={{display:'flex',justifyContent:'space-between',gap:16,marginTop:4}}><span>{MLABEL[m]}</span><span style={{fontFamily:'var(--font-mono)',fontWeight:500}}>{pct(tip.v)}</span></div>
+      {/* A page-supplied totals cell can have lines without a value (nothing it checks ran). */}
+      {tip.v==null&&!tip.custom?<div style={{opacity:.7,marginTop:4}}>No run</div>:<>
+      {tip.v!=null?<div style={{display:'flex',justifyContent:'space-between',gap:16,marginTop:4}}><span>{tip.valueLabel||MLABEL[m]}</span><span style={{fontFamily:'var(--font-mono)',fontWeight:500}}>{pct(tip.v)}</span></div>:null}
       {tip.lines.map(([k,v])=><div key={k} style={{display:'flex',justifyContent:'space-between',gap:16,opacity:.8}}><span>{k}</span><span style={{fontFamily:'var(--font-mono)'}}>{v}</span></div>)}
       </>}
       {tip.cost!==undefined?<div style={{display:'flex',justifyContent:'space-between',gap:16,marginTop:4,paddingTop:4,borderTop:'1px solid color-mix(in oklch,var(--fg-inverse) 20%,transparent)'}}><span>{costLabel}</span><span style={{fontFamily:'var(--font-mono)'}}>{tip.cost==null?'not recorded':formatCost(tip.cost)}</span></div>:null}

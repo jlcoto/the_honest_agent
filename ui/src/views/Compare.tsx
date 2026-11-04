@@ -1,25 +1,52 @@
 import { useMemo, useState } from 'react'
 import { asLabel } from '../components/asLabel'
 import { CostInfo } from '../components/CostInfo'
+import { InfoLabel } from '../components/InfoLabel'
 import { PageHeader } from '../components/PageHeader'
 import { SCORES_OVER_TIME_NOTE, ScoresOverTime, seriesColors } from '../components/ScoresOverTime'
-import { agentOf, agentsOf, evalHeatRow, evalTitles, evalsOf, formatRunTime, mean, resultsCost, runCost, runsOf, smallUsd, usd, type Run } from '../data/derive'
+import {
+  CHECKS,
+  accuracyPasses,
+  agentOf,
+  agentsOf,
+  evalHeatRow,
+  evalTitles,
+  evalsOf,
+  passedLines,
+  formatRunTime,
+  isError,
+  passedCell,
+  passes,
+  pct,
+  provenanceChecked,
+  provenancePasses,
+  resultsCost,
+  runCost,
+  runsOf,
+  smallUsd,
+  usd,
+  type Check,
+  type Run,
+} from '../data/derive'
 import type { ReportData, ResultRow } from '../data/types'
-import { AccuracyBar, Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, ScoreCell, Select, Tabs, Tooltip } from '../ds'
+import { Badge, Card, DataTable, DateRangePicker, Heatmap, Icon, Select, Tabs, Tooltip } from '../ds'
 import { navigate } from '../router'
 import { useNarrow } from '../useNarrow'
 
-const METRICS = [
-  { id: 'overall', label: 'Combined' },
-  { id: 'accuracy', label: 'Accuracy' },
-  { id: 'provenance', label: 'Provenance' },
-]
+/** A Passed column: which evals it checks, and whether one passed. */
+const PASS_CHECKS = {
+  passed: { checks: (r: ResultRow) => !isError(r), passes },
+  accuracy: { checks: (r: ResultRow) => !isError(r), passes: accuracyPasses },
+  provenance: { checks: provenanceChecked, passes: provenancePasses },
+}
+type PassKey = keyof typeof PASS_CHECKS
 
-/** "8 of 10 passed · 2 below min score · 1 stopped with an error": errored evals have no
- * scores, so the bar shows the graded ones and the errors are named apart. */
-function passedTitle(run: Run) {
-  const title = `${run.passed} of ${run.graded} passed · ${run.graded - run.passed} below min score`
-  return run.errored ? `${title} · ${run.errored} stopped with an error` : title
+interface PassCount {
+  passed: number
+  /** Evals this check covers in the selected run. */
+  of: number
+  /** Change in passing evals vs the baseline, over the shared evals both runs checked; null for the baseline. */
+  delta: number | null
 }
 
 interface ModelRow {
@@ -32,15 +59,10 @@ interface ModelRow {
   isLatest: boolean
   /** The selected run's results by eval_id. */
   latest: Map<string, ResultRow>
-  /** The selected run's averages over its graded evals (null: none was graded). */
-  accuracy: number | null
-  provenance: number | null
-  dAccuracy: number | null
-  dProvenance: number | null
+  /** The selected run's Passed, Passed accuracy and Passed provenance, as on the Overview. */
+  counts: Record<PassKey, PassCount>
   /** Evals both this model's and the baseline's selected runs contain; the differences are computed on these. */
   shared: number
-  /** Evals in the selected run that met both their accuracy and provenance thresholds, as on the Overview. */
-  passed: number
   /** Not the baseline, and its selected run shares no evals with the baseline's, so there's no difference to show. */
   noOverlap: boolean
   /** Not the baseline, and its selected run tested a different set of evals than the baseline's. */
@@ -62,17 +84,37 @@ function differsNote(shared: number, baselineEvals: number) {
 function Delta({ value, shared, noOverlap }: { value: number | null; shared: number; noOverlap: boolean }) {
   if (noOverlap) return <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}>no evals in common</span>
   if (value == null) return null
-  const flat = Math.abs(value) < 0.0005
   return (
     <span
       style={{
         font: '500 12px var(--font-mono)',
         whiteSpace: 'nowrap',
-        color: flat ? 'var(--fg-3)' : value > 0 ? 'var(--acc-correct-ink)' : 'var(--acc-wrong-ink)',
+        color: value === 0 ? 'var(--fg-3)' : value > 0 ? 'var(--acc-correct-ink)' : 'var(--acc-wrong-ink)',
       }}
     >
-      {flat ? '±0.0 pp' : `${value > 0 ? '+' : '−'}${Math.abs(value * 100).toFixed(1)} pp`}
+      {value === 0 ? '±0' : `${value > 0 ? '+' : '−'}${Math.abs(value)}`}
       <span style={{ font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }}> · {shared} shared</span>
+    </span>
+  )
+}
+
+/** A Passed cell: the count, the rate under it, and the difference from the baseline. */
+function PassCell({ row, pass, unchecked }: { row: ModelRow; pass: PassKey; unchecked?: string }) {
+  const { passed, of, delta } = row.counts[pass]
+  const sub = { font: '400 12px var(--font-sans)', color: 'var(--fg-3)' }
+  if (of === 0)
+    return (
+      <span style={{ font: '400 13px var(--font-mono)', color: 'var(--fg-3)' }}>
+        — <span style={{ font: 'var(--type-small)' }}>{row.run.graded ? unchecked : 'every eval stopped with an error'}</span>
+      </span>
+    )
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, whiteSpace: 'nowrap' }}>
+      <span style={{ font: '500 13px var(--font-mono)' }}>
+        {passed} / {of}
+      </span>
+      <span style={sub}>{pct(passed / of)}</span>
+      <Delta value={delta} shared={row.shared} noOverlap={row.noOverlap} />
     </span>
   )
 }
@@ -104,8 +146,8 @@ export function Compare({
   setAgent: (agent: string) => void
 }) {
   const narrow = useNarrow()
-  const [metric, setMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
-  const [trendMetric, setTrendMetric] = useState<'overall' | 'accuracy' | 'provenance'>('overall')
+  const [metric, setMetric] = useState<Check>('accuracy')
+  const [trendMetric, setTrendMetric] = useState<Check>('accuracy')
   const agents = useMemo(() => agentsOf(data.results), [data])
   const agentRuns = useMemo(() => runsOf(data.results.filter((r) => agentOf(r) === agent)), [data, agent])
   // One color per model for the whole report, independent of agent, date range or baseline.
@@ -136,11 +178,17 @@ export function Compare({
     const rows: ModelRow[] = models.map((model) => {
       const latest = resultsOf(model)
       const shared = [...latest.keys()].filter((q) => base.has(q))
-      // Over evals both runs scored; provenance that either side didn't check is left out.
-      const sharedDelta = (key: 'accuracy_score' | 'provenance_score') => {
-        const scored = shared.filter((q) => latest.get(q)![key] != null && base.get(q)![key] != null)
-        if (model === baseline || scored.length === 0) return null
-        return mean(scored.map((q) => latest.get(q)![key]!)) - mean(scored.map((q) => base.get(q)![key]!))
+      // Over the shared evals both runs checked: an error or a provenance check on one side only is left out.
+      const countOf = (pass: PassKey): PassCount => {
+        const { checks, passes } = PASS_CHECKS[pass]
+        const checked = [...latest.values()].filter(checks)
+        const both = shared.filter((q) => checks(latest.get(q)!) && checks(base.get(q)!))
+        const passing = (results: Map<string, ResultRow>) => both.filter((q) => passes(results.get(q)!)).length
+        return {
+          passed: checked.filter(passes).length,
+          of: checked.length,
+          delta: model === baseline || both.length === 0 ? null : passing(latest) - passing(base),
+        }
       }
       return {
         model,
@@ -149,12 +197,8 @@ export function Compare({
         run: selectedRun(model),
         isLatest: selectedRun(model) === runsByModel.get(model)![0],
         latest,
-        accuracy: selectedRun(model).accuracy,
-        provenance: selectedRun(model).provenance,
-        dAccuracy: sharedDelta('accuracy_score'),
-        dProvenance: sharedDelta('provenance_score'),
+        counts: { passed: countOf('passed'), accuracy: countOf('accuracy'), provenance: countOf('provenance') },
         shared: shared.length,
-        passed: selectedRun(model).passed,
         noOverlap: model !== baseline && shared.length === 0,
         differs: model !== baseline && !(shared.length === base.size && latest.size === base.size),
       }
@@ -176,6 +220,7 @@ export function Compare({
   )
 
   const baselineEvals = rows.find((m) => m.isBaseline)?.latest.size ?? 0
+  const categoryOf = new Map(evals.map((q) => [q.eval_id, q.category]))
   // Heatmap column per model; which run each shows is in the Results table above (rotated headers can't fit a date).
   const columns = rows.map((m) => m.model)
 
@@ -208,7 +253,7 @@ export function Compare({
             title="Results by model"
             subtitle={asLabel(
               <span>
-                Differences in points vs the baseline, {baseline}, on the evals both ran ·{' '}
+                Differences in evals vs the baseline, {baseline}, on the evals both ran ·{' '}
                 <CostInfo side="bottom">costs are estimates</CostInfo>
               </span>,
             )}
@@ -278,6 +323,12 @@ export function Compare({
                         {r.latest.size} {r.latest.size === 1 ? 'eval' : 'evals'}
                         {r.isLatest ? '' : ' · older run'}
                       </span>
+                      {/* Under the run, not a count: it's the same for every Passed column and would push one out of line. */}
+                      {r.run.errored ? (
+                        <span style={{ font: '400 12px var(--font-sans)', color: 'var(--acc-wrong-ink)' }}>
+                          {r.run.errored} stopped with an error
+                        </span>
+                      ) : null}
                     </span>
                   ),
                 },
@@ -286,41 +337,12 @@ export function Compare({
                   label: 'Est. cost',
                   render: (r: ModelRow) => <CostCell run={r.run} evals={r.latest.size} />,
                 },
-                {
-                  key: 'accuracy',
-                  label: 'Accuracy',
-                  render: (r: ModelRow) => (
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <ScoreCell score={r.accuracy} />
-                      <Delta value={r.dAccuracy} shared={r.shared} noOverlap={r.noOverlap} />
-                    </span>
-                  ),
-                },
+                { key: 'passed', label: 'Passed', render: (r: ModelRow) => <PassCell row={r} pass="passed" /> },
+                { key: 'accuracy', label: 'Passed accuracy', render: (r: ModelRow) => <PassCell row={r} pass="accuracy" /> },
                 {
                   key: 'provenance',
-                  label: 'Provenance',
-                  render: (r: ModelRow) => (
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <ScoreCell score={r.provenance} />
-                      <Delta value={r.dProvenance} shared={r.shared} noOverlap={r.noOverlap} />
-                    </span>
-                  ),
-                },
-                {
-                  key: 'passed',
-                  label: 'Passed thresholds',
-                  width: 200,
-                  render: (r: ModelRow) => (
-                    <span
-                      style={{ display: 'block', padding: '6px 0' }}
-                      title={passedTitle(r.run)}
-                    >
-                      {/* pointerEvents off so the bar's own segment titles ("Correct"/"Wrong") don't replace this one. */}
-                      <span style={{ display: 'block', pointerEvents: 'none' }}>
-                        <AccuracyBar counts={{ correct: r.passed, wrong: r.run.graded - r.passed }} height={8} />
-                      </span>
-                    </span>
-                  ),
+                  label: 'Passed provenance',
+                  render: (r: ModelRow) => <PassCell row={r} pass="provenance" unchecked="not checked" />,
                 },
               ]}
             />
@@ -328,12 +350,17 @@ export function Compare({
           <Card
             title="Scores by model"
             subtitle="Each model's selected run · grey cells: not in that run, or stopped with an error · click a cell to see the answer"
-            actions={<Tabs items={METRICS} value={metric} onChange={(id) => setMetric(id as typeof metric)} />}
+            actions={<Tabs items={CHECKS} value={metric} onChange={(id) => setMetric(id as Check)} />}
           >
             <Heatmap
               metric={metric}
               showToggle={false}
               showSummary={false}
+              totalsLabel="Passed"
+              totals={rows.map((m) => passedCell(m.run.results, metric))}
+              groupLines={(group, i) =>
+                i == null ? null : passedLines(rows[i].run.results.filter((r) => categoryOf.get(r.eval_id) === group), metric)
+              }
               rowHeader="Eval"
               rowLabelWidth={narrow ? 150 : 360}
               groupBy="category"
@@ -351,25 +378,15 @@ export function Compare({
           </Card>
           <Card
             title="Scores over time"
-            subtitle="One row per model · each point is the model's last run that day"
-            actions={
-              <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-                <Tabs items={METRICS} value={trendMetric} onChange={(id) => setTrendMetric(id as typeof trendMetric)} />
-                <Tooltip
-                  side="bottom"
-                  content={<span style={{ display: 'block', width: 260, whiteSpace: 'normal' }}>{SCORES_OVER_TIME_NOTE}</span>}
-                >
-                  <span
-                    role="img"
-                    aria-label={SCORES_OVER_TIME_NOTE}
-                    tabIndex={0}
-                    style={{ display: 'inline-flex', color: 'var(--fg-3)', cursor: 'help' }}
-                  >
-                    <Icon name="info" size={16} />
-                  </span>
-                </Tooltip>
-              </span>
-            }
+            subtitle={asLabel(
+              <span>
+                One row per model · each point is the model's last{' '}
+                <InfoLabel note={SCORES_OVER_TIME_NOTE} side="bottom">
+                  run that day
+                </InfoLabel>
+              </span>,
+            )}
+            actions={<Tabs items={CHECKS} value={trendMetric} onChange={(id) => setTrendMetric(id as Check)} />}
           >
             {/* All runs in the date range, regardless of the Run dropdowns: this card is the history. */}
             <ScoresOverTime

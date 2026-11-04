@@ -12,9 +12,14 @@ export interface Run {
   accuracy: number | null
   /** null when no graded result in the run had provenance checked. */
   provenance: number | null
-  overall: number | null
-  /** Evals that met both thresholds, out of `graded`. */
+  /** Evals that met both min scores, out of `graded`; one with no provenance min score needs accuracy alone. */
   passed: number
+  /** Evals that met their accuracy min score, out of `graded`. */
+  accuracyPassed: number
+  /** Evals that met their provenance min score, out of `provenanceChecked`. */
+  provenancePassed: number
+  /** Graded evals whose provenance was checked: the others expect no sources. */
+  provenanceChecked: number
   /** Evals that were graded; the others stopped with an error and have no scores. */
   graded: number
   errored: number
@@ -49,10 +54,6 @@ export function meanOf(xs: (number | null)[]): number | null {
   return present.length ? mean(present) : null
 }
 
-/** Accuracy and provenance averaged, or accuracy alone when provenance wasn't checked. */
-const combined = (accuracy: number, provenance: number | null) =>
-  provenance == null ? accuracy : (accuracy + provenance) / 2
-
 /** An eval that stopped with an error (a provider or MCP failure): no scores, so it's left
  * out of every average, and counts as failing (as in cli/honest_agent/thresholds.py). */
 export const isError = (r: ResultRow) => r.status === 'error'
@@ -65,9 +66,22 @@ export const accuracyPasses = (r: ResultRow) =>
 export const provenancePasses = (r: ResultRow) =>
   !isError(r) && (r.provenance_score == null || r.provenance_min_score == null || r.provenance_score >= r.provenance_min_score)
 export const passes = (r: ResultRow) => accuracyPasses(r) && provenancePasses(r)
+/** A graded eval with a provenance score and min score; the others expect no sources. `provenancePasses`
+ * counts those as passing, which is right for `passes` but not for a count of provenance alone. */
+export const provenanceChecked = (r: ResultRow) => !isError(r) && r.provenance_score != null && r.provenance_min_score != null
 
-/** Combined score; null for an errored eval. */
-export const overallOf = (r: ResultRow) => (r.accuracy_score == null ? null : combined(r.accuracy_score, r.provenance_score))
+/** Passed, Passed accuracy and Passed provenance for a set of results: graded evals only. */
+export function passCounts(rows: ResultRow[]) {
+  const graded = rows.filter((r) => !isError(r))
+  const checked = graded.filter(provenanceChecked)
+  return {
+    graded: graded.length,
+    passed: graded.filter(passes).length,
+    accuracyPassed: graded.filter(accuracyPasses).length,
+    provenanceChecked: checked.length,
+    provenancePassed: checked.filter(provenancePasses).length,
+  }
+}
 
 export function runsOf(results: ResultRow[]): Run[] {
   const byRun = new Map<string, ResultRow[]>()
@@ -87,9 +101,7 @@ export function runsOf(results: ResultRow[]): Run[] {
       results: rows,
       accuracy,
       provenance,
-      overall: accuracy == null ? null : combined(accuracy, provenance),
-      passed: rows.filter(passes).length,
-      graded: graded.length,
+      ...passCounts(rows),
       errored: rows.length - graded.length,
       agentCost: sumOrNull(rows.map((r) => r.agent_cost_usd)),
       gradingCost: sumOrNull(rows.map((r) => r.grading_cost_usd)),
@@ -225,3 +237,43 @@ export function toCsv(header: string[], rows: (string | number | null)[][]): str
 
 /** "92.4%" -- one decimal, per the design system's number rules. */
 export const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`)
+
+/** The two checks the heatmaps and Scores over time switch between. */
+export type Check = 'accuracy' | 'provenance'
+export const CHECKS: { id: Check; label: string }[] = [
+  { id: 'accuracy', label: 'Accuracy' },
+  { id: 'provenance', label: 'Provenance' },
+]
+
+const evalCount = (n: number) => `${n} ${n === 1 ? 'eval' : 'evals'}`
+
+/** Evals in `rows` that met `check`'s min score, out of those it checks. */
+function checkCounts(rows: ResultRow[], check: Check) {
+  const c = passCounts(rows)
+  return check === 'accuracy' ? { passed: c.accuracyPassed, of: c.graded } : { passed: c.provenancePassed, of: c.provenanceChecked }
+}
+
+/** A heatmap's bottom-row cell: the share of `rows` that met the tab's min score, coloured by it, with the
+ * count, the evals the check skipped and the errors in the tooltip. Null when nothing ran. */
+export function passedCell(rows: ResultRow[], check: Check) {
+  if (rows.length === 0) return null
+  const { passed, of } = checkCounts(rows, check)
+  const graded = rows.filter((r) => !isError(r)).length
+  const lines: [string, string][] = [['Passed', `${passed} / ${of}`]]
+  if (graded > of) lines.push(['Not checked', evalCount(graded - of)])
+  if (rows.length > graded) lines.push(['Stopped with an error', evalCount(rows.length - graded)])
+  return { value: of ? passed / of : null, title: `Passed ${check}`, label: 'Pass rate', lines }
+}
+
+/** A category cell's tooltip line: evals that met the tab's min score in that run, by the same rule as `run`
+ * and `notify`. */
+export function passedLines(rows: ResultRow[], check: Check): [string, string][] | null {
+  const { passed, of } = checkCounts(rows, check)
+  return of ? [['Passed', `${passed} / ${of}`]] : null
+}
+
+/** An eval's summary cell line: the runs it met the tab's min score in, errored runs left out. */
+export function passedRunsLines(rows: ResultRow[], check: Check): [string, string][] | null {
+  const { passed, of } = checkCounts(rows, check)
+  return of ? [['Runs passed', `${passed} / ${of}`]] : null
+}

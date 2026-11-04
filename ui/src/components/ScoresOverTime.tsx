@@ -1,8 +1,13 @@
-import { useState, type ReactNode } from 'react'
-import { formatRunDate, formatRunTime, pct, type Run } from '../data/derive'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { formatRunDate, formatRunTime, pct, type Check, type Run } from '../data/derive'
 
-type Metric = 'overall' | 'accuracy' | 'provenance'
-const METRIC_LABEL: Record<Metric, string> = { overall: 'Combined', accuracy: 'Accuracy', provenance: 'Provenance' }
+const METRIC_LABEL: Record<Check, string> = { accuracy: 'Accuracy', provenance: 'Provenance' }
+
+/** "12 / 25 passed accuracy": the evals that met the tab's min score, out of those it checks. */
+const passedOf = (run: Run, check: Check) =>
+  check === 'accuracy'
+    ? `${run.accuracyPassed} / ${run.graded} passed accuracy`
+    : `${run.provenancePassed} / ${run.provenanceChecked} passed provenance`
 
 /**
  * The design system's series palette, assigned by first appearance: each model takes the next --series color the
@@ -49,10 +54,21 @@ export function ScoresOverTime({
 }: {
   runs: Run[]
   models: string[]
-  metric: Metric
+  metric: Check
   colors: Map<string, string>
 }) {
   const [tip, setTip] = useState<{ x: number; y: number; body: ReactNode } | null>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
+  // Centred over the point, then moved in from the screen's edges, so a point near a side keeps its tooltip on
+  // screen (on a phone the chart is narrower than the tooltip).
+  useLayoutEffect(() => {
+    const el = tipRef.current
+    if (!el) return
+    el.style.marginLeft = '0px'
+    const { left, right } = el.getBoundingClientRect()
+    const M = 8
+    el.style.marginLeft = `${left < M ? M - left : right > window.innerWidth - M ? window.innerWidth - M - right : 0}px`
+  }, [tip])
   const days = [...new Set(runs.map((r) => r.date))].sort()
   const slot = (W - LEFT - RIGHT) / Math.max(days.length, 1)
   const x = (day: number) => LEFT + (day + 0.5) * slot
@@ -121,7 +137,7 @@ export function ScoresOverTime({
                           {p.run.results.length === 1 ? 'eval' : 'evals'}
                           {p.runsThatDay > 1 ? ` · last of ${p.runsThatDay} runs that day` : ''}
                           <br />
-                          {METRIC_LABEL[metric]} {pct(p.value)} · {p.run.passed}/{p.run.results.length} passed thresholds
+                          {METRIC_LABEL[metric]} {pct(p.value)} · {passedOf(p.run, metric)}
                         </>
                       ),
                     })
@@ -139,6 +155,7 @@ export function ScoresOverTime({
       </svg>
       {tip ? (
         <div
+          ref={tipRef}
           role="tooltip"
           style={{
             position: 'absolute',
@@ -152,7 +169,8 @@ export function ScoresOverTime({
             background: 'var(--bg-inverse)',
             color: 'var(--fg-inverse)',
             font: '400 12px/1.45 var(--font-sans)',
-            whiteSpace: 'nowrap',
+            width: 'max-content',
+            maxWidth: 'min(320px, calc(100vw - 16px))',
             boxShadow: 'var(--shadow-2)',
           }}
         >

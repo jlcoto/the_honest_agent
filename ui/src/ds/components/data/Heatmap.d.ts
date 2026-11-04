@@ -1,3 +1,14 @@
+/** A totals-row cell the page computes itself, in place of the column's mean. */
+export interface HeatmapTotal {
+  /** 0–1; colours the cell. null shows as an empty cell ("No run"). */
+  value: number | null;
+  /** Tooltip heading; defaults to `totalsLabel` */
+  title?: string;
+  /** Label of the value's line in the tooltip; defaults to the metric's name */
+  label?: string;
+  /** More [label, value] lines under it */
+  lines?: [string, string][];
+}
 export interface HeatmapRow {
   label: string;
   /** Secondary line under the label, in mono. Typically the row's identifier (e.g. a eval_id) when `label` is a human-readable title. */
@@ -40,6 +51,14 @@ export interface HeatmapProps {
   showTotals?: boolean;
   /** Default "Overall" */
   totalsLabel?: string;
+  /** One cell per column for the bottom row, in place of each column's mean (e.g. a pass rate). Group and eval rows are unchanged. */
+  totals?: (HeatmapTotal | null)[];
+  /** The bottom row's cell in the summary column, when `totals` is given */
+  totalsSummary?: HeatmapTotal | null;
+  /** [label, value] lines for a group cell's tooltip, under its score, in place of "2 of 4 evals below 80%"; `column` is null for the summary column. Return null for none. */
+  groupLines?: (group: string, column: number | null) => [string, string][] | null;
+  /** [label, value] lines for an eval row cell's tooltip, under its score (none by default); `column` is null for the summary column. */
+  rowLines?: (row: HeatmapRow, column: number | null) => [string, string][] | null;
   /** Uppercase header over the row labels */
   rowHeader?: string;
   cellWidth?: number;
