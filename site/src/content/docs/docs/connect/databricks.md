@@ -95,8 +95,8 @@ grant use schema, select on schema <catalog>.<schema> to `<application_id>`;
   [the MCP](https://docs.databricks.com/aws/en/ai-gateway/govern-mcp-service) and
   [the warehouse](https://docs.databricks.com/aws/en/agents/mcp-tools/built-in-mcp-services).
 
-For Genie One, also share what shapes its answers, so the service principal gets the same
-answers as your users:
+For Genie One, also share your Genie Agents and workspace instructions with the service
+principal. Without them, it might not get the same answers as your users:
 
 - each **Genie Agent** they use: open it, **Share**, the service principal with
   **CAN RUN**;
