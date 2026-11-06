@@ -239,9 +239,6 @@ used ours after we added this line to the
 - For questions about orders, customers or sales, use the "Sales Agent" Genie Agent.
 ```
 
-Evals show whether a Genie Agent's curation reaches the answers: a question that needs the
-agent's instructions fails when Genie One answers without it.
-
 ### Routed answers have no SQL
 
 When Genie One uses other, specialized agents (Genie Agents) to generate the response, the
