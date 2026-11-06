@@ -88,8 +88,7 @@ grant use catalog on catalog <catalog> to `<application_id>`;
 grant use schema, select on schema <catalog>.<schema> to `<application_id>`;
 ```
 
-- **The name won't work here:** `to honest_agent_service` fails with
-  `PRINCIPAL_DOES_NOT_EXIST`. Use the application ID, in backticks.
+- **Use the service principal's application ID, not its name,** in backticks.
 - **Several schemas?** Repeat the grants for each one.
 - **Extra privileges:** your setup might require more, like `EXECUTE` on the MCP or `CAN USE`
   on a SQL warehouse. Check Databricks' docs on
