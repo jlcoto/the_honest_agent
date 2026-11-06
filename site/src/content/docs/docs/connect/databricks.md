@@ -127,10 +127,16 @@ curl -X POST "https://<host>/api/2.0/token-management/on-behalf-of/tokens" \
 
 ## 5. Run `init`
 
-In the folder for your evals, pick the server:
+In the folder for your evals, run `init` for the server you want to evaluate. For Genie One:
 
 ```bash
-uv run honest-agent init --server databricks_genie   # or --server databricks_sql
+uv run honest-agent init --server databricks_genie
+```
+
+For Databricks SQL:
+
+```bash
+uv run honest-agent init --server databricks_sql
 ```
 
 `init` asks for the URL from step 1, then writes a target to `honest_agent_config.yml`.
