@@ -220,7 +220,7 @@ other grading methods.
 
 Genie One answers asynchronously. The agent asks with `genie_ask`, then calls
 `genie_poll_response` until Genie has finished, and each poll is a step. In our tests evals
-took 25 to 56 seconds and the agent used 7 to 13 steps; yours may be slower on larger data.
+took 25 to 87 seconds and the agent used 7 to 21 steps; yours may be slower on larger data.
 The agent always needed more than the default of 5 steps. `init` sets 30; raise it if
 results say the eval hit the step limit.
 
@@ -247,7 +247,7 @@ agent that answered. For questions that Genie One routes to an agent, grade accu
 leave `expected_sources` out of those evals, or provenance fails.
 
 To see whether an answer was routed, open its result: in our tests, routed answers showed no
-SQL calls and usually named the agent.
+query on your tables and usually named the agent.
 
 When Genie One answers itself, its reply includes the SQL it ran, and provenance works as
 for any other server.
