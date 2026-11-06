@@ -163,9 +163,9 @@ DATABRICKS_GENIE_MCP_TOKEN=...
 ANTHROPIC_API_KEY=...
 ```
 
-To evaluate both, run `init` once, then copy the target in `honest_agent_config.yml` and
-change its name, URL and token variable. Both can run the same evals: the report then
-shows Genie One and a model writing its own SQL side by side on the same questions.
+To evaluate both servers, run `init` once, then copy the target in `honest_agent_config.yml`
+and change its name, URL and token variable. The two targets can run the same evals: the
+report then shows Genie One and a model writing its own SQL side by side on the same questions.
 
 ## 6. Check the connection
 
