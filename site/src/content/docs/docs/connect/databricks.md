@@ -1,6 +1,6 @@
 ---
 title: Connect to Databricks
-description: Evaluate Genie One, or an agent that runs SQL on Databricks, through Databricks' managed MCP servers.
+description: Evaluate Genie One, or a model writing its own SQL on Databricks, through Databricks-provided MCPs.
 ---
 
 :::caution[An example, not a security review]
@@ -9,18 +9,21 @@ against your company's security policies, and adapt it before you use it with re
 See [Your setup, your responsibility](/docs/team/#your-setup-your-responsibility).
 :::
 
-Databricks hosts managed MCP servers that Claude and other agents connect to.
+Databricks hosts MCP servers of its own, [Databricks-provided MCPs](https://docs.databricks.com/aws/en/agents/mcp-tools/built-in-mcp-services),
+that Claude and other agents connect to.
 honest-agent works with two of them, and they test different things:
 
 | Server | Who writes the SQL | What you evaluate |
 |---|---|---|
 | **Genie One** | Genie, Databricks' own AI | Genie's answers, as your business users get them in Claude or another client |
-| **Databricks SQL** | The model honest-agent runs | An agent your team built on Databricks SQL |
+| **Databricks SQL** | The model honest-agent runs | How well a model answers from your data, writing its own SQL through this server |
 
 honest-agent connects to either one as a
 [service principal](https://docs.databricks.com/aws/en/admin/users-groups/service-principals),
-with a personal access token sent with each request. We tested these steps on a Databricks
-Free Edition workspace in November 2026.
+with a personal access token sent with each request. Databricks supports these tokens here
+but [recommends OAuth](https://docs.databricks.com/aws/en/agents/mcp-tools/authentication-networking) for unattended
+agents, which honest-agent doesn't do yet: check this against your company's policies. We
+tested this setup on a Databricks Free Edition workspace in November 2026.
 
 The SQL and commands below have placeholders in angle brackets. Replace them with yours:
 
@@ -31,7 +34,7 @@ The SQL and commands below have placeholders in angle brackets. Replace them wit
 | `<catalog>`, `<schema>` | Where the tables the agent reads live |
 | `<application_id>` | The service principal's application ID (step 2) |
 
-You need to be a workspace admin for steps 2 to 4.
+Make sure you have the privileges to complete steps 2 to 4.
 
 ## 1. Find your workspace's host and ID
 
@@ -41,21 +44,30 @@ You need to be a workspace admin for steps 2 to 4.
   in Databricks' URLs.
 
 The server URLs use the newer
-[Unity Gateway](https://docs.databricks.com/aws/en/generative-ai/mcp/managed-mcp) endpoints:
+[Unity Gateway](https://docs.databricks.com/aws/en/agents/mcp-tools/built-in-mcp-services) endpoints:
 
 ```
 https://<host>/ai-gateway/mcp-services/system.ai.genie_one_mcp?o=<workspace_id>
 https://<host>/ai-gateway/mcp-services/system.ai.dbsql?o=<workspace_id>
 ```
 
+Databricks SQL's URL uses the Unity Gateway beta: on your workspace, an account admin might
+need to turn it on. Check [Databricks' docs](https://docs.databricks.com/aws/en/agents/mcp-tools/databricks-sql).
+
 The older endpoints under `/api/2.0/mcp/` need the "Managed MCP Servers" preview turned on.
 On a workspace without it, they answer "Databricks managed MCP servers are not enabled".
+The older Genie One URL [stops working on November 30, 2026](https://docs.databricks.com/aws/en/agents/mcp-tools/genie-mcp),
+so use the ones above.
 
 ## 2. Create a service principal
 
 honest-agent can't log in as your users do, so it needs its own identity. Using a
 service principal also matters for Genie One, which remembers each user's past
 conversations: see [Genie One remembers](#genie-one-remembers).
+
+On a paid workspace, check the cost first: Genie One's usage by users is free until January
+31, 2027, but [service principals are excluded and billed](https://docs.databricks.com/aws/en/genie/monitor-cost), and every
+eval is a Genie conversation.
 
 Go to **Settings → Identity and access → Service principals → Add new**, name it (for
 example `honest_agent_service`), and set its entitlements:
@@ -79,6 +91,10 @@ grant use schema, select on schema <catalog>.<schema> to `<application_id>`;
 - **The name won't work here:** `to honest_agent_service` fails with
   `PRINCIPAL_DOES_NOT_EXIST`. Use the application ID, in backticks.
 - **Several schemas?** Repeat the grants for each one.
+- **Extra privileges:** your setup might require more, like `EXECUTE` on the MCP or `CAN USE`
+  on a SQL warehouse. Check Databricks' docs on
+  [the MCP](https://docs.databricks.com/aws/en/ai-gateway/govern-mcp-service) and
+  [the warehouse](https://docs.databricks.com/aws/en/agents/mcp-tools/built-in-mcp-services).
 
 For Genie One, also share what shapes its answers, so the service principal gets the same
 answers as your users:
@@ -90,12 +106,14 @@ answers as your users:
 
 ## 4. Create a token for it
 
-A service principal can only have a token if the workspace allows it. Go to
+A service principal can only have a token if the workspace allows it. Create a token for
+yourself first if you don't have one: you'll need it below, and Databricks' docs say this
+setting only appears once a token exists. Then go to
 **Settings → Advanced → Personal access tokens → Permission settings**, and give the
-service principal **Can Use**.
+service principal **CAN USE**.
 
 Databricks' UI can't create a token for a service principal, so use the
-[token management API](https://docs.databricks.com/api/workspace/tokenmanagement/createobotoken),
+[token management API](https://docs.databricks.com/api/token-management/v1/create-on-behalf-of-token),
 with your own token as an admin:
 
 ```bash
@@ -142,7 +160,7 @@ ANTHROPIC_API_KEY=...
 
 To evaluate both, run `init` once, then copy the target in `honest_agent_config.yml` and
 change its name, URL and token variable. Both can run the same evals: the report then
-shows Genie One and your own agent side by side on the same questions.
+shows Genie One and a model writing its own SQL side by side on the same questions.
 
 ## 6. Check the connection
 
@@ -198,9 +216,9 @@ other grading methods.
 
 Genie One answers asynchronously. The agent asks with `genie_ask`, then calls
 `genie_poll_response` until Genie has finished, and each poll is a step. In our tests Genie
-took 25 to 55 seconds and the agent used 7 to 13 steps; Databricks' docs say 70 to 260
-seconds is typical. With the default of 5 steps, evals stop before any answer. `init`
-sets 30; raise it if results say the eval hit the step limit.
+took 25 to 55 seconds and the agent used 7 to 13 steps; yours may be slower on larger data.
+With the default of 5 steps, evals stop before any answer. `init` sets 30; raise it if
+results say the eval hit the step limit.
 
 The agent may answer before Genie has finished: Genie's replies show its query results as
 they come, and the agent can answer from them. That's what a user's client would do too.
@@ -209,9 +227,9 @@ they come, and the agent can answer from them. That's what a user's client would
 
 Genie One can hand a question to one of your
 [Genie Agents](https://docs.databricks.com/aws/en/genie-agents), with its curated tables,
-instructions and example SQL. In our tests it didn't pick our agent on its own; a line in
-the [workspace instructions](https://docs.databricks.com/aws/en/genie-one/chat) made it,
-also through MCP:
+instructions and example SQL. Genie One may not pick your agent on its own. In our tests, a
+line in the [workspace instructions](https://docs.databricks.com/aws/en/genie-one/chat) made
+it:
 
 ```markdown
 - For questions about orders, customers or sales, use the "Sales Agent" Genie Agent.
@@ -237,7 +255,7 @@ for any other server.
 ### Genie One remembers
 
 Genie One [remembers each user's past conversations](https://docs.databricks.com/aws/en/genie-one/chat)
-and uses them in later answers, and it can't be turned off. Every eval is a conversation, so:
+and uses them in later answers. Every eval is a conversation, so:
 
 - **results can drift** between runs, with nothing changed in your data or agents;
 - **with a person's token**, their own chats shape the evals' answers, and the evals shape
@@ -255,24 +273,24 @@ your own catalog first.
   caller's grants. honest-agent blocks SQL that changes data, but a service principal with
   only `select` grants (step 3) is what makes sure it can't. Databricks' docs also describe
   turning writes off for the server, with `disallow_writes` in the `system.ai.dbsql_policy`
-  policy; we haven't tried it.
-- **Steps:** queries usually come back finished on the first call, so the default of 5
-  steps was enough in our tests. A slow query comes back pending and the agent polls; raise
-  `max_tool_steps` if evals hit the limit.
+  policy, which needs another preview; we haven't tried it.
+- **Steps:** the agent can need several steps for one question, so raise `max_tool_steps` if
+  evals hit the limit. We ran ours with 10.
 
 ## When it doesn't connect
 
 - **"Databricks managed MCP servers are not enabled":** the URL uses an `/api/2.0/mcp/`
   endpoint. Use the `/ai-gateway/mcp-services/` one from step 1.
 - **"does not have permission to use tokens"** when creating the token: give the service
-  principal **Can Use** on tokens (step 4).
+  principal **CAN USE** on tokens (step 4).
 - **`PRINCIPAL_DOES_NOT_EXIST`** in a grant: use the application ID, not the name (step 3).
 - **Queries fail with a permission error:** the service principal is missing `use catalog`,
-  `use schema` or `select` (step 3).
+  `use schema` or `select`, or your setup needs extra privileges (step 3).
 - **Genie One never uses your Genie Agent:** share the agent with the service principal
   (**CAN RUN**), and check the workspace instructions (step 3, and
   [Routing to Genie Agents](#routing-to-genie-agents)).
-- **It worked before and now it's refused:** the token may have expired (step 4).
+- **It worked before and now it's refused:** the token may have expired (step 4), or been revoked after 90
+  days without use.
 
 Still stuck? [Open an issue](https://github.com/jlcoto/the_honest_agent/issues/new) with the
 output of `honest-agent debug`. It prints variable names, never their values, but check what

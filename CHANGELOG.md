@@ -7,7 +7,7 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 ## Unreleased
 
 - **Databricks: Genie One and Databricks SQL.** `init --server databricks_genie` or
-  `--server databricks_sql` sets up a target for Databricks' managed MCP servers; Genie
+  `--server databricks_sql` sets up a target for Databricks' own MCP servers; Genie
   One's gets `max_tool_steps: 30`, since the agent polls until Genie answers. A new guide,
   [Connect to Databricks](https://thehonestagent.dev/docs/connect/databricks/), covers the
   service principal, its token, and what to know about Genie One (routing to Genie Agents,
