@@ -231,9 +231,9 @@ they come, and the agent can answer from them.
 
 Genie One can hand a question to one of your
 [Genie Agents](https://docs.databricks.com/aws/en/genie-agents), with its curated tables,
-instructions and example SQL. Genie One may not pick your agent on its own. In our tests, a
-line in the [workspace instructions](https://docs.databricks.com/aws/en/genie-one/chat) made
-it:
+instructions and example SQL. Genie One may not pick your agent on its own. In our tests, it
+used ours after we added this line to the
+[workspace instructions](https://docs.databricks.com/aws/en/genie-one/chat):
 
 ```markdown
 - For questions about orders, customers or sales, use the "Sales Agent" Genie Agent.
