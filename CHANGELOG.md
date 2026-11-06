@@ -4,6 +4,21 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
+## Unreleased
+
+- **Databricks: Genie One and Databricks SQL.** `init --server databricks_genie` or
+  `--server databricks_sql` sets up a target for Databricks' managed MCP servers; Genie
+  One's gets `max_tool_steps: 30`, since the agent polls until Genie answers. A new guide,
+  [Connect to Databricks](https://thehonestagent.dev/docs/connect/databricks/), covers the
+  service principal, its token, and what to know about Genie One (routing to Genie Agents,
+  its memory of past conversations).
+- **Provenance reads SQL from markdown replies:** when a tool's reply has no SQL field,
+  the queries in its ```sql blocks count, once each, as SQL the tool ran (Genie One shows
+  its SQL that way). When Genie One routes a question to a Genie Agent, its reply has no
+  SQL, so those answers have no provenance.
+- **Provenance reads Databricks SQL,** with its backtick-quoted names
+  (`` `catalog`.`schema`.`table` ``).
+
 ## v0.4.0 (alpha) — 2026-10-28
 
 - **A stronger default grading model, never the agent's own.** Without `grading_model`,

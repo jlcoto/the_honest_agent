@@ -125,6 +125,65 @@ def test_extract_ignores_result_with_no_matching_field():
     assert extract_sql_calls(trace) == []
 
 
+# Shaped like Databricks Genie One's `genie_poll_response`: markdown, the SQL Genie ran
+# in a ```sql block (with a blank first line), then its result.
+_GENIE_REPLY = """Still running. 2 progress steps so far:
+
+  • Running SQL: select count(*) from `samples`.`tpch`.`orders`
+
+```sql
+
+select count(*) as order_count from `samples`.`tpch`.`orders`
+
+```
+
+Query returned 1 rows:
+"""
+
+
+def test_extract_reads_sql_blocks_in_a_markdown_result_as_run():
+    trace = _tool_use_and_result_trace("genie_poll_response", {"conversation_id": "c1"}, _GENIE_REPLY)
+
+    assert extract_sql_calls(trace) == [
+        _call("genie_poll_response", "select count(*) as order_count from `samples`.`tpch`.`orders`")
+    ]
+
+
+def test_extract_records_a_repeated_sql_block_once_at_its_first_step():
+    """A polled tool repeats the SQL so far in every reply."""
+    trace = [{"role": "user", "content": "prompt"}]
+    for step, reply in enumerate(["Still running, no progress steps yet.", _GENIE_REPLY, _GENIE_REPLY], start=1):
+        trace += [
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": str(step), "name": "genie_poll_response", "input": {}}],
+            },
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": str(step), "content": reply}]},
+        ]
+
+    assert [(c["sql"], c["step"]) for c in extract_sql_calls(trace)] == [
+        ("select count(*) as order_count from `samples`.`tpch`.`orders`", 2)
+    ]
+
+
+def test_extract_prefers_a_sql_field_over_sql_blocks():
+    trace = _tool_use_and_result_trace("query_warehouse", {"sql": "select 1"}, "```sql\nselect 2\n```")
+
+    assert extract_sql_calls(trace) == [_call("query_warehouse", "select 1")]
+
+
+def test_extract_reads_only_the_declared_field_not_sql_blocks():
+    trace = _tool_use_and_result_trace("ask", {"question": "..."}, "```sql\nselect 2\n```")
+
+    assert extract_sql_calls(trace, sql_fields={"ask": "generated_sql"}) == []
+
+
+def test_extract_skips_sql_blocks_of_ignored_tools():
+    trace = _tool_use_and_result_trace("explain", {"topic": "joins"}, "```sql\nselect 2\n```")
+
+    assert extract_sql_calls(trace, ignore_tools=["explain"]) == []
+
+
 def test_extract_collects_multiple_calls_in_order_with_tool_names():
     trace = [
         {

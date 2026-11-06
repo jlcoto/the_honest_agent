@@ -32,6 +32,18 @@ SERVERS = {  # menu order: hosted servers first, as most agents use one
         "https://<account>.snowflakecomputing.com/api/v2/databases/<db>/schemas/<schema>/mcp-servers/<server>",
     ),
     "motherduck": ("MotherDuck", "motherduck", "https://api.motherduck.com/mcp", None),
+    "databricks_genie": (
+        "Databricks Genie One",
+        "databricks_genie",
+        None,
+        "https://<host>/ai-gateway/mcp-services/system.ai.genie_one_mcp?o=<workspace id>",
+    ),
+    "databricks_sql": (
+        "Databricks SQL",
+        "databricks_sql",
+        None,
+        "https://<host>/ai-gateway/mcp-services/system.ai.dbsql?o=<workspace id>",
+    ),
     "url": ("another URL", "agent", None, "https://..."),
     "local": ("a local command", "local", None, None),
 }
@@ -94,6 +106,8 @@ def config_text(answers: Answers) -> str:
         ]
     if answers.server == "motherduck":
         lines.append("    max_tool_steps: 10   # it explores databases and tables before it queries")
+    if answers.server == "databricks_genie":
+        lines.append("    max_tool_steps: 30   # the agent asks Genie, then polls until it answers")
     lines.append("    evals_dir: evals")
     return "\n".join(lines) + "\n"
 
