@@ -255,8 +255,11 @@ for any other server.
 ### Genie One remembers
 
 Genie One [remembers each user's past conversations](https://docs.databricks.com/aws/en/genie-one/chat)
-and can use them in later answers, so use a separate service principal (step 2) rather than
-a person's token.
+and can use them in later answers. With a person's token, their chats can affect how Genie
+answers your evals: in our tests, it cited earlier conversations and went back to the data
+they used. Use a separate service principal (step 2), so a person's chats aren't part of the
+test. It still builds up its own history from past eval runs, and we haven't tested how much
+that affects later runs.
 
 ### `samples` is demo data to Genie
 
