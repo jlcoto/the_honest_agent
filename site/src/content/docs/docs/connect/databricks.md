@@ -285,7 +285,3 @@ sample data, copy the tables into your own catalog first.
 - **`PRINCIPAL_DOES_NOT_EXIST`** in a grant: use the application ID, not the name (step 3).
 - **It worked before and now it's refused:** the token may have expired (step 4), or been revoked after 90
   days without use.
-
-Still stuck? [Open an issue](https://github.com/jlcoto/the_honest_agent/issues/new) with the
-output of `honest-agent debug`. It prints variable names, never their values, but check what
-you paste anyway: no tokens, keys or private URLs.
