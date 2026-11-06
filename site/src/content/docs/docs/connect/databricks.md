@@ -7,6 +7,9 @@ description: Evaluate Genie One, or a model writing its own SQL on Databricks, t
 This is one setup we tested, shown as an example. Don't copy it blindly: check each step
 against your company's security policies, and adapt it before you use it with real data.
 See [Your setup, your responsibility](/docs/team/#your-setup-your-responsibility).
+
+I'm not a Databricks specialist. If you know a better way to set this up, or see something
+wrong here, please [let me know](https://github.com/jlcoto/the_honest_agent/issues/new).
 :::
 
 Databricks hosts MCP servers of its own, [Databricks-provided MCPs](https://docs.databricks.com/aws/en/agents/mcp-tools/built-in-mcp-services),
