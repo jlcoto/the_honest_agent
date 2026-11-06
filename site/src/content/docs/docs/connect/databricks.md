@@ -219,9 +219,9 @@ other grading methods.
 ### Genie One takes many steps
 
 Genie One answers asynchronously. The agent asks with `genie_ask`, then calls
-`genie_poll_response` until Genie has finished, and each poll is a step. In our tests Genie
-took 25 to 55 seconds and the agent used 7 to 13 steps; yours may be slower on larger data.
-With the default of 5 steps, evals stop before any answer. `init` sets 30; raise it if
+`genie_poll_response` until Genie has finished, and each poll is a step. In our tests evals
+took 25 to 56 seconds and the agent used 7 to 13 steps; yours may be slower on larger data.
+The agent always needed more than the default of 5 steps. `init` sets 30; raise it if
 results say the eval hit the step limit.
 
 The agent may answer before Genie has finished: Genie's replies show its query results as
@@ -244,11 +244,10 @@ used ours after we added this line to the
 When Genie One uses other, specialized agents (Genie Agents) to generate the response, the
 SQL isn't in the MCP output, so provenance can't be checked. The reply only links to the
 agent that answered. For questions that Genie One routes to an agent, grade accuracy only:
-leave `expected_sources` out of those evals, or provenance fails every time.
+leave `expected_sources` out of those evals, or provenance fails.
 
-To tell which questions get routed, look at a first run: a routed answer names the agent,
-and its result shows no SQL calls. Genie One makes that choice itself, so check again if
-provenance starts failing.
+To see whether an answer was routed, open its result: in our tests, routed answers showed no
+SQL calls and usually named the agent.
 
 When Genie One answers itself, its reply includes the SQL it ran, and provenance works as
 for any other server.
@@ -256,17 +255,13 @@ for any other server.
 ### Genie One remembers
 
 Genie One [remembers each user's past conversations](https://docs.databricks.com/aws/en/genie-one/chat)
-and uses them in later answers. Every eval is a conversation, so:
-
-- **results can drift** between runs, with nothing changed in your data or agents;
-- **with a person's token**, their own chats shape the evals' answers, and the evals shape
-  theirs. A service principal (step 2) keeps them apart.
+and can use them in later answers, so use a separate service principal (step 2) rather than
+a person's token.
 
 ### `samples` is demo data to Genie
 
-Genie treats Databricks' `samples` catalog as demo data and looks for your own data first,
-unless the question points to it. To try Genie One on sample data, copy the tables into
-your own catalog first.
+In our tests, Genie treated Databricks' `samples` catalog as demo data. To try Genie One on
+sample data, copy the tables into your own catalog first.
 
 ## What to know about Databricks SQL
 
@@ -285,11 +280,6 @@ your own catalog first.
 - **"does not have permission to use tokens"** when creating the token: give the service
   principal **CAN USE** on tokens (step 4).
 - **`PRINCIPAL_DOES_NOT_EXIST`** in a grant: use the application ID, not the name (step 3).
-- **Queries fail with a permission error:** the service principal is missing `use catalog`,
-  `use schema` or `select`, or your setup needs extra privileges (step 3).
-- **Genie One never uses your Genie Agent:** share the agent with the service principal
-  (**CAN RUN**), and check the workspace instructions (step 3, and
-  [Routing to Genie Agents](#routing-to-genie-agents)).
 - **It worked before and now it's refused:** the token may have expired (step 4), or been revoked after 90
   days without use.
 
