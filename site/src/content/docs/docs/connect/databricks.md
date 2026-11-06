@@ -40,8 +40,7 @@ Make sure you have the privileges to complete steps 2 to 4.
 
 - **Host:** the part of your browser's address between `https://` and the next `/` when
   you're in Databricks.
-- **Workspace ID:** in the menu under your avatar (top right), or the number after `?o=`
-  in Databricks' URLs.
+- **Workspace ID:** the number after `?o=` in Databricks' URLs.
 
 The server URLs use the newer
 [Unity Gateway](https://docs.databricks.com/aws/en/agents/mcp-tools/built-in-mcp-services) endpoints:
@@ -65,7 +64,7 @@ honest-agent can't log in as your users do, so it needs its own identity. Using 
 service principal also matters for Genie One, which remembers each user's past
 conversations: see [Genie One remembers](#genie-one-remembers).
 
-On a paid workspace, check the cost first: Genie One's usage by users is free until January
+Check the cost first: Databricks' docs say Genie One's usage by users is free until January
 31, 2027, but [service principals are excluded and billed](https://docs.databricks.com/aws/en/genie/monitor-cost), and every
 eval is a Genie conversation.
 
@@ -73,7 +72,8 @@ Go to **Settings → Identity and access → Service principals → Add new**, n
 example `honest_agent_service`), and set its entitlements:
 
 - **Databricks SQL access** and **Consumer access**: on.
-- **Workspace access** and **Admin access**: off. Evals don't need them.
+- Anything else: off. Evals don't need it. See Databricks' docs on
+  [entitlements](https://docs.databricks.com/aws/en/security/auth/entitlements).
 
 Open the new service principal and copy its **Application ID**: grants use it, not the
 name.
@@ -106,13 +106,13 @@ answers as your users:
 
 ## 4. Create a token for it
 
-A service principal can only have a token if the workspace allows it. Create a token for
-yourself first if you don't have one: you'll need it below, and Databricks' docs say this
-setting only appears once a token exists. Then go to
-**Settings → Advanced → Personal access tokens → Permission settings**, and give the
-service principal **CAN USE**.
+A service principal can only have a token if the workspace allows it. In **Settings →
+Advanced**, find the permissions for personal access tokens and give the service principal
+**CAN USE**. See Databricks' docs on
+[token permissions](https://docs.databricks.com/aws/en/security/auth/api-access-permissions). You'll also need a token of
+your own for the next step.
 
-Databricks' UI can't create a token for a service principal, so use the
+Create the service principal's token with the
 [token management API](https://docs.databricks.com/api/token-management/v1/create-on-behalf-of-token),
 with your own token as an admin:
 
@@ -221,7 +221,7 @@ With the default of 5 steps, evals stop before any answer. `init` sets 30; raise
 results say the eval hit the step limit.
 
 The agent may answer before Genie has finished: Genie's replies show its query results as
-they come, and the agent can answer from them. That's what a user's client would do too.
+they come, and the agent can answer from them.
 
 ### Routing to Genie Agents
 
@@ -246,8 +246,8 @@ agent that answered. For questions that Genie One routes to an agent, grade accu
 leave `expected_sources` out of those evals, or provenance fails every time.
 
 To tell which questions get routed, look at a first run: a routed answer names the agent,
-and its result shows no SQL calls. Genie One decides for each question and each run, so a
-question can be routed one day and not the next.
+and its result shows no SQL calls. Genie One makes that choice itself, so check again if
+provenance starts failing.
 
 When Genie One answers itself, its reply includes the SQL it ran, and provenance works as
 for any other server.
