@@ -20,6 +20,8 @@ from .prices import Price, call_cost
 from .provenance import check_provenance
 from .raw import honest_agent_version
 from .sql_capture import extract_sql_calls
+from .sql_guard import TIMED_OUT
+from .thresholds import EVAL_ERROR
 
 _TIME = "%Y-%m-%d %H:%M:%S"
 
@@ -27,6 +29,7 @@ _TIME = "%Y-%m-%d %H:%M:%S"
 class Derived(NamedTuple):
     row: dict  # one `results` row + its trace and SQL calls, the shape storage.write_derived takes
     unparsed: list[str]  # SQL that couldn't be parsed, so it didn't count toward provenance
+    timed_out: int  # tool calls stopped by tool_timeout
 
 
 def _wants_tools(event: dict) -> bool:
@@ -192,6 +195,13 @@ def _read(con, result_id: str) -> tuple[dict, dict, list[dict]]:
     return run, evaluation, events
 
 
+def _timed_out(event: dict) -> bool:
+    """Whether this is a tool call that tool_timeout stopped (sql_guard.py)."""
+    if event["kind"] != "tool_call" or not event["response"]:
+        return False
+    return any((block.get("text") or "").startswith(TIMED_OUT) for block in event["response"].get("content") or [])
+
+
 def recorded_answer(con, result_id: str) -> tuple[str, bool]:
     """The agent's answer as recorded so far, for `run` to grade: (answer, ran out of steps)."""
     run, _, events = _read(con, result_id)
@@ -219,18 +229,23 @@ def _cost(settings: dict, model: str, responses: list[tuple[str, dict]]) -> floa
 def derive_result(con, result_id: str) -> Derived:
     """One result's derived rows, from its raw record alone."""
     run, evaluation, events = _read(con, result_id)
-    if any(e["kind"] == "eval_error" for e in events):
-        raise ValueError(f"Result {result_id} stopped with an error; it has nothing to derive")
+    error = next((e["error"] for e in events if e["kind"] == "eval_error"), None)
     settings = json.loads(run["settings"])
     definition = EvalDefinition(**json.loads(evaluation["definition"]))
 
     agent_events = [e for e in events if e["kind"] in ("model_call", "tool_call")]
     answer, hit_step_limit = agent_answer(agent_events, settings["max_tool_steps"])
+    if error is not None and hit_step_limit:
+        # Stopped mid-loop, not out of steps: there's no answer (an error while grading keeps it).
+        answer, hit_step_limit = None, False
     trace = conversation(definition.prompt, agent_events)
 
-    grading = next((e for e in events if e["kind"] == "grading_call"), None)
+    # A grading call that failed has no reply; the eval stopped there with an error.
+    grading = next((e for e in events if e["kind"] == "grading_call" and e["response"] is not None), None)
     reply = response_text(grading["provider"], grading["response"]) if grading else None
-    if grading and cut_off(grading):
+    if error is not None:
+        grade = Grade(None, f"{EVAL_ERROR}{error}", None)
+    elif grading and cut_off(grading):
         grade = Grade(0.0, f"{CUT_OFF_REPLY}{_limit(grading)}", None)
     else:
         grade = score(
@@ -253,6 +268,9 @@ def derive_result(con, result_id: str) -> Derived:
         settings.get("default_database"),
         settings.get("default_schema"),
     )
+    if error is not None:
+        # No score for an eval that didn't finish, but the sources it read are still a record.
+        provenance = provenance._replace(score=None)
 
     agent_responses = [
         (e["provider"], e["response"]) for e in agent_events if e["kind"] == "model_call" and e["response"] is not None
@@ -300,8 +318,9 @@ def derive_result(con, result_id: str) -> Derived:
         "effort": settings.get("effort"),
         "agent_name": run["agent_name"],
         "latency_ms": latency_ms,
-        # One step is one model call and the tool calls it asks for.
-        "steps": sum(1 for e in agent_events if e["kind"] == "model_call"),
+        # One step is one model call and the tool calls it asks for; a call that failed (the
+        # eval stopped with an error) isn't one.
+        "steps": len(agent_responses),
         "max_steps": settings["max_tool_steps"],
         "hit_step_limit": hit_step_limit,
         "agent_input_tokens": sum(t[0] for t in agent_tokens),
@@ -314,6 +333,7 @@ def derive_result(con, result_id: str) -> Derived:
         "grading_cost_usd": _cost(settings, run["judge_model"], [(grading["provider"], grading["response"])])
         if grading
         else 0.0,
+        "status": "graded" if error is None else "error",
         "derived_at": datetime.now(timezone.utc).strftime(_TIME),
         "honest_agent_version": honest_agent_version(),
         # -- traces --
@@ -323,4 +343,4 @@ def derive_result(con, result_id: str) -> Derived:
         # -- tool_calls (expanded into one row per call by storage.py) --
         "sql_calls": sql_calls,
     }
-    return Derived(row, provenance.unparsed)
+    return Derived(row, provenance.unparsed, sum(_timed_out(e) for e in agent_events))

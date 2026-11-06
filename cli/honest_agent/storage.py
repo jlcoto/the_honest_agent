@@ -72,6 +72,7 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("expected_answer", "varchar"),
     ("agent_answer", "varchar"),
     ("tools_used", "varchar[]"),
+    # NULL when the eval stopped with an error (status `error`): it has no grade.
     ("accuracy_score", "double"),
     ("accuracy_method", "varchar"),
     # Model that graded the answer (extract_match/llm_judge); NULL for contains, which uses none.
@@ -129,6 +130,10 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("grading_cost_usd", "double"),
     # When the eval's last recorded call ended (run_timestamp is when it started).
     ("finished_at", "varchar"),
+    # `graded`, or `error` when an exception stopped the eval (a provider or MCP failure):
+    # no scores then, and the reason in accuracy_rationale. NULL for rows from before
+    # this column, which were all graded.
+    ("status", "varchar"),
     # When derive.py built this row, and the honest-agent version that did; a
     # `rebuild` updates both. NULL for rows from before the raw layer.
     ("derived_at", "varchar"),

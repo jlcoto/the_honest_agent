@@ -40,15 +40,28 @@ Run 7d2e41a0-3c55-4f0b-9a61-2b8e5d90c417 complete. Next: `honest-agent report` /
   the grading model, and `--effort` and `--grading-effort` how much each thinks. See
   [Models](/docs/connect/#models).
 - **The exit code:** `run` exits with 0 when every eval meets its thresholds, and 1 when
-  any falls below, like a failing test. It also exits with 1 when the run itself fails,
-  for example when the MCP server can't be reached. In CI, the job fails on a regression;
+  any falls below or stops with an error, like a failing test. It also exits with 1 when
+  the run itself fails, for example when the MCP server can't be reached. In CI, the job fails on a regression;
   [Run it in GitHub Actions](/docs/team/ci/) shows how to still publish the report and
   send the alert.
+- **When an eval errors:** if a model call fails (the provider is overloaded,
+  rate-limits the run, or rejects the API key) or the MCP connection drops, that eval's
+  line says `ERROR` with the reason, and the run goes on to the next eval. The eval is
+  stored without scores, so it doesn't pull the run's averages down, and the summary at
+  the end lists it before the evals below threshold. A wrong query isn't an error: the
+  agent sees the database's message and can try again.
 - **Step limit:** an agent gets 5 steps per question by default (a step is one model call
   and the tool calls it asks for). An eval that runs out fails with "hit the step limit
   without a final answer". Raise it with `max_tool_steps` in the config, at the top level
   or on a target, or with `--max-tool-steps` for one run (see
   [Other target settings](/docs/connect/#other-target-settings)).
+- **Tool timeout:** a tool call that takes longer than 120 seconds is stopped. The agent
+  gets an error result saying so, like a failed query, and can try again or answer; the
+  eval goes on, and a warning under its line says a call was stopped. Raise it with
+  `tool_timeout`, or `--tool-timeout` for one run. honest-agent also asks the server to
+  stop the query, but whether it does is up to the server: one that doesn't lets the query
+  finish in the warehouse. On Snowflake, see
+  [Long-running queries](/docs/connect/snowflake/#long-running-queries).
 
 :::caution[Each run costs money]
 Every eval calls the model, and the grading methods `extract_match` and `llm_judge` call

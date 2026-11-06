@@ -42,7 +42,7 @@ _RAW_TABLES = {
         ("model", "varchar"),
         ("judge_model", "varchar"),
         ("honest_agent_version", "varchar"),
-        # JSON: max_tool_steps, max_tokens, the MCP server (URL or command, never a token), ignore_tools,
+        # JSON: max_tool_steps, tool_timeout, max_tokens, the MCP server (URL or command, never a token), ignore_tools,
         # default database/schema, and the instructions the server sent when it connected (or null).
         ("settings", "varchar"),
         # JSON: the MCP server's tool list as returned by list_tools.
@@ -65,7 +65,7 @@ _RAW_TABLES = {
         ("duration_ms", "integer"),
         ("request", "varchar"),  # JSON as sent (a model call's without the earlier history)
         ("response", "varchar"),  # JSON as received; NULL when the call failed
-        ("error", "varchar"),  # the call's exception, or for eval_error the one that stopped the eval
+        ("error", "varchar"),  # the call's exception, or for eval_error why the eval stopped
     ],
 }
 
@@ -153,9 +153,10 @@ class EvalRecorder:
         self._write(kind, provider, started_at, start, request, to_jsonable(response), None)
         return response
 
-    def eval_error(self, exc: BaseException) -> None:
-        """Records the exception that stopped the eval."""
-        self._write("eval_error", None, _now(), time.monotonic(), None, None, repr(exc))
+    def eval_error(self, message: str) -> None:
+        """Records why the eval stopped, as one line; the failed call's own event, if
+        there was one, keeps the full exception."""
+        self._write("eval_error", None, _now(), time.monotonic(), None, None, message)
 
     def _write(self, kind, provider, started_at, start, request, response, error) -> None:
         self._con.execute(

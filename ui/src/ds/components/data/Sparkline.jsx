@@ -5,7 +5,8 @@ export function Sparkline({values,width=96,height=28,color='var(--chart-neutral)
   const pad=3,W=width-pad*2,H=height-pad*2;
   const pts=v.map((y,i)=>[pad+i*W/(v.length-1),pad+H-(Math.max(min,Math.min(max,y))-min)/(max-min)*H]);
   const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-  const last=pts[pts.length-1];const b=bucketOf(v[v.length-1]);
+  // The end dot takes the accuracy bucket's colour only on the 0–1 score scale.
+  const last=pts[pts.length-1];const b=min===0&&max===1?bucketOf(v[v.length-1]):null;
   return <svg width={width} height={height} viewBox={'0 0 '+width+' '+height} style={{display:'block',overflow:'visible'}}>
     <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
     {showEnd?<circle cx={last[0]} cy={last[1]} r="2.5" fill={b?BUCKET_COLOR[b]:color}/>:null}

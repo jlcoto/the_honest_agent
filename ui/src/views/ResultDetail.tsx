@@ -7,6 +7,8 @@ import { formatSql, highlight } from '../components/Sql'
 import { PageHeader } from '../components/PageHeader'
 import {
   accuracyPasses,
+  errorReason,
+  isError,
   agentOf,
   formatRunTime,
   modelLabel,
@@ -269,7 +271,34 @@ function Ledger({ rows }: { rows: LedgerRow[] }) {
 const answerText = (text: string) => (text ? <Markdown text={text} /> : <p style={para}>(empty answer)</p>)
 
 /** Expected vs. the agent's answer, laid out for the grading method that scored it. */
+/** An eval that stopped with an error: what it was asked, why it stopped, and its answer if it had one. */
+function ErrorAccuracyCard({ r }: { r: ResultRow }) {
+  const rows: LedgerRow[] = [
+    { label: 'Expected', hint: 'written in the eval', value: formatValue(r.expected_answer), text: true },
+    {
+      label: 'Error',
+      hint: 'the eval stopped, so nothing was scored',
+      value: <p style={{ ...para, color: 'var(--acc-wrong-ink)' }}>{errorReason(r)}</p>,
+      text: true,
+    },
+  ]
+  if (r.agent_answer != null) rows.push({ label: 'Agent answer', hint: 'not graded', value: answerText(r.agent_answer), text: true })
+  return (
+    <Card
+      title="Accuracy"
+      actions={
+        <Badge tone="wrong" dot>
+          Error
+        </Badge>
+      }
+    >
+      <Ledger rows={rows} />
+    </Card>
+  )
+}
+
 function AccuracyCard({ r }: { r: ResultRow }) {
+  if (isError(r)) return <ErrorAccuracyCard r={r} />
   const ok = accuracyPasses(r)
   const tolerances = toleranceLabels(r)
   const extracted = r.accuracy_method === 'extract_match' ? r.extracted_answer : null
@@ -291,7 +320,7 @@ function AccuracyCard({ r }: { r: ResultRow }) {
   } else {
     // llm_judge gives a score between 0 and 1, so it goes under the answer it scored.
     const scored = r.accuracy_method === 'llm_judge' ? `score ${pct(r.accuracy_score)}` : undefined
-    rows = [{ ...expected, text: true }, { label: 'Agent answer', hint: scored, value: answerText(r.agent_answer), text: true }]
+    rows = [{ ...expected, text: true }, { label: 'Agent answer', hint: scored, value: answerText(r.agent_answer ?? ''), text: true }]
     if (r.accuracy_method === 'llm_judge') {
       rows.push({
         label: 'Judge',
@@ -317,7 +346,7 @@ function AccuracyCard({ r }: { r: ResultRow }) {
           <summary style={{ cursor: 'pointer', listStyle: 'none', font: '500 13px/1.4 var(--font-sans)', color: 'var(--accent)' }}>
             Show the agent's full reply
           </summary>
-          <div style={{ ...stack(10), marginTop: 10 }}>{answerText(r.agent_answer)}</div>
+          <div style={{ ...stack(10), marginTop: 10 }}>{answerText(r.agent_answer ?? '')}</div>
         </details>
       ) : null}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -480,6 +509,14 @@ const note: CSSProperties = { margin: 0, font: 'var(--type-small)', color: 'var(
 
 /** Expected sources vs. what the agent's counted queries read (results.queried_sources). */
 function ProvenanceCard({ r }: { r: ResultRow }) {
+  if (isError(r)) {
+    return (
+      <Card title="Provenance" actions={<Badge dot>Not scored</Badge>}>
+        <p style={note}>The eval stopped with an error, so its sources weren't scored.</p>
+        <ToolsUsed r={r} />
+      </Card>
+    )
+  }
   if (r.provenance_score == null) {
     return (
       <Card title="Provenance" actions={<Badge dot>Not checked</Badge>}>
@@ -1119,6 +1156,17 @@ function stopWords(call: GradingCall): string | null {
 /** What the grading model did: its tokens, cost and time, its full reply (opened like a Trace step) and how
  * much it thought. The verdict and the values it graded on stay in the Accuracy card. */
 function GradingCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
+  if (isError(r)) {
+    return (
+      <Card title="Grading" actions={<Badge dot>Not graded</Badge>}>
+        <p style={note}>The eval stopped with an error, so its answer wasn't graded. The Accuracy card says why.</p>
+      </Card>
+    )
+  }
+  return <GradedCard r={r} call={call} />
+}
+
+function GradedCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const ok = accuracyPasses(r)
@@ -1266,15 +1314,23 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
           </>
         }
       >
-        <Badge tone={accOk ? 'correct' : 'wrong'} dot>
-          Accuracy
-        </Badge>
-        {r.provenance_score == null ? (
-          <Badge dot>Provenance not checked</Badge>
-        ) : (
-          <Badge tone={provOk ? 'correct' : 'wrong'} dot>
-            Provenance
+        {isError(r) ? (
+          <Badge tone="wrong" dot>
+            Error
           </Badge>
+        ) : (
+          <>
+            <Badge tone={accOk ? 'correct' : 'wrong'} dot>
+              Accuracy
+            </Badge>
+            {r.provenance_score == null ? (
+              <Badge dot>Provenance not checked</Badge>
+            ) : (
+              <Badge tone={provOk ? 'correct' : 'wrong'} dot>
+                Provenance
+              </Badge>
+            )}
+          </>
         )}
         {back}
       </PageHeader>
@@ -1288,10 +1344,16 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 16 }}>
         <Card>
-          <ScoreStat label="Accuracy" value={r.accuracy_score} caption={`min score ${pct(r.accuracy_min_score)}`} />
+          {r.accuracy_score == null ? (
+            <ScoreStat label="Accuracy" format="raw" value="—" caption="Not scored: the eval stopped with an error" />
+          ) : (
+            <ScoreStat label="Accuracy" value={r.accuracy_score} caption={`min score ${pct(r.accuracy_min_score)}`} />
+          )}
         </Card>
         <Card>
-          {r.provenance_score == null ? (
+          {isError(r) ? (
+            <ScoreStat label="Provenance" format="raw" value="—" caption="Not scored: the eval stopped with an error" />
+          ) : r.provenance_score == null ? (
             <ScoreStat label="Provenance" format="raw" value="Not checked" caption="This eval expects no sources" />
           ) : (
             <ScoreStat label="Provenance" value={r.provenance_score} caption={`min score ${pct(r.provenance_min_score)}`} />

@@ -57,7 +57,7 @@ class _FakeMCP:
     def __init__(self):
         self.calls = []
 
-    async def call_tool(self, name, arguments):
+    async def call_tool(self, name, arguments, read_timeout_seconds=None):
         self.calls.append((name, arguments))
         return "ran"
 

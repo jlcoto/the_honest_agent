@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 
 class Grade(NamedTuple):
-    score: float
+    score: float | None  # None only for an eval that stopped with an error (derive.py)
     # The judge's one-sentence reason (llm_judge only).
     rationale: str | None
     # The value extract_match pulled from the answer and compared (extract_match only).

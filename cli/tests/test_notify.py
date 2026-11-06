@@ -7,7 +7,7 @@ import honest_agent.notify as notify_mod
 from honest_agent.cli import main
 from honest_agent.notify import alert_message
 from honest_agent.storage import write_run_results
-from honest_agent.thresholds import failing_rows
+from honest_agent.thresholds import EVAL_ERROR, failing_rows
 
 
 def _row(**overrides) -> dict:
@@ -50,6 +50,32 @@ def test_alert_names_agent_model_run_time_and_scores():
         "*Revenue in 1996*  `q_revenue_1996`\nAccuracy *1.00* (min 0.8)  ·  Provenance *0.00* (min 0.7)",
         "Details: `honest-agent report` · honest-agent",
     ]
+
+
+def test_alert_names_errored_evals_with_their_reason():
+    errored = _row(
+        result_id="r2",
+        eval_id="q_top",
+        eval_title=None,
+        status="error",
+        accuracy_score=None,
+        provenance_score=None,
+        accuracy_rationale=f"{EVAL_ERROR}Anthropic rejected a model call (HTTP 529): Overloaded",
+    )
+    rows = [_row(), errored, _row(result_id="r3", eval_id="q_ok", provenance_score=1.0)]
+
+    message = alert_message(rows, failing_rows(rows))
+
+    assert message["text"] == (
+        "2 of 3 evals failed: 1 below threshold, 1 stopped with an error for snowflake (claude-sonnet-5)"
+    )
+    assert _texts(message)[3] == ("*q_top*  `q_top`\nError: Anthropic rejected a model call (HTTP 529): Overloaded")
+
+
+def test_alert_headline_when_every_failure_is_an_error():
+    rows = [_row(status="error", accuracy_score=None, provenance_score=None, accuracy_rationale="x")]
+
+    assert alert_message(rows, failing_rows(rows))["text"].startswith("1 of 1 evals stopped with an error")
 
 
 def test_alert_leaves_out_unchecked_provenance():
@@ -125,7 +151,7 @@ def test_notify_target_uses_its_agent_name(two_agents):
 
     assert result.exit_code == 0, result.output
     assert two_agents == []
-    assert "No evals below threshold in the latest run for agent motherduck_dev" in result.output
+    assert "No evals below threshold or stopped by an error in the latest run for agent motherduck_dev" in result.output
 
 
 def test_notify_unknown_target_is_an_error(two_agents):

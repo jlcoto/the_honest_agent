@@ -24,6 +24,7 @@ from typing import Any
 
 from sqlglot import exp
 
+from .mcp_client import DEFAULT_TOOL_TIMEOUT
 from .provenance import parse_statements
 from .sql_capture import sent_sql
 
@@ -82,20 +83,46 @@ def refusal(sql: str) -> str | None:
     return None
 
 
+# How a call stopped by tool_timeout starts, in the error result the agent gets (derive.py counts them).
+TIMED_OUT = "honest-agent stopped this tool call: it took longer than"
+
+
 class ReadOnlySQL:
     """Stands in for the connected MCP client in the agent loops: SQL that only reads goes
-    through to the server, anything else comes back as an error result without running."""
+    through to the server, anything else comes back as an error result without running; so
+    does a call that takes longer than `tool_timeout` seconds."""
 
-    def __init__(self, client: Any, sql_fields: dict[str, str], ignore_tools: list[str]):
+    def __init__(
+        self,
+        client: Any,
+        sql_fields: dict[str, str],
+        ignore_tools: list[str],
+        tool_timeout: float = DEFAULT_TOOL_TIMEOUT,
+    ):
         self._client = client
         self._sql_fields = sql_fields
         self._ignore_tools = ignore_tools
+        self._tool_timeout = tool_timeout
 
     async def call_tool(self, name: str, arguments: dict) -> Any:
         sql = sent_sql(name, arguments, self._sql_fields, self._ignore_tools)
         reason = refusal(sql) if sql else None
         if reason is None:
-            return await self._client.call_tool(name, arguments)
-        from mcp.types import CallToolResult, TextContent
+            from mcp import MCPError
+            from mcp.types import REQUEST_TIMEOUT
 
-        return CallToolResult(content=[TextContent(type="text", text=reason)], is_error=True)
+            try:
+                return await self._client.call_tool(name, arguments, read_timeout_seconds=self._tool_timeout)
+            except MCPError as exc:
+                if exc.code != REQUEST_TIMEOUT:
+                    raise
+                # The SDK has asked the server to stop the call; the connection stays open.
+                reason = f"{TIMED_OUT} {self._tool_timeout:g}s (tool_timeout)."
+        return error_result(reason)
+
+
+def error_result(text: str) -> Any:
+    """A tool result that tells the agent its call failed, the way an MCP server would."""
+    from mcp.types import CallToolResult, TextContent
+
+    return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)

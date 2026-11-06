@@ -134,6 +134,7 @@ targets:
 | Setting | What it does |
 |---|---|
 | `max_tool_steps` | Steps the agent may take for each question before the eval fails. A step is one model call and the tool calls it asks for. Default: 5. Can also be set at the top level. |
+| `tool_timeout` | Seconds a tool call may take before it's stopped; the agent gets an error result saying so and can try a lighter query or answer. Default: 120. Raise it for a warehouse with slow queries. Can also be set at the top level. |
 | `agent_name` | The name results are recorded under. Default: the target's name. |
 | `evals_dir` | The folder with this target's evals. Default: `evals`. |
 | `default_database`, `default_schema` | Where the server runs a bare table name like `orders`, so provenance can tell where the table lives. Set them only if the server's connection really starts there: a wrong value puts tables in the wrong place without warning. |

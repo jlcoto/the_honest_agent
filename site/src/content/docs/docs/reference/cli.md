@@ -95,7 +95,7 @@ honest-agent notify [OPTIONS]
 
 ## `rebuild`
 
-Re-derive results, SQL calls and traces from the raw record of past runs, after a change to how honest-agent scores or reads them. Calls no model: it costs nothing and uses each run's own settings and eval definitions. Runs recorded before honest-agent kept raw records, and evals stopped by an error, are left as they are.
+Re-derive results, SQL calls and traces from the raw record of past runs, after a change to how honest-agent scores or reads them. Calls no model: it costs nothing and uses each run's own settings and eval definitions. Runs recorded before honest-agent kept raw records are left as they are.
 
 ```bash
 honest-agent rebuild [OPTIONS]
@@ -132,6 +132,7 @@ honest-agent run [OPTIONS]
 - **`--effort [low|medium|high]`**: How much the agent's model thinks before it answers. Without it, none is sent and the provider's default applies. Part of what's evaluated: results are compared by model and effort. *(environment variable `HONEST_AGENT_EFFORT`)*
 - **`--grading-effort [low|medium|high]`**: How much the grading model thinks before it grades. Defaults to low for the default grading model; a grading model you choose runs at its provider's default unless you set this. *(environment variable `HONEST_AGENT_GRADING_EFFORT`)*
 - **`--max-tool-steps INTEGER RANGE`**: Max steps per eval before giving up: each step is one model API call and the tool calls it asks for. If the model still wants to call tools when this is hit, that eval fails with a clear error instead of silently returning an empty answer. *(default `5`)*
+- **`--tool-timeout INTEGER RANGE`**: Seconds a tool call may take before it's stopped. The agent gets an error result saying so and can try again or answer; the run goes on. *(default `120`)*
 - **`--mcp-command TEXT`**: Shell command launching a local MCP server over stdio, e.g. "python mcp_server/server.py". Mutually exclusive with --mcp-url; when given on the command line, it overrides an MCP_URL set in the environment. *(environment variable `MCP_COMMAND`)*
 - **`--mcp-url TEXT`**: URL of a remote MCP server's streamable-HTTP endpoint. Mutually exclusive with --mcp-command; when given on the command line, it overrides an MCP_COMMAND set in the environment. *(environment variable `MCP_URL`)*
 - **`--mcp-bearer-token TEXT`**: [--mcp-url only] Bearer token sent as the Authorization header. *(environment variable `MCP_BEARER_TOKEN`)*

@@ -10,6 +10,9 @@ from __future__ import annotations
 import os
 import shlex
 
+# Seconds an MCP request may take before it's stopped (`tool_timeout`).
+DEFAULT_TOOL_TIMEOUT = 120
+
 
 def build_mcp_client(
     command: str | None = None,
@@ -17,6 +20,7 @@ def build_mcp_client(
     bearer_token: str | None = None,
     cwd: str | None = None,
     env_names: list[str] | None = None,
+    tool_timeout: float = DEFAULT_TOOL_TIMEOUT,
 ):
     """Builds an (unconnected) mcp.Client.
 
@@ -29,6 +33,10 @@ def build_mcp_client(
       - `url`: a remote MCP server's streamable-HTTP endpoint, e.g.
         "https://mcp.internal.example.com/mcp". `bearer_token`, if given, is
         sent as an `Authorization: Bearer <token>` header on every request.
+
+    Every request waits at most `tool_timeout` seconds for its answer; one that takes longer
+    raises the SDK's REQUEST_TIMEOUT error and the connection stays open (sql_guard.py turns it
+    into an error result the agent sees).
 
     Connect it with `async with build_mcp_client(...) as client: ...`.
     """
@@ -49,15 +57,20 @@ def build_mcp_client(
         from mcp.client.stdio import get_default_environment
 
         env = {**get_default_environment(), **{name: os.environ[name] for name in env_names or []}}
-        return Client(StdioServerParameters(command=parts[0], args=parts[1:], env=env, cwd=cwd))
+        server = StdioServerParameters(command=parts[0], args=parts[1:], env=env, cwd=cwd)
+        return Client(server, read_timeout_seconds=tool_timeout)
 
-    if bearer_token:
-        import httpx2
-        from mcp.client.streamable_http import streamable_http_client
+    import httpx2
+    from mcp.client.streamable_http import streamable_http_client
 
-        http_client = httpx2.AsyncClient(headers={"Authorization": f"Bearer {bearer_token}"})
-        return Client(streamable_http_client(url, http_client=http_client))
-    return Client(url)
+    # The MCP SDK's own timeouts (30s to connect, 300s between reads, for a server holding a
+    # stream open), with the read one kept longer than `tool_timeout`: the HTTP client hitting
+    # its limit first cancels the call and closes the connection, so every later call fails.
+    # httpx2's default (5s) did that to any query slower than 5 seconds.
+    timeout = httpx2.Timeout(30, read=max(300, tool_timeout + 30))
+    headers = {"Authorization": f"Bearer {bearer_token}"} if bearer_token else None
+    http_client = httpx2.AsyncClient(headers=headers, timeout=timeout)
+    return Client(streamable_http_client(url, http_client=http_client), read_timeout_seconds=tool_timeout)
 
 
 def describe_connection_error(exc: BaseException) -> str:

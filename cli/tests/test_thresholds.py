@@ -53,3 +53,10 @@ def test_unchecked_provenance_never_fails():
     row = {**FAILING_ACCURACY_ROW, "provenance_score": None, "provenance_min_score": None}
     assert check_row(row) == {"accuracy_pass": False, "provenance_pass": True}
     assert failing_rows([{**PASSING_ROW, "provenance_score": None, "provenance_min_score": None}]) == []
+
+
+def test_an_errored_eval_fails_both_checks_without_scores():
+    row = {"status": "error", "accuracy_score": None, "accuracy_min_score": 0.8, "provenance_score": None}
+
+    assert check_row(row) == {"accuracy_pass": False, "provenance_pass": False}
+    assert len(failing_rows([row])) == 1
