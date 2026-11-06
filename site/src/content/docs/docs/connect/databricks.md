@@ -164,8 +164,7 @@ ANTHROPIC_API_KEY=...
 ```
 
 To evaluate both Genie One and Databricks SQL, run `init` once, then copy the target in
-`honest_agent_config.yml` and change its name, URL and token variable. Genie One and
-Databricks SQL can run the same evals: the report then shows Genie One and a model writing its own SQL side by side on the same questions.
+`honest_agent_config.yml` and change its name, URL and token variable.
 
 ## 6. Check the connection
 
