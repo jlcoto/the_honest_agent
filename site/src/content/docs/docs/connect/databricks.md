@@ -9,7 +9,7 @@ against your company's security policies, and adapt it before you use it with re
 See [Your setup, your responsibility](/docs/team/#your-setup-your-responsibility).
 :::
 
-Databricks hosts managed MCP servers that Claude and other clients connect to.
+Databricks hosts managed MCP servers that Claude and other agents connect to.
 honest-agent works with two of them, and they test different things:
 
 | Server | Who writes the SQL | What you evaluate |
