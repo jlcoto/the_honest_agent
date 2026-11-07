@@ -84,8 +84,8 @@ uv run honest-agent init
 
 `init` asks a few questions with numbered options and defaults (Enter accepts them):
 
-- which MCP server your agent uses: Snowflake's managed MCP server, MotherDuck, another
-  URL, or a local command;
+- which MCP server your agent uses: Snowflake's managed MCP server, MotherDuck, Databricks
+  Genie One, Databricks SQL, another URL, or a local command;
 - its URL, or the command that starts it;
 - which model provider runs the agent: Anthropic (Claude) or OpenAI;
 - where results live: on your machine, in MotherDuck, or in a file in S3. Not sure? Keep

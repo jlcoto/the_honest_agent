@@ -64,6 +64,26 @@ def test_motherduck_prefills_its_url(in_tmp_dir: Path):
     assert "MOTHERDUCK_MCP_URL=https://api.motherduck.com/mcp" in (in_tmp_dir / ".env").read_text()
 
 
+def test_databricks_genie_gets_more_steps_for_polling(in_tmp_dir: Path, monkeypatch):
+    url = "https://dbc-1.cloud.databricks.com/ai-gateway/mcp-services/system.ai.genie_one_mcp?o=1"
+    genie = _init("--no-input", "--server", "databricks_genie", "--mcp-url", url)
+
+    assert genie.exit_code == 0, genie.output
+    assert f"DATABRICKS_GENIE_MCP_URL={url}" in (in_tmp_dir / ".env").read_text()
+    monkeypatch.setenv("DATABRICKS_GENIE_MCP_URL", url)
+    target = load_config(in_tmp_dir / "honest_agent_config.yml").target(None)
+    assert (target.name, target.settings["max_tool_steps"]) == ("databricks_genie", 30)
+    assert target.settings["bearer_token_env"] == "DATABRICKS_GENIE_MCP_TOKEN"
+
+
+def test_databricks_sql_keeps_the_default_steps(in_tmp_dir: Path):
+    result = _init("--no-input", "--server", "databricks_sql", "--mcp-url", "https://dbc-1.cloud.databricks.com/x")
+
+    assert result.exit_code == 0, result.output
+    config_text = (in_tmp_dir / "honest_agent_config.yml").read_text()
+    assert "default_target: databricks_sql" in config_text and "max_tool_steps" not in config_text
+
+
 def test_existing_files_are_never_overwritten(in_tmp_dir: Path):
     (in_tmp_dir / ".env").write_text("ANTHROPIC_API_KEY=real-key\n")
 
@@ -172,17 +192,18 @@ def _skill_folders(folder: Path) -> list[Path]:
 
 
 def test_the_server_menu_lists_hosted_servers_first_and_has_no_default(in_tmp_dir: Path):
-    # Enter alone at the server question asks again; then 4 (a local command)
-    result = _init(input="\n4\nuv run python server.py\n\n\nn\n")
+    # Enter alone at the server question asks again; then 6 (a local command)
+    result = _init(input="\n6\nuv run python server.py\n\n\nn\n")
 
     assert result.exit_code == 0, result.output
-    assert "1) Snowflake managed MCP  2) MotherDuck  3) another URL  4) a local command: " in result.output
+    menu = "1) Snowflake managed MCP  2) MotherDuck  3) Databricks Genie One  4) Databricks SQL  5) another URL"
+    assert menu + "  6) a local command: " in result.output
     assert load_config(in_tmp_dir / "honest_agent_config.yml").target(None).name == "local"
 
 
 def test_init_asks_for_the_setup_skill_and_yes_is_the_default(in_tmp_dir: Path):
     # server 4 (local), its command, default model, default results, Enter at the skill question
-    result = _init(input="4\nuv run python server.py\n\n\n\n")
+    result = _init(input="6\nuv run python server.py\n\n\n\n")
 
     assert result.exit_code == 0, result.output
     assert result.output.startswith(
@@ -202,14 +223,14 @@ def test_init_asks_for_the_setup_skill_and_yes_is_the_default(in_tmp_dir: Path):
 
 
 def test_saying_no_adds_nothing_for_coding_agents(in_tmp_dir: Path):
-    result = _init(input="4\nuv run python server.py\n\n\nn\n")
+    result = _init(input="6\nuv run python server.py\n\n\nn\n")
 
     assert result.exit_code == 0, result.output
     assert not (in_tmp_dir / ".agents").exists() and not (in_tmp_dir / ".claude").exists()
 
 
 def test_the_hint_skips_the_skill_line_when_it_is_already_asked_for(in_tmp_dir: Path):
-    result = _init("--with-skill", input="4\nuv run python server.py\n\n\n")
+    result = _init("--with-skill", input="6\nuv run python server.py\n\n\n")
 
     assert result.exit_code == 0, result.output
     assert result.output.startswith("A few questions to set up this folder. Press Enter")

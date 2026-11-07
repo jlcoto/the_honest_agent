@@ -6,6 +6,18 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 ## Unreleased
 
+- **Databricks: Genie One and Databricks SQL.** `init --server databricks_genie` or
+  `--server databricks_sql` sets up a target for Databricks' own MCP servers; Genie
+  One's gets `max_tool_steps: 30`, since the agent polls until Genie answers. A new guide,
+  [Connect to Databricks](https://thehonestagent.dev/docs/connect/databricks/), covers the
+  service principal, its token, and what to know about Genie One (routing to Genie Agents,
+  its memory of past conversations).
+- **Provenance reads SQL from markdown replies:** when a tool's reply has no SQL field,
+  the queries in its ```sql blocks count, once each, as SQL the tool ran (Genie One shows
+  its SQL that way). When Genie One routes a question to a Genie Agent, its reply has no
+  SQL, so those answers have no provenance.
+- **Provenance reads Databricks SQL,** with its backtick-quoted names
+  (`` `catalog`.`schema`.`table` ``).
 - **The report leads with how many evals passed.** The Overview's cards are now Passed,
   Passed accuracy and Passed provenance: the count, its change in evals since the last
   run, and the percentage. A fourth card, Est. cost, shows the run's cost and its

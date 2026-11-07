@@ -27,6 +27,14 @@ list, and there's no second real example yet to generalize a dedicated
 marked `generated`: the tool wrote it but may not have run it (Cortex Analyst
 doesn't), so it's recorded but doesn't count toward provenance.
 
+Some tools answer in markdown and show the SQL they ran in a ```sql block: e.g.
+Databricks' Genie One (`genie_poll_response`), which writes and runs the query
+itself. When neither side has a SQL field, those blocks are read from the result
+text. Unlike a response-side field, they count as run (`generated` False): a tool
+that only shows SQL it didn't run would belong in the target's `ignore_tools`. A
+polled tool repeats the SQL so far in every reply, so a block already seen in an
+earlier result isn't recorded again.
+
 This only ever produces `type="sql"` rows. A tool that reaches a semantic
 layer through fully structured args on *both* sides -- no SQL string
 anywhere, request or response (e.g. `{"metric": "revenue", "grain":
@@ -90,6 +98,14 @@ def _find_field(data: Any, field: str | None) -> str | None:
             if isinstance(value, str) and value.strip():
                 return value
     return None
+
+
+_SQL_BLOCK = re.compile(r"```sql[ \t]*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _sql_blocks(text: str) -> list[str]:
+    """The SQL in a markdown reply's ```sql blocks, in order."""
+    return [block.strip() for block in _SQL_BLOCK.findall(text) if block.strip()]
 
 
 def _text(content: Any) -> str:
@@ -193,7 +209,9 @@ def extract_sql_calls(
     matching tool_result's content. For any other tool, the same two-sided
     check runs against `_HEURISTIC_FIELD_NAMES` instead. Silently skips
     calls where nothing matches on either side, or the matched value isn't a
-    non-empty string.
+    non-empty string. With no field on either side, the ```sql blocks in the
+    result text are read instead, each recorded once per trace (see the module
+    docstring).
 
     Tools in `_NON_SQL_TOOLS` or `ignore_tools` are skipped, unless `sql_fields`
     names them: declaring a tool's SQL field is more specific than either list.
@@ -232,12 +250,30 @@ def extract_sql_calls(
                     errored_ids.add(block.get("tool_use_id"))
 
     calls: list[dict[str, Any]] = []
+    seen_blocks: set[str] = set()
     for tool_use_id, tool_name, tool_input, step in tool_uses:
         if tool_name in skipped and tool_name not in sql_fields:
             continue
         field = sql_fields.get(tool_name)
         sent = _find_field(tool_input, field)
         value = sent or _find_field(results_by_id.get(tool_use_id), field)
+        if not value and field is None:
+            for sql in _sql_blocks(texts_by_id.get(tool_use_id, "")):
+                if sql in seen_blocks:
+                    continue
+                seen_blocks.add(sql)
+                calls.append(
+                    {
+                        "tool_name": tool_name,
+                        "sql": sql,
+                        "is_error": tool_use_id in errored_ids,
+                        "generated": False,
+                        "step": step,
+                        "error": None,
+                        "result_column": None,
+                        "result_value": None,
+                    }
+                )
         if value:
             text = texts_by_id.get(tool_use_id, "")
             # A generated statement's response is the SQL itself, not a query result.

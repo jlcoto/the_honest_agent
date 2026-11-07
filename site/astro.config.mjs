@@ -63,6 +63,7 @@ export default defineConfig({
             { label: 'Overview', link: '/docs/connect/' },
             { label: 'Snowflake', link: '/docs/connect/snowflake/' },
             { label: 'MotherDuck', link: '/docs/connect/motherduck/' },
+            { label: 'Databricks', link: '/docs/connect/databricks/' },
           ],
         },
         { label: 'Writing evals', link: '/docs/writing-evals/' },

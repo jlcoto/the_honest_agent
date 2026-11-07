@@ -34,8 +34,9 @@ from sqlglot import exp
 # Snowflake's `show semantic views`); those are never reads, so the noise isn't useful.
 logging.getLogger("sqlglot").setLevel(logging.ERROR)
 
-# Tried in order. Snowflake's dialect also reads the DuckDB/MotherDuck SQL seen so far.
-_DIALECTS = ("snowflake", "duckdb")
+# Tried in order. Snowflake's dialect also reads the DuckDB/MotherDuck SQL seen so far;
+# Databricks' reads its backtick-quoted names (`samples`.`tpch`.`orders`).
+_DIALECTS = ("snowflake", "duckdb", "databricks")
 
 
 # Where warehouses keep metadata about their own tables. Reading these is exploration.

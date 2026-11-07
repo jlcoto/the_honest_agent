@@ -51,7 +51,7 @@ SALES_AGENT_MCP_TOKEN=...
 Set `mcp_url` to the server's address and, if it needs a bearer token, `bearer_token_env`
 to the variable that holds it. honest-agent sends the token only to that target's server.
 
-### Snowflake and MotherDuck
+### Snowflake, MotherDuck and Databricks
 
 These have their own step-by-step guides, from creating the token to a first eval:
 
@@ -59,6 +59,8 @@ These have their own step-by-step guides, from creating the token to a first eva
   programmatic access token for a read-only role.
 - [Connect to MotherDuck](/docs/connect/motherduck/): MotherDuck's hosted server, with a
   read scaling token.
+- [Connect to Databricks](/docs/connect/databricks/): Genie One or Databricks SQL, Databricks'
+  managed servers, with a token for a service principal.
 
 ### Any other server
 

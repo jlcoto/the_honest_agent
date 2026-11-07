@@ -275,6 +275,22 @@ def test_sql_that_does_not_parse_is_reported_and_reads_nothing():
     assert provenance.score == 1.0
 
 
+def test_databricks_backtick_quoted_names_parse():
+    """Databricks (e.g. Genie One) quotes every name with backticks."""
+    provenance = check_provenance(
+        sql_statements=[
+            "select sum(`l_extendedprice`) from `samples`.`tpch`.`lineitem` l"
+            " join `samples`.`tpch`.`orders` o on l.`l_orderkey` = o.`o_orderkey`"
+        ],
+        expected_sources=["lineitem", "orders"],
+        expected_database="samples",
+        expected_schema="tpch",
+    )
+    assert provenance.unparsed == []
+    assert provenance.queried_sources == [Source("samples", "tpch", "lineitem"), Source("samples", "tpch", "orders")]
+    assert provenance.score == 1.0
+
+
 def _defaults(sql: str, **expected):
     return check_provenance(sql_statements=[sql], default_database="warehouse", default_schema="main", **expected)
 
