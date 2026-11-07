@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass
 
 from .llm import response_cache_tokens, response_tokens
 
-PRICES_AS_OF = "2026-10-28"
+PRICES_AS_OF = "2026-11-07"
 
 
 @dataclass(frozen=True)

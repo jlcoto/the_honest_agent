@@ -4,39 +4,8 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
-## Unreleased
+## v0.5.0 (alpha) — 2026-11-07
 
-- **Databricks: Genie One and Databricks SQL.** `init --server databricks_genie` or
-  `--server databricks_sql` sets up a target for Databricks' own MCP servers; Genie
-  One's gets `max_tool_steps: 30`, since the agent polls until Genie answers. A new guide,
-  [Connect to Databricks](https://thehonestagent.dev/docs/connect/databricks/), covers the
-  service principal, its token, and what to know about Genie One (routing to Genie Agents,
-  its memory of past conversations).
-- **Provenance reads SQL from markdown replies:** when a tool's reply has no SQL field,
-  the queries in its ```sql blocks count, once each, as SQL the tool ran (Genie One shows
-  its SQL that way). When Genie One routes a question to a Genie Agent, its reply has no
-  SQL, so those answers have no provenance.
-- **Provenance reads Databricks SQL,** with its backtick-quoted names
-  (`` `catalog`.`schema`.`table` ``).
-- **The report leads with how many evals passed.** The Overview's cards are now Passed,
-  Passed accuracy and Passed provenance: the count, its change in evals since the last
-  run, and the percentage. A fourth card, Est. cost, shows the run's cost and its
-  change; it was a line under the title before. The Combined score is gone everywhere: it averaged accuracy
-  with provenance, which is often 100%, so it read far higher than the share of evals the
-  agent got right. The heatmaps open on Accuracy, and their bottom row is now Passed,
-  coloured by the run's pass rate. Model comparison counts passes too, and its
-  differences from the baseline are in evals. Passed provenance and the Provenance tab's
-  Passed row count only evals that expect sources.
-- **A tool call stopped by `tool_timeout` is named under its eval's line** in `run`'s
-  output, so a fail caused by a slow warehouse doesn't look like a wrong answer. The eval
-  is still graded: a slow query can be the agent's own doing.
-- **A tool call that takes longer than 120 seconds is stopped,** and the agent gets an
-  error result saying so, so it can try a lighter query or answer. Before, a server that
-  never answered could hang the run for good (six hours in GitHub Actions). Change it with
-  `tool_timeout`, at the top level or on a target, or `--tool-timeout`; the run records it.
-- **Fixed: a remote server with a bearer token cut off any tool call slower than 5
-  seconds** and dropped the connection, so every later call in the run failed. It now gets
-  the same limits as a server without a token.
 - **An eval that errors no longer stops the run.** When a provider call fails (overloaded,
   rate-limited, a wrong API key) or the MCP connection drops during an eval, `run` prints
   `ERROR` with the reason on that eval's line and goes on to the next one. Before, the run
@@ -49,12 +18,43 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   evals only. Errored evals show in Below threshold with an Error badge and their reason,
   their result page says why the eval stopped, and their heatmap cell is grey. Passed
   thresholds counts graded evals, with the errors named under it.
+- **The report leads with how many evals passed.** The Overview's cards are now Passed,
+  Passed accuracy and Passed provenance: the count, its change in evals since the last
+  run, and the percentage. A fourth card, Est. cost, shows the run's cost and its
+  change; it was a line under the title before. The Combined score is gone everywhere: it averaged accuracy
+  with provenance, which is often 100%, so it read far higher than the share of evals the
+  agent got right. The heatmaps open on Accuracy, and their bottom row is now Passed,
+  coloured by the run's pass rate. Model comparison counts passes too, and its
+  differences from the baseline are in evals. Passed provenance and the Provenance tab's
+  Passed row count only evals that expect sources.
+- **A tool call that takes longer than 120 seconds is stopped,** and the agent gets an
+  error result saying so, so it can try a lighter query or answer. Before, a server that
+  never answered could hang the run for good (six hours in GitHub Actions). Change it with
+  `tool_timeout`, at the top level or on a target, or `--tool-timeout`; the run records it.
+- **A tool call stopped by `tool_timeout` is named under its eval's line** in `run`'s
+  output, so a fail caused by a slow warehouse doesn't look like a wrong answer. The eval
+  is still graded: a slow query can be the agent's own doing.
 - **`notify` alerts on errored evals too,** with the reason in place of the scores, so a
   run that broke halfway reaches Slack. Before, a run that stopped early could send
   nothing.
 - **`rebuild` now re-derives evals that stopped with an error,** as error results; it
   used to skip them. Run `honest-agent rebuild` once to add the evals that stopped earlier
   runs to your report.
+- **Databricks: Genie One and Databricks SQL.** `init --server databricks_genie` or
+  `--server databricks_sql` sets up a target for Databricks' own MCP servers; Genie
+  One's gets `max_tool_steps: 30`, since the agent polls until Genie answers. A new guide,
+  [Connect to Databricks](https://thehonestagent.dev/docs/connect/databricks/), covers the
+  service principal, its token, and what to know about Genie One (routing to Genie Agents,
+  its memory of past conversations).
+- **Provenance reads SQL from markdown replies:** when a tool's reply has no SQL field,
+  the queries in its ```sql blocks count, once each, as SQL the tool ran (Genie One shows
+  its SQL that way). When Genie One routes a question to a Genie Agent, its reply has no
+  SQL, so those answers have no provenance.
+- **Provenance reads Databricks SQL,** with its backtick-quoted names
+  (`` `catalog`.`schema`.`table` ``).
+- **Fixed: a remote server with a bearer token cut off any tool call slower than 5
+  seconds** and dropped the connection, so every later call in the run failed. It now gets
+  the same limits as a server without a token.
 
 ## v0.4.0 (alpha) — 2026-10-28
 

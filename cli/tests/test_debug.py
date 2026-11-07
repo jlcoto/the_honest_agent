@@ -14,6 +14,7 @@ from click.testing import CliRunner
 
 import honest_agent.debug as debug_mod
 from honest_agent.cli import main
+from honest_agent.prices import PRICES_AS_OF
 
 DEMO_COMMAND = f"{shlex.quote(sys.executable)} -m honest_agent.demo_server warehouse.duckdb"
 # Variables from the shell that would change what `debug` resolves.
@@ -251,7 +252,7 @@ def test_debug_says_where_each_models_price_comes_from(demo_project):
     result = _debug("--model", "claude-haiku-5-5")
 
     assert _lines(result.output)["Prices"].endswith(
-        "claude-haiku-5-5 built-in (as of 2026-10-28) · my-proxy-model from honest_agent_config.yml"
+        f"claude-haiku-5-5 built-in (as of {PRICES_AS_OF}) · my-proxy-model from honest_agent_config.yml"
     )
 
     result = _debug("--model", "claude-haiku-5-5", "--grading-model", "my-proxy")
