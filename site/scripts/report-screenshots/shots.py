@@ -125,7 +125,7 @@ def improve(c, W=1240):
             pg.wait_for_timeout(350)
             pg.screenshot(path=D + "t.png")
             tb = pg.evaluate(
-                """()=>{const els=[...document.querySelectorAll('div')].filter(d=>{const t=d.innerText||'';return t.includes('2026-10-11')&&t.includes('Combined')&&getComputedStyle(d).position==='fixed'});const e=els[0];const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height]}"""
+                """()=>{const els=[...document.querySelectorAll('div')].filter(d=>{const t=d.innerText||'';return t.includes('2026-10-11')&&t.includes('Accuracy')&&getComputedStyle(d).position==='fixed'});const e=els[0];const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height]}"""
             )
             bx = (tb[0] - 2, tb[1] - 2, tb[0] + tb[2] + 2, tb[1] + tb[3] + 2)
             Image.open(D + "t.png").convert("RGB").crop(tuple(int(v * S) for v in bx)).save(
