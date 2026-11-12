@@ -1,0 +1,16 @@
+---
+// Starlight's own footer (edit link, pagination), plus who made it, as on the landing page.
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+<Default />
+<div class="made">
+ Made by Jose Coto
+ <a href="https://www.linkedin.com/in/jose-coto" rel="me noopener" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.5c0-1.3-.02-3-1.83-3s-2.12 1.43-2.12 2.9V21H9z"/></svg>LinkedIn</a>
+ <a href="https://blog.thegroundlayer.io/" rel="me noopener" target="_blank"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h18v2.6H3zm0 4.9h18v2.6H3zM3 12.8h18V22l-9-5-9 5z"/></svg>Substack</a>
+</div>
+
+<style>
+.made{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:2rem;padding-top:1rem;border-top:1px solid var(--sl-color-hairline);font-size:var(--sl-text-sm);color:var(--sl-color-gray-3)}
+.made a{color:var(--sl-color-text-accent);font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.made a:hover{text-decoration:underline;text-underline-offset:3px}
+</style>
