@@ -53,6 +53,8 @@ export default defineConfig({
         { icon: 'x.com', label: 'X', href: 'https://x.com/ev_honestagent' },
       ],
       editLink: { baseUrl: 'https://github.com/jlcoto/the_honest_agent/edit/main/site/' },
+      // The default footer plus a "Made by" line, as on the landing page.
+      components: { Footer: './src/components/docs/Footer.astro' },
       sidebar: [
         { label: 'Overview', link: '/docs/' },
         { label: 'What are evals for agentic analytics?', link: '/docs/evals-for-agentic-analytics/' },
