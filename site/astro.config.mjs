@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import starlight from '@astrojs/starlight';
 import starlightLlmsTxt from 'starlight-llms-txt';
+import { posthogSnippet } from './src/posthog.mjs';
 
 // The design system lives in the report's source (ui/src/ds), outside this folder.
 // It comes in only through the @ds alias, so moving the site elsewhere means changing it here.
@@ -42,6 +43,8 @@ export default defineConfig({
       ],
       head: [
         { tag: 'script', content: lightByDefault },
+        // Web analytics, as on the landing page: see src/posthog.mjs.
+        { tag: 'script', content: posthogSnippet },
         // The landing page's share image, for links to the docs too.
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://thehonestagent.dev/assets/og.png' } },
         { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
