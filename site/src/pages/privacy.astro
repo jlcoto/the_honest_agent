@@ -1,0 +1,66 @@
+---
+import { Logo } from '@ds';
+import Base from '../layouts/Base.astro';
+import Footer from '../components/sections/Footer.astro';
+
+// TODO(Jose): write the text before the release that turns on analytics.
+// The headings are what the page needs to cover; the bracketed notes say what goes in each.
+---
+<Base
+  title="Privacy · The Honest Agent"
+  description="What this website collects about visitors, and why."
+>
+  <div class="s-privacy">
+    <nav class="nav">
+      <a class="home" href="/" aria-label="The Honest Agent"><Logo markSrc="/assets/robot.png" size={40} /></a>
+      <div class="links">
+        <a href="/docs/">Docs</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/jlcoto/the_honest_agent">GitHub</a>
+      </div>
+    </nav>
+    <main class="body">
+      <h1>Privacy</h1>
+      <p class="sub">[Who runs this site, and a contact address.]</p>
+
+      <h2>What this site collects</h2>
+      <p>[PostHog web analytics, in cookieless mode: pages viewed, referrer, browser and device type,
+      clicks. Nothing is stored in your browser: no cookies, no local storage. No session recordings.]</p>
+
+      <h2>Who processes it</h2>
+      <p>[PostHog, on its EU Cloud in Frankfurt, as data processor. Cloudflare, which hosts the site and
+      routes the analytics requests.]</p>
+
+      <h2>Legal basis and retention</h2>
+      <p>[Legitimate interest: understanding which pages help people. How long the data is kept.]</p>
+
+      <h2>Your rights</h2>
+      <p>[Access, deletion, objection, and the right to complain to a data protection authority.]</p>
+
+      <h2>The honest-agent tool</h2>
+      <p>[The CLI and its reports send nothing to this site or to the maintainer.]</p>
+    </main>
+  </div>
+  <Footer />
+</Base>
+
+<style>
+.s-privacy{background:linear-gradient(180deg,#FFFFFF 0,#EEF0E8 480px);color:var(--fg-1);font-family:var(--font-sans);font-size:15px;line-height:1.6}
+.nav{max-width:1240px;margin:0 auto;padding:20px 32px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 24px}
+.home{display:inline-flex;text-decoration:none;color:var(--fg-1)}
+.links{display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px}
+.links a{color:var(--fg-2);text-decoration:none;font-weight:500}
+.links a:hover{color:var(--fg-1)}
+.body{max-width:720px;margin:0 auto;padding:32px 32px 72px}
+h1{margin:0 0 10px;font-family:var(--font-display);font-weight:500;font-size:44px;line-height:1.08;letter-spacing:-.02em}
+.sub{margin:0 0 28px;font-size:18px;color:var(--fg-2)}
+h2{margin:32px 0 8px;font-family:var(--font-display);font-weight:500;font-size:24px;line-height:1.2;letter-spacing:-.01em}
+.body p{margin:0 0 14px;color:var(--fg-2)}
+@media (max-width:900px){
+ .nav{padding:16px}
+ .body{padding:20px 16px 56px}
+ h1{font-size:34px}
+ .sub{font-size:16px;margin-bottom:20px}
+ h2{font-size:21px}
+}
+</style>
