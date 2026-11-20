@@ -1,5 +1,6 @@
 ---
 import '@ds/styles.css';
+import { posthogSnippet } from '../posthog.mjs';
 
 interface Props {
   title: string;
@@ -62,11 +63,9 @@ const jsonLd = {
     <meta name="twitter:image" content={ogImage} />
     <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- Lato is only for the Slack windows; the brand fonts are bundled in the design system's tokens/fonts. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" />
     <script is:inline>document.documentElement.classList.add('js');</script>
+    <!-- Web analytics: see src/posthog.mjs. -->
+    <script is:inline set:html={posthogSnippet} />
   </head>
   <body>
     <slot />
