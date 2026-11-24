@@ -94,7 +94,9 @@ targets:
 ## Models
 
 honest-agent works with Anthropic (Claude) and OpenAI (GPT) models. You only need the API key for the
-provider you use: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
+provider you use: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. A decision model as the judge of
+`llm_judge` evals needs its own provider's key (see
+[Using a decision model as the judge](/docs/writing-evals/#using-a-decision-model-as-the-judge)).
 
 ```yaml
 model: claude-haiku-5-5         # for every target
@@ -112,13 +114,23 @@ targets:
   Chat Completions, where GPT-6 models can't think and call tools in one request, so
   `run` stops before the first call. They can be the grading model, which calls no tools.
 - **The provider comes from the name:** `gpt-*`, `o3`, `o4-mini` and similar are OpenAI;
-  anything else is Claude.
+  `jev-*`, `gemini-decision-*` and `decision:gpt-6-luna` are decision models; anything
+  else is Claude.
 - **`grading_model`** is the model for grading, for both methods that use one:
   `extract_match` has it pull the value out of the answer, `llm_judge` has it judge the
   answer. `contains` uses none. Without one, honest-agent uses a stronger model from the
   agent's provider: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` for an OpenAI
   one. You can change it; [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model)
-  sums up what research says about the choice.
+  sums up what research says about the choice. In the config file it can also name one
+  model per method:
+
+  ```yaml
+  grading_model:
+    extract_match: claude-sonnet-5-5
+    llm_judge: jev-1.14.0
+  ```
+
+  A method you leave out gets the default. `--grading-model` sets both methods for one run.
 - **`effort`** sets how much the agent's model thinks before it answers: `low`, `medium`
   or `high`. Without it, none is sent and the provider's default applies. The effort is
   part of what you evaluate: the report shows each model and effort as its own agent

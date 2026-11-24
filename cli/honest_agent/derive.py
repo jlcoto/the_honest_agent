@@ -14,8 +14,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, NamedTuple
 
 from .eval_loader import EvalDefinition
-from .grading import CUT_OFF_REPLY, Grade, score
-from .llm import OPENAI, response_cache_tokens, response_stop, response_text, response_tokens
+from .grading import CUT_OFF_REPLY, Grade, decision_grade, score
+from .llm import (
+    DECISION_PROVIDERS,
+    OPENAI,
+    decision_answer,
+    response_cache_tokens,
+    response_stop,
+    response_text,
+    response_tokens,
+    served_model,
+)
 from .prices import Price, call_cost
 from .provenance import check_provenance
 from .raw import honest_agent_version
@@ -105,11 +114,27 @@ def _thinking_tokens(provider: str, response: dict) -> int | None:
 def grading_details(event: dict | None) -> dict | None:
     """What the report's Grading card shows about the grading call: its model, its full
     reply, its tokens (and how many went to thinking), its duration, why it stopped, and
-    its token limit. None when there was no grading call (contains)."""
+    its token limit. For a decision model: the question it answered, its P(yes), its
+    confidence where the provider gives one, and the model that answered when the
+    response names it. None when there was no grading call (contains)."""
     if event is None or event["response"] is None:
         return None
     provider, response = event["provider"], event["response"]
     tokens = response_tokens(provider, response)
+    if provider in DECISION_PROVIDERS:
+        probability, confidence = decision_answer(provider, response)
+        return {
+            "kind": "decision",
+            "model": event["request"].get("model"),
+            "served_model": served_model(provider, response),
+            "question": event["request"].get("question"),
+            "reply": response_text(provider, response),
+            "probability": probability,
+            "confidence": confidence,
+            "input_tokens": tokens[0],
+            "output_tokens": tokens[1],
+            "duration_ms": event["duration_ms"],
+        }
     return {
         "model": event["request"].get("model"),
         "reply": response_text(provider, response),
@@ -243,8 +268,15 @@ def derive_result(con, result_id: str) -> Derived:
     # A grading call that failed has no reply; the eval stopped there with an error.
     grading = next((e for e in events if e["kind"] == "grading_call" and e["response"] is not None), None)
     reply = response_text(grading["provider"], grading["response"]) if grading else None
+    # The model that graded, as the grading call asked for it: per eval, since a run can
+    # grade extract_match and llm_judge evals with different models.
+    grading_model = grading["request"]["model"] if grading else None
+    decision = grading is not None and grading["provider"] in DECISION_PROVIDERS
     if error is not None:
         grade = Grade(None, f"{EVAL_ERROR}{error}", None)
+    elif decision:
+        probability, _ = decision_answer(grading["provider"], grading["response"])
+        grade = decision_grade(probability, definition.accuracy_min_score)
     elif grading and cut_off(grading):
         grade = Grade(0.0, f"{CUT_OFF_REPLY}{_limit(grading)}", None)
     else:
@@ -298,10 +330,13 @@ def derive_result(con, result_id: str) -> Derived:
         "agent_answer": answer,
         "tools_used": [e["request"]["name"] for e in agent_events if e["kind"] == "tool_call"],
         "accuracy_score": grade.score,
+        # A decision model's P(yes) that the answer is correct; accuracy_score is its pass/fail.
+        "accuracy_confidence": grade.confidence,
         "accuracy_method": definition.grading_method,
         # The model that graded the answer; `contains` uses none.
-        "grading_model": run["judge_model"] if grading else None,
-        "grading_effort": settings.get("grading_effort") if grading else None,
+        "grading_model": grading_model,
+        # A decision model takes no effort setting.
+        "grading_effort": settings.get("grading_effort") if grading and not decision else None,
         "accuracy_rationale": grade.rationale,
         "extracted_answer": grade.extracted_answer,
         "accuracy_tolerance": definition.tolerance,
@@ -330,7 +365,7 @@ def derive_result(con, result_id: str) -> Derived:
         "grading_input_tokens": grading_tokens[0],
         "grading_output_tokens": grading_tokens[1],
         "agent_cost_usd": _cost(settings, run["model"], agent_responses),
-        "grading_cost_usd": _cost(settings, run["judge_model"], [(grading["provider"], grading["response"])])
+        "grading_cost_usd": _cost(settings, grading_model, [(grading["provider"], grading["response"])])
         if grading
         else 0.0,
         "status": "graded" if error is None else "error",

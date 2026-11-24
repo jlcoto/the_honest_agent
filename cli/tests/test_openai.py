@@ -168,7 +168,7 @@ def test_without_model_an_openai_only_user_gets_the_openai_default(fake_run, in_
     result = _invoke_run([], {"OPENAI_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
-    assert (fake_run["model"], fake_run["grading_model"]) == ("gpt-5.4-mini", "gpt-6.1-sol")
+    assert (fake_run["model"], fake_run["graders"]["llm_judge"]) == ("gpt-5.4-mini", "gpt-6.1-sol")
     assert fake_run["grading_effort"] == "low"
     assert "No --model given; using gpt-5.4-mini (OPENAI_API_KEY is set)" in result.output
 
@@ -186,7 +186,7 @@ def test_a_gpt6_model_can_still_grade(fake_run, in_tmp_dir):
     result = _invoke_run(["--model", "gpt-5.4-mini", "--grading-model", "gpt-6-luna"], {"OPENAI_API_KEY": "test"})
 
     assert result.exit_code == 0, result.output
-    assert fake_run["grading_model"] == "gpt-6-luna"
+    assert fake_run["graders"]["llm_judge"] == "gpt-6-luna"
 
 
 def test_a_providers_error_reads_as_one_line():

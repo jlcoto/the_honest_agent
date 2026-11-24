@@ -106,7 +106,9 @@ The limits, for when you need them:
   list, use `llm_judge`.
 - **`llm_judge`**: a model scores the answer from 0 to 1 against `expected_answer`, with
   a reason. It's only as strict as `expected_answer`: write what a right answer must
-  contain ("Exactly these 5: …").
+  contain ("Exactly these 5: …"). If `grading_model: llm_judge:` is a decision model
+  (`jev-*`, `gemini-decision-*`, `decision:gpt-6-luna`), it gives pass/fail instead:
+  pass when its P(yes) reaches `min_score`, with no reason.
 
 ## Provenance
 

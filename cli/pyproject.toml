@@ -16,9 +16,14 @@ dependencies = [
     # The MCP SDK (open Model Context Protocol), used by `run` to reach the agent's tools.
     # 2.x is needed for its `Client` class.
     "mcp>=2.2,<3",
-    # Model SDKs: both installed, each imported only when one of its models is used.
+    # Model SDKs: all installed, each imported only when one of its models is used.
     "anthropic>=1.5,<2",
-    "openai>=3.23,<4",
+    # 3.26 added the Decisions API (decision:gpt-6-luna as a judge).
+    "openai>=3.27,<4",
+    # Decision models as llm_judge graders: TypeSafe's Jev and Google's Gemini Decisions.
+    "typesafe-sdk>=0.7.5,<0.8",
+    # Every google-genai release with Decisions needs Python 3.11, so a Gemini judge does too.
+    "google-genai>=3.6,<4; python_version >= '3.11'",
     "sqlglot>=30.21,<31",
 ]
 

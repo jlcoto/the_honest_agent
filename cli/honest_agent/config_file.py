@@ -4,7 +4,8 @@ from flags, environment variables or built-in defaults, as before.
 
     results_path: ./honest_agent_results/results.duckdb   # shared by every target
     model: claude-haiku-5-5                               # can be overridden per target
-    grading_model: claude-sonnet-5-5                      # so can this, effort and grading_effort
+    grading_model: claude-sonnet-5-5                      # so can this, effort and grading_effort;
+                                                          # or one per method: {extract_match: ..., llm_judge: ...}
     default_target: demo
     targets:
       demo:
@@ -64,6 +65,8 @@ _TARGET_KEYS = _SHARED_KEYS | {
     "default_database",
     "default_schema",
 }
+# grading_model can name one model per grading method instead of one for both.
+GRADING_METHODS = ("extract_match", "llm_judge")
 _PATH_KEYS = {"results_path", "evals_dir"}
 _INT_KEYS = {"max_tool_steps", "tool_timeout"}
 
@@ -147,6 +150,7 @@ def load_config(path: Path) -> Config:
     if not isinstance(doc, dict):
         raise ConfigError(f"{path.name} must be a mapping of settings.")
     _check_keys(doc, _TOP_LEVEL_KEYS, f"{path.name}")
+    _check_grading_model(doc.get("grading_model"), path.name)
     raw_targets = doc.get("targets")
     prices = _prices(doc.get("prices"), path.name)
     rest = {k: v for k, v in doc.items() if k not in ("targets", "prices")}
@@ -158,6 +162,7 @@ def load_config(path: Path) -> Config:
         settings = settings or {}
         where = f"target {name!r} in {path.name}"
         _check_keys(settings, _TARGET_KEYS, where)
+        _check_grading_model(settings.get("grading_model"), where)
         if settings.get("mcp_command") and settings.get("mcp_url"):
             raise ConfigError(f"Set either mcp_command or mcp_url in {where}, not both.")
         targets[str(name)] = settings
@@ -221,6 +226,8 @@ def _render(settings: dict[str, Any], where: str) -> dict[str, Any]:
 def _render_value(value: Any, where: str) -> Any:
     if isinstance(value, list):
         return [_render_value(item, where) for item in value]
+    if isinstance(value, dict):
+        return {key: _render_value(item, where) for key, item in value.items()}
     if not isinstance(value, str):
         return value
 
@@ -268,6 +275,21 @@ def _env_var_names(value: Any) -> list[str]:
     if not isinstance(value, str):
         return []
     return [match.group(2) for match in _ENV_VAR.finditer(value) if match.group(4) is None]
+
+
+def _check_grading_model(value: Any, where: str) -> None:
+    """grading_model is one model name, or a mapping from grading method to model name."""
+    if value is None or isinstance(value, str):
+        return
+    if not isinstance(value, dict):
+        raise ConfigError(
+            f"grading_model in {where} must be a model name, or one per method: "
+            f"{{{', '.join(f'{m}: <model>' for m in GRADING_METHODS)}}}."
+        )
+    _check_keys(value, set(GRADING_METHODS), f"grading_model in {where}")
+    for method, model in value.items():
+        if not isinstance(model, str) or not model:
+            raise ConfigError(f"grading_model.{method} in {where} must be a model name; got {model!r}.")
 
 
 def _check_keys(settings: dict, allowed: set[str], where: str) -> None:

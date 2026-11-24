@@ -88,6 +88,16 @@ BUILT_IN: dict[str, Price] = {
     "gpt-4o-mini": Price(0.15, 0.60, 0.075, 0.0),
     "o4-mini": Price(1.10, 4.40, 0.275, 0.0),
     "o3": Price(2.00, 8.00, 0.50, 0.0),
+    # Decision models: input only, output is free. From https://docs.typesafe.ai/models.md,
+    # https://developers.openai.com/api/docs/guides/decisions.md and
+    # https://blog.google/innovation-and-ai/technology/developers-tools/gemini-decisions-api/.
+    # Their cache isn't priced (llm.response_cache_tokens): every input token is input.
+    "jev-1.14.0": Price(0.042, 0.0, 0.042, 0.042),
+    "jev-1.13.0": Price(0.042, 0.0, 0.042, 0.042),
+    "jev-latest": Price(0.042, 0.0, 0.042, 0.042),
+    "jev-preview": Price(0.042, 0.0, 0.042, 0.042),
+    "decision:gpt-6-luna": Price(0.10, 0.0, 0.10, 0.10),
+    "gemini-decision-1": Price(0.10, 0.0, 0.10, 0.10),
 }
 
 CUSTOM_PRICE_KEYS = ("input", "output", "cache_read", "cache_write")

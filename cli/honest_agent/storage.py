@@ -74,6 +74,9 @@ _RESULTS_COLUMNS: list[tuple[str, str]] = [
     ("tools_used", "varchar[]"),
     # NULL when the eval stopped with an error (status `error`): it has no grade.
     ("accuracy_score", "double"),
+    # A decision model's P(yes) that the answer is correct (accuracy_score is then 1.0 when
+    # it reaches accuracy_min_score, else 0.0); NULL for every other grader.
+    ("accuracy_confidence", "double"),
     ("accuracy_method", "varchar"),
     # Model that graded the answer (extract_match/llm_judge); NULL for contains, which uses none.
     ("grading_model", "varchar"),
