@@ -335,8 +335,9 @@ def derive_result(con, result_id: str) -> Derived:
         "accuracy_method": definition.grading_method,
         # The model that graded the answer; `contains` uses none.
         "grading_model": grading_model,
-        # A decision model takes no effort setting.
-        "grading_effort": settings.get("grading_effort") if grading and not decision else None,
+        # The effort the grading call sent: none for a decision model, or a model that
+        # takes no effort setting.
+        "grading_effort": grading["request"].get("effort") if grading else None,
         "accuracy_rationale": grade.rationale,
         "extracted_answer": grade.extracted_answer,
         "accuracy_tolerance": definition.tolerance,

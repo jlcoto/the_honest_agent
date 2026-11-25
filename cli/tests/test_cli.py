@@ -16,7 +16,7 @@ import honest_agent.cli as cli_mod
 from honest_agent.cli import main
 from honest_agent.grading import UNREADABLE_REPLY
 from honest_agent.raw import RunRecorder, read_records
-from honest_agent.runner import eval_loop, failure_summary, resolve_agent_name
+from honest_agent.runner import eval_loop, failure_summary, grader_shown, grading_effort_for, resolve_agent_name
 from honest_agent.sql_guard import TIMED_OUT
 from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
 from honest_agent.thresholds import EVAL_ERROR, failing_rows
@@ -218,11 +218,25 @@ def test_the_default_grading_model_is_a_stronger_one_at_low_effort(fake_run, in_
     assert "WARNING" not in fake_run["output"]
 
 
-def test_a_chosen_grading_model_runs_at_its_providers_default_effort(fake_run, in_tmp_dir):
+def test_a_chosen_grading_model_also_runs_at_low_effort(fake_run, in_tmp_dir):
     _run_capturing_models(fake_run, ["--model", "claude-haiku-5-5", "--grading-model", "claude-opus-5-5"])
 
-    assert fake_run["grading_effort"] is None
+    assert fake_run["grading_effort"] == "low"
     assert "No --grading-model given" not in fake_run["output"]
+
+
+def test_the_default_grading_effort_skips_a_model_that_takes_none(fake_run, in_tmp_dir):
+    Path("evals").mkdir()
+    result = CliRunner().invoke(
+        main,
+        ["run", "--evals-dir", "evals", "--mcp-command", "x", "--model", "gpt-5.4-mini", "--grading-model", "gpt-4o"],
+        env={"OPENAI_API_KEY": "test", "HONEST_AGENT_GRADING_EFFORT": ""},
+    )
+
+    # Not an error, unlike an effort set for it: low is only the default, and gpt-4o gets none.
+    assert result.exit_code == 0, result.output
+    assert grading_effort_for("gpt-4o", fake_run["grading_effort"]) is None
+    assert grader_shown("gpt-4o", fake_run["grading_effort"]) == "gpt-4o"
 
 
 def test_efforts_can_be_set_for_both_models(fake_run, in_tmp_dir):

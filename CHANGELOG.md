@@ -18,6 +18,11 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   `grading_model: {extract_match: ..., llm_judge: ...}`. A method left out gets the
   default. A single model, and `--grading-model`, still set both, so existing configs
   grade as before.
+- **`grading_effort` now defaults to `low` for a grading model you choose too**, not only
+  for the default one, and for both methods. Before, naming any grading model, even only
+  the `llm_judge` one, sent no effort, so the provider's default applied: earlier runs
+  with a named grading model were graded at that default. Models that take no effort
+  setting still get none, and each result records the effort its grading call sent.
 - **Each result records the model that graded it**, read from its own grading call, so a
   run with two grading models labels and prices every result right.
 - `openai` is now `>=3.27`, for its Decisions API.

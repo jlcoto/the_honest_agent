@@ -57,8 +57,9 @@ SETTINGS = {
     ),
     "grading_effort": (
         "both",
-        "How much the grading model thinks: `low`, `medium` or `high`. Default: `low` for the default "
-        "grading model; the provider's default for one you choose.",
+        "How much the grading model thinks, for both `extract_match` and `llm_judge`: `low`, `medium` or "
+        "`high`. Default: `low`, for the default grading model and one you choose. Models that take no "
+        "effort setting, and decision models, get none.",
     ),
     "max_tool_steps": (
         "both",

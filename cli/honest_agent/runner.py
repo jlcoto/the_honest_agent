@@ -22,7 +22,16 @@ from .eval_loader import (
     select_evals,
 )
 from .grading import DECISION_QUESTION, GRADING_MAX_TOKENS, GRADING_SCHEMAS, NOT_GRADED, grading_prompt, judge_state
-from .llm import OPENAI, DecisionJudge, Judge, is_decision_model, make_judge, provider_error, provider_for
+from .llm import (
+    OPENAI,
+    DecisionJudge,
+    Judge,
+    effort_unsupported,
+    is_decision_model,
+    make_judge,
+    provider_error,
+    provider_for,
+)
 from .mcp_client import DEFAULT_TOOL_TIMEOUT
 from .prices import PRICES_AS_OF, price_for, usd
 from .progress import Progress
@@ -78,14 +87,15 @@ async def eval_loop(
                     )
                 elif prompt := grading_prompt(method, answer, definition.expected_answer, definition.prompt):
                     schema = GRADING_SCHEMAS[method]
+                    effort = grading_effort_for(grader, grading_effort)
                     request = {
                         "model": grader,
                         "max_tokens": GRADING_MAX_TOKENS,
                         "prompt": prompt,
                         "schema": schema,
                     }
-                    if grading_effort:
-                        request["effort"] = grading_effort
+                    if effort:
+                        request["effort"] = effort
                     await record.call(
                         "grading_call",
                         provider_for(grader),
@@ -95,7 +105,7 @@ async def eval_loop(
                             model=grader,
                             max_tokens=GRADING_MAX_TOKENS,
                             schema=schema,
-                            effort=grading_effort,
+                            effort=effort,
                         ),
                     )
                 derived = derive_result(con, result_id)
@@ -165,10 +175,18 @@ def with_effort(model: str, effort: str | None) -> str:
     return f"{model} ({effort} effort)" if effort else model
 
 
+def grading_effort_for(model: str, effort: str | None) -> str | None:
+    """The effort sent to grading model `model`: none for a model known to reject one, so
+    the default low effort doesn't stop a run whose grading model takes none."""
+    return None if effort_unsupported(model) else effort
+
+
 def grader_shown(model: str, effort: str | None) -> str:
-    """A grading model as the run reports it: with its effort, or `(decision model)`,
-    which takes none."""
-    return f"{model} (decision model)" if is_decision_model(model) else with_effort(model, effort)
+    """A grading model as the run reports it: with the effort it's sent, or `(decision
+    model)`, which takes none."""
+    if is_decision_model(model):
+        return f"{model} (decision model)"
+    return with_effort(model, grading_effort_for(model, effort))
 
 
 def saved_prices(model: str, graders: dict[str, str], custom: dict | None) -> dict:

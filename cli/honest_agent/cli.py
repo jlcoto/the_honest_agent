@@ -189,10 +189,11 @@ def _resolve_models(
     grading_effort: str | None,
 ) -> Models:
     """Applies the layers to the models and efforts, then the defaults: the agent's model
-    from the API key, a stronger judge from the agent's provider at low effort. grading_model
-    is one model for both methods, or (in the config file) one per method; a method it
-    leaves out gets the default. Stops when an effort is set for a model known to reject
-    it, or a decision model would have to extract a value."""
+    from the API key, a stronger judge from the agent's provider, and low grading effort
+    (sent only to grading models that take one). grading_model is one model for both
+    methods, or (in the config file) one per method; a method it leaves out gets the
+    default. Stops when an effort is set for a model known to reject it, or a decision
+    model would have to extract a value."""
     model = _from_layers(ctx, "model", model, layer)
     model_defaulted = not model
     model = model or default_model(os.environ)
@@ -216,8 +217,10 @@ def _resolve_models(
         )
     effort = _effort_value(_from_layers(ctx, "effort", effort, layer), "effort")
     grading_effort = _effort_value(_from_layers(ctx, "grading_effort", grading_effort, layer), "grading_effort")
-    if grading_effort is None and grading_defaulted:
-        grading_effort = DEFAULT_GRADING_EFFORT
+    # The default low effort skips models that reject one (runner.grading_effort_for); one
+    # set explicitly for such a model stops the run below.
+    grading_effort_set = grading_effort is not None
+    grading_effort = grading_effort or DEFAULT_GRADING_EFFORT
     if model and agent_unsupported(model):
         raise click.ClickException(
             f"{model} can't be the agent yet: on Chat Completions, the OpenAI API honest-agent uses, GPT-6 "
@@ -230,7 +233,9 @@ def _resolve_models(
             "Run honest-agent on a newer Python, or pick another judge."
         )
     llm_graders = [name for name in dict.fromkeys(graders.values()) if not is_decision_model(name)]
-    checks = [(model, effort, "effort")] + [(name, grading_effort, "grading_effort") for name in llm_graders]
+    checks = [(model, effort, "effort")]
+    if grading_effort_set:
+        checks += [(name, grading_effort, "grading_effort") for name in llm_graders]
     for name, value, key in checks:
         if name and value and effort_unsupported(name):
             raise click.ClickException(
@@ -439,8 +444,9 @@ _model_options = _options(
         envvar="HONEST_AGENT_GRADING_EFFORT",
         type=click.Choice(EFFORTS, case_sensitive=False),
         default=None,
-        help="How much the grading model thinks before it grades. Defaults to low for the default grading "
-        "model; a grading model you choose runs at its provider's default unless you set this.",
+        help="How much the grading model thinks before it grades, for both extract_match and llm_judge. "
+        "Defaults to low, for the default grading model and one you choose; models that take no effort "
+        "setting (and decision models) get none.",
     ),
 )
 _mcp_options = _options(

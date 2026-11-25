@@ -336,6 +336,17 @@ def test_a_method_left_out_of_the_mapping_gets_the_default_grading_model(project
     assert fake_run["graders"] == {"extract_match": "claude-sonnet-5-5", "llm_judge": "claude-opus-5-5"}
 
 
+def test_setting_only_the_judge_keeps_low_effort_for_extract_match(project, fake_run):
+    # Naming a judge must not change how extract_match is graded: same model, same effort.
+    _config("grading_model:\n  llm_judge: jev-1.14.0\n")
+
+    result = _invoke(env={"TYPESAFE_API_KEY": "k"})
+
+    assert result.exit_code == 0, result.output
+    assert fake_run["graders"]["extract_match"] == "claude-sonnet-5-5"
+    assert fake_run["grading_effort"] == "low"
+
+
 def test_the_flag_sets_both_methods_over_the_files_mapping(project, fake_run):
     _config("grading_model:\n  llm_judge: jev-1.14.0\n")
 

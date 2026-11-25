@@ -136,11 +136,12 @@ targets:
   or `high`. Without it, none is sent and the provider's default applies. The effort is
   part of what you evaluate: the report shows each model and effort as its own agent
   model, such as `claude-haiku-5-5 · medium`.
-- **`grading_effort`** does the same for the grading model. The default grading model runs
-  at `low`: grading against an expected answer needs little thinking. A grading model you
-  choose runs at its provider's default unless you set it.
+- **`grading_effort`** does the same for the grading model, for both `extract_match` and
+  `llm_judge`. It defaults to `low`, whether the grading model is the default or one you
+  choose: grading against an expected answer needs little thinking. Decision models take
+  none.
 - Claude Haiku 4.5 and Sonnet 4.5 and OpenAI's GPT-4 models don't accept an effort, so
-  `run` stops if one is set for them.
+  `run` stops if one is set for them. As a grading model they get no effort by default.
 
 ## Other target settings
 
