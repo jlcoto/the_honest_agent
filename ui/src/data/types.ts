@@ -14,6 +14,8 @@ export interface ResultRow {
   agent_answer: string | null // null when the eval stopped with an error before answering
   tools_used: string[] | null
   accuracy_score: number | null // null when the eval stopped with an error (status 'error')
+  // A decision model's P(yes) that the answer is correct; accuracy_score is then 1 or 0 against the min.
+  accuracy_confidence?: number | null
   accuracy_method: string
   grading_model: string | null // grading model for extract_match/llm_judge; null for contains
   grading_effort?: string | null // the grading model's effort; null when none was sent (provider default)
@@ -65,7 +67,10 @@ export interface AgentLogRow {
 }
 
 /** The grading call, as derive.grading_details records it, for the Grading card. */
-export interface GradingCall {
+export type GradingCall = LlmGradingCall | DecisionGradingCall
+
+interface LlmGradingCall {
+  kind?: undefined
   model: string | null
   reply: string
   stop_reason: string | null
@@ -73,6 +78,20 @@ export interface GradingCall {
   input_tokens: number
   output_tokens: number
   thinking_tokens: number | null
+  duration_ms: number | null
+}
+
+/** A decision model's call: a yes/no question, its P(yes), and no text or reason. */
+export interface DecisionGradingCall {
+  kind: 'decision'
+  model: string | null
+  served_model: string | null // the model that answered, when the response names it
+  question: string | null
+  reply: string // the answers, as JSON
+  probability: number | null
+  confidence: number | null // the provider's own confidence, where it gives one (Google)
+  input_tokens: number
+  output_tokens: number
   duration_ms: number | null
 }
 

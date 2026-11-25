@@ -19,7 +19,7 @@ import {
   smallUsd,
   toolCallsFor,
 } from '../data/derive'
-import type { GradingCall, ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
+import type { DecisionGradingCall, GradingCall, ReportData, ResultRow, SourceRef, StepDetails, ToolCallRow } from '../data/types'
 import { Badge, Button, Card, Icon, IconButton, ScoreStat } from '../ds'
 import { useNarrow } from '../useNarrow'
 
@@ -297,7 +297,24 @@ function ErrorAccuracyCard({ r }: { r: ResultRow }) {
   )
 }
 
-function AccuracyCard({ r }: { r: ResultRow }) {
+const percent = (v: number) => `${Math.round(v * 100)}%`
+// llm._ALIASES: names that move to a newer model without the config changing.
+const DECISION_ALIASES = ['jev-latest', 'jev-preview']
+
+/** The grading-model chip. When a decision model was named by an alias and the reply says which version
+ * answered, it shows both: jev-latest → jev-1.14.0. */
+function GradingModelBadge({ model, call }: { model: string; call: GradingCall | null }) {
+  const served = call?.kind === 'decision' ? call.served_model : null
+  return (
+    <Badge mono>
+      grading model {model}
+      {served && served !== model ? ` → ${served}` : null}
+      {!served && DECISION_ALIASES.includes(model) ? <span style={{ color: 'var(--fg-3)' }}> (alias)</span> : null}
+    </Badge>
+  )
+}
+
+function AccuracyCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
   if (isError(r)) return <ErrorAccuracyCard r={r} />
   const ok = accuracyPasses(r)
   const tolerances = toleranceLabels(r)
@@ -318,10 +335,27 @@ function AccuracyCard({ r }: { r: ResultRow }) {
       })
     }
   } else {
-    // llm_judge gives a score between 0 and 1, so it goes under the answer it scored.
-    const scored = r.accuracy_method === 'llm_judge' ? `score ${pct(r.accuracy_score)}` : undefined
+    // llm_judge gives a score between 0 and 1, so it goes under the answer it scored; a decision model
+    // gives pass/fail, with how sure it is that the answer is correct.
+    const sure = r.accuracy_confidence
+    const scored =
+      r.accuracy_method !== 'llm_judge' ? undefined : sure != null ? `${percent(sure)} sure it's correct` : `score ${pct(r.accuracy_score)}`
     rows = [{ ...expected, text: true }, { label: 'Agent answer', hint: scored, value: answerText(r.agent_answer ?? ''), text: true }]
-    if (r.accuracy_method === 'llm_judge') {
+    if (sure != null) {
+      rows.push({
+        label: 'Decision',
+        hint: 'no rationale',
+        value: (
+          <>
+            <p style={para}>
+              {percent(sure)} sure the answer is correct. It passes at {percent(r.accuracy_min_score ?? 0)} or more.
+            </p>
+            <p style={{ ...para, color: 'var(--fg-3)' }}>Decision models answer yes or no with a probability, so there's no reason to show.</p>
+          </>
+        ),
+        text: true,
+      })
+    } else if (r.accuracy_method === 'llm_judge') {
       rows.push({
         label: 'Judge',
         hint: r.grading_model ?? undefined,
@@ -358,7 +392,7 @@ function AccuracyCard({ r }: { r: ResultRow }) {
               </Badge>
             ))
           : null}
-        {r.accuracy_method !== 'contains' && r.grading_model ? <Badge mono>grading model {r.grading_model}</Badge> : null}
+        {r.accuracy_method !== 'contains' && r.grading_model ? <GradingModelBadge model={r.grading_model} call={call} /> : null}
         {r.accuracy_method !== 'contains' && r.grading_effort ? <Badge mono>grading effort {r.grading_effort}</Badge> : null}
       </div>
     </Card>
@@ -1146,7 +1180,7 @@ const NOT_GRADED = 'Not graded:' // the rationale grading.py records when an eva
 const CUT_OFF_STOPS = ['max_tokens', 'length'] // Anthropic's and OpenAI's words for "hit the token limit"
 
 /** How the grading call stopped, in plain words. */
-function stopWords(call: GradingCall): string | null {
+function stopWords(call: Exclude<GradingCall, DecisionGradingCall>): string | null {
   if (call.stop_reason && CUT_OFF_STOPS.includes(call.stop_reason))
     return `stopped: reached the token limit${call.max_tokens ? ` (${call.max_tokens.toLocaleString('en-US')})` : ''}`
   if (call.stop_reason === 'end_turn' || call.stop_reason === 'stop') return 'stopped for the reply'
@@ -1173,14 +1207,18 @@ function GradedCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
   const notGraded = (r.accuracy_rationale ?? '').startsWith(NOT_GRADED)
   const usesModel = r.accuracy_method !== 'contains'
   // The chip names the setting (grading_model); this line says what the model did with it.
+  const decision = call?.kind === 'decision'
+  const sure = r.accuracy_confidence
   const role =
-    r.accuracy_method === 'extract_match'
+    decision && sure != null
+      ? `A decision model answered a yes/no question: ${percent(sure)} sure the answer is correct (min ${percent(r.accuracy_min_score ?? 0)}). Decision models give no rationale.`
+      : r.accuracy_method === 'extract_match'
       ? 'The grading model pulled the value out of the answer; code compared it with the expected one.'
       : r.accuracy_method === 'llm_judge'
         ? 'The grading model judged the answer and gave it a score.'
         : null
   const model = call?.model ?? r.grading_model
-  const stop = call ? stopWords(call) : null
+  const stop = call && call.kind !== 'decision' ? stopWords(call) : null
   const copy = () =>
     navigator.clipboard?.writeText(call?.reply ?? '').then(
       () => {
@@ -1256,7 +1294,7 @@ function GradedCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
               </div>
             ) : null}
           </div>
-          {call.thinking_tokens ? (
+          {call.kind !== 'decision' && call.thinking_tokens ? (
             <i style={muted}>
               Thought before replying: {call.thinking_tokens.toLocaleString('en-US')} of {call.output_tokens.toLocaleString('en-US')} output tokens (hidden by
               the provider)
@@ -1265,7 +1303,7 @@ function GradedCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <Badge mono>{usesModel ? `grading model ${model ?? ''}`.trim() : 'graded in code, no model call'}</Badge>
+        {usesModel && model ? <GradingModelBadge model={model} call={call} /> : <Badge mono>{usesModel ? 'grading model' : 'graded in code, no model call'}</Badge>}
         {usesModel && r.grading_effort ? <Badge mono>grading effort {r.grading_effort}</Badge> : null}
       </div>
     </Card>
@@ -1367,7 +1405,7 @@ export function ResultDetail({ data, resultId }: { data: ReportData; resultId: s
         </Card>
       </div>
 
-      <AccuracyCard r={r} />
+      <AccuracyCard r={r} call={grading} />
 
       <ProvenanceCard r={r} />
 
