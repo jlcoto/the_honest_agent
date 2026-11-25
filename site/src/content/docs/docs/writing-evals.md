@@ -257,8 +257,21 @@ grading_model:
 A decision model answers a yes/no question with a probability instead of writing text.
 honest-agent can use one to judge `llm_judge` evals: it asks whether the given answer is
 correct and equivalent to the expected answer, with the same rules as the LLM judge. It
-can't grade `extract_match`, which needs a value pulled out of the answer, so `run` stops
-if one is set for it.
+can't grade `extract_match`, which needs a value pulled out of the answer.
+
+So set it for `llm_judge` only, with the per-method form in the config file.
+`extract_match` keeps an LLM: the one you name, or the default grading model when you
+leave it out:
+
+```yaml
+grading_model:
+  llm_judge: jev-1.14.0   # extract_match gets the default grading model
+```
+
+A decision model given as one model for both methods (`grading_model: jev-1.14.0`,
+`--grading-model` or `HONEST_AGENT_GRADING_MODEL`) stops `run` and `debug` before the
+first eval, with the config to use instead. This holds even when none of your evals use
+`extract_match`, so a config that works keeps working when one is added.
 
 | Model | Provider | API key |
 |---|---|---|
@@ -266,17 +279,11 @@ if one is set for it.
 | `decision:gpt-6-luna` | [OpenAI's Decisions API](https://developers.openai.com/api/docs/guides/decisions.md) | `OPENAI_API_KEY` |
 | `gemini-decision-1` | [Gemini Decisions API](https://aistudio.google.com/docs/decisions-api) | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
 
-```yaml
-grading_model:
-  extract_match: claude-sonnet-5-5
-  llm_judge: jev-1.14.0
-```
-
 - **Pass or fail, no partial credit.** With a decision model, `min_score` is measured
   against P(yes), the model's probability that the answer is correct, not against a
   partial-credit score. The eval passes when P(yes) reaches `min_score` (0.8 by default,
-  so the model must give the answer at least an 80% chance of being correct). Its `accuracy_score` is then 1 or 0, and
-  P(yes) is stored in `accuracy_confidence`.
+  so the model must give the answer at least an 80% chance of being correct). Its
+  `accuracy_score` is then 1 or 0, and P(yes) is stored in `accuracy_confidence`.
 - **No reason.** A decision model gives no rationale, so the result shows only the
   verdict and the chance the model gave.
 - **Pin a version.** `jev-latest` and `jev-preview` are aliases that move to each new

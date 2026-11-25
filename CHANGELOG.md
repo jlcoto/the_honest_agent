@@ -11,8 +11,9 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
   answer one yes/no question, whether the answer is correct, with a probability. The eval
   passes when that probability reaches its `min_score`: `accuracy_score` is 1 or 0, and
   the probability is in the new `accuracy_confidence` column. They give no reason, and
-  can't grade `extract_match`. Each needs its provider's API key; Gemini also needs
-  Python 3.11.
+  can't grade `extract_match`, so they're set for `llm_judge` only
+  (`grading_model: {llm_judge: jev-1.14.0}`); `run` stops if one would grade both methods.
+  Each needs its provider's API key; Gemini also needs Python 3.11.
 - **`grading_model` can name one model per method** in the config file:
   `grading_model: {extract_match: ..., llm_judge: ...}`. A method left out gets the
   default. A single model, and `--grading-model`, still set both, so existing configs

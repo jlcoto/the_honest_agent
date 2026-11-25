@@ -130,7 +130,8 @@ targets:
     llm_judge: jev-1.14.0
   ```
 
-  A method you leave out gets the default. `--grading-model` sets both methods for one run.
+  A method you leave out gets the default. `--grading-model` sets both methods for one run,
+  so it can't name a decision model, which can only judge `llm_judge` evals.
 - **`effort`** sets how much the agent's model thinks before it answers: `low`, `medium`
   or `high`. Without it, none is sent and the provider's default applies. The effort is
   part of what you evaluate: the report shows each model and effort as its own agent
