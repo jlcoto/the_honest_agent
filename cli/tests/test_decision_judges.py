@@ -174,6 +174,8 @@ def test_each_providers_answer_tokens_and_model_are_read_from_its_own_response()
         (140, 0),
     ]
     assert served_model(TYPESAFE, TYPESAFE_RESPONSE) == "jev-1.14.0"
+    # OpenAI names the model without our prefix; the report compares it with the config's name.
+    assert served_model(OPENAI_DECISIONS, OPENAI_RESPONSE) == "decision:gpt-6-luna"
     assert served_model(GOOGLE, GOOGLE_RESPONSE) is None  # Google's response doesn't name it
 
 

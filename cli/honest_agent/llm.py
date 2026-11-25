@@ -219,9 +219,12 @@ def decision_answer(provider: str, response: dict) -> tuple[float | None, float 
 
 
 def served_model(provider: str, response: dict) -> str | None:
-    """The model that answered, as the response names it (it can differ from an alias
-    asked for); None when the provider doesn't say (Google)."""
-    return response.get("model") if provider in (TYPESAFE, OPENAI_DECISIONS) else None
+    """The model that answered, named the way the config names it (it can differ from an
+    alias asked for); None when the provider doesn't say (Google). OpenAI's response
+    leaves out our decision: prefix, so it's added back."""
+    if provider == OPENAI_DECISIONS and response.get("model"):
+        return OPENAI_DECISIONS_PREFIX + response["model"]
+    return response.get("model") if provider == TYPESAFE else None
 
 
 def response_text(provider: str, response: dict) -> str:
