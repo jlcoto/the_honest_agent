@@ -147,9 +147,9 @@ def failure_summary(rows: list[dict], failures: list[dict]) -> list[str]:
 
 def accuracy_shortfall(row: dict) -> str:
     """Why accuracy failed: `accuracy 0.40 < 0.8`, or for a decision model, which gives
-    pass/fail, how sure it was: `accuracy fail, 32% sure it's correct (min 0.8)`."""
+    pass/fail, the chance it gave: `accuracy fail, 32% chance it's correct (min 0.8)`."""
     if row.get("accuracy_confidence") is not None:
-        return f"accuracy fail, {row['accuracy_confidence']:.0%} sure it's correct (min {row['accuracy_min_score']})"
+        return f"accuracy fail, {row['accuracy_confidence']:.0%} chance it's correct (min {row['accuracy_min_score']})"
     return f"accuracy {row['accuracy_score']:.2f} < {row['accuracy_min_score']}"
 
 

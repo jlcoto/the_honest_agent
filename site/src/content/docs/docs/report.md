@@ -129,8 +129,8 @@ that answer was graded, which tables it read, and the steps it took to get there
   value the grader pulled out and the difference, against the tolerance; for
   `llm_judge`, the judge's score (under the answer) and its reason. A
   [decision model](/docs/writing-evals/#using-a-decision-model-as-the-judge) judge gives no
-  score or reason: the card says how sure it was that the answer is correct, for example
-  "85% sure it's correct", and the min score that sure has to reach. "Show the agent's full
+  score or reason: the card gives the chance it put on the answer being correct, for example
+  "85% chance it's correct", and the min score that chance has to reach. "Show the agent's full
   reply" shows the whole answer.
 - **Provenance:** each expected source, with the database, schema and table the agent
   read, or "not read".

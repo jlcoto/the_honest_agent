@@ -185,7 +185,7 @@ DECISION_QUESTION = (
 def decision_grade(probability: float | None, min_score: float) -> Grade:
     """A decision model's verdict as pass/fail: 1.0 when its P(yes) that the answer is
     correct reaches the eval's min_score, else 0.0, with P(yes) kept as the confidence.
-    It gives no rationale, and no partial credit: P(yes) is how sure it is, not how much
+    It gives no rationale, and no partial credit: P(yes) is the chance the answer is correct, not how much
     of the answer is right."""
     if probability is None:
         return Grade(0.0, f"{NOT_GRADED} the decision model gave no answer to the question", None)

@@ -287,10 +287,10 @@ def test_a_decision_model_below_min_score_fails_and_says_how_sure_it_was(tmp_pat
 
     assert (row["accuracy_score"], row["accuracy_confidence"]) == (0.0, 0.32)
     failures = failing_rows([row])
-    assert "q1: accuracy fail, 32% sure it's correct (min 0.8)" in "\n".join(failure_summary([row], failures))
+    assert "q1: accuracy fail, 32% chance it's correct (min 0.8)" in "\n".join(failure_summary([row], failures))
     message = alert_message([row], failures)
     assert any(
-        "Accuracy *fail*, 32% sure it's correct (min 0.8)" in b.get("text", {}).get("text", "")
+        "Accuracy *fail*, 32% chance it's correct (min 0.8)" in b.get("text", {}).get("text", "")
         for b in message["blocks"]
     )
 

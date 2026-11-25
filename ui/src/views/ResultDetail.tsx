@@ -336,19 +336,19 @@ function AccuracyCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
     }
   } else {
     // llm_judge gives a score between 0 and 1, so it goes under the answer it scored; a decision model
-    // gives pass/fail, with how sure it is that the answer is correct.
-    const sure = r.accuracy_confidence
+    // gives pass/fail, with the chance it gave that the answer is correct.
+    const chance = r.accuracy_confidence
     const scored =
-      r.accuracy_method !== 'llm_judge' ? undefined : sure != null ? `${percent(sure)} sure it's correct` : `score ${pct(r.accuracy_score)}`
+      r.accuracy_method !== 'llm_judge' ? undefined : chance != null ? `${percent(chance)} chance it's correct` : `score ${pct(r.accuracy_score)}`
     rows = [{ ...expected, text: true }, { label: 'Agent answer', hint: scored, value: answerText(r.agent_answer ?? ''), text: true }]
-    if (sure != null) {
+    if (chance != null) {
       rows.push({
         label: 'Decision',
         hint: 'no rationale',
         value: (
           <>
             <p style={para}>
-              {percent(sure)} sure the answer is correct. It passes at {percent(r.accuracy_min_score ?? 0)} or more.
+              {percent(chance)} chance the answer is correct. It needs {percent(r.accuracy_min_score ?? 0)} to pass.
             </p>
             <p style={{ ...para, color: 'var(--fg-3)' }}>Decision models answer yes or no with a probability, so there's no reason to show.</p>
           </>
@@ -1208,10 +1208,10 @@ function GradedCard({ r, call }: { r: ResultRow; call: GradingCall | null }) {
   const usesModel = r.accuracy_method !== 'contains'
   // The chip names the setting (grading_model); this line says what the model did with it.
   const decision = call?.kind === 'decision'
-  const sure = r.accuracy_confidence
+  const chance = r.accuracy_confidence
   const role =
-    decision && sure != null
-      ? `A decision model answered a yes/no question: ${percent(sure)} sure the answer is correct (min ${percent(r.accuracy_min_score ?? 0)}). Decision models give no rationale.`
+    decision && chance != null
+      ? `A decision model answered a yes/no question: ${percent(chance)} chance the answer is correct (min ${percent(r.accuracy_min_score ?? 0)}). Decision models give no rationale.`
       : r.accuracy_method === 'extract_match'
       ? 'The grading model pulled the value out of the answer; code compared it with the expected one.'
       : r.accuracy_method === 'llm_judge'

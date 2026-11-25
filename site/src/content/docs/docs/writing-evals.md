@@ -275,10 +275,10 @@ grading_model:
 - **Pass or fail, no partial credit.** With a decision model, `min_score` is measured
   against P(yes), the model's probability that the answer is correct, not against a
   partial-credit score. The eval passes when P(yes) reaches `min_score` (0.8 by default,
-  so the model must be at least 80% sure). Its `accuracy_score` is then 1 or 0, and
+  so the model must give the answer at least an 80% chance of being correct). Its `accuracy_score` is then 1 or 0, and
   P(yes) is stored in `accuracy_confidence`.
 - **No reason.** A decision model gives no rationale, so the result shows only the
-  verdict and how sure the model was.
+  verdict and the chance the model gave.
 - **Pin a version.** `jev-latest` and `jev-preview` are aliases that move to each new
   release, so grades can change between runs with nothing changed on your side. `run`
   warns when the judge is an alias.

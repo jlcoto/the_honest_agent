@@ -74,7 +74,7 @@ def alert_message(
             if f.get("accuracy_confidence") is not None:
                 # A decision model gives pass/fail; its P(yes) says more than a bare 0.00.
                 verdict = "pass" if f["accuracy_pass"] else "fail"
-                accuracy = f"Accuracy *{verdict}*, {f['accuracy_confidence']:.0%} sure it's correct"
+                accuracy = f"Accuracy *{verdict}*, {f['accuracy_confidence']:.0%} chance it's correct"
             else:
                 accuracy = f"Accuracy *{f['accuracy_score']:.2f}*"
             scores = [f"{accuracy} (min {f['accuracy_min_score']})"]
