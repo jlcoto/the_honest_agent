@@ -292,7 +292,9 @@ first eval, with the config to use instead. This holds even when none of your ev
 - **`decision:gpt-6-luna`** is written with the prefix because `gpt-6-luna` is also a chat
   model: plain `gpt-6-luna` stays the chat model.
 - **Gemini needs Python 3.11** or later, as Google's SDK for its Decisions API does.
-- Gemini's probabilities stop at 0.99, so an eval with `min_score: 1.0` never passes with it.
+- **Keep `min_score` below 1.0.** Gemini's probabilities stop at 0.99, and Jev gave 0.99
+  for a clearly correct answer in our tests, so with `min_score: 1.0` they fail answers
+  they judge correct.
 
 ## Checking provenance
 
