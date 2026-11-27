@@ -114,7 +114,7 @@ targets:
   as the agent and as the grading model, GPT-5.6 and GPT-6 included. Nothing is stored at
   OpenAI between steps (`store: false`): each step sends the conversation so far,
   with the model's reasoning as OpenAI returned it, encrypted.
-- **The provider comes from the name:** `gpt-*`, `o3`, `o4-mini` and similar are OpenAI;
+- **The provider comes from the name:** `gpt-*`, `o3` and similar are OpenAI;
   `jev-*`, `gemini-decision-*` and `decision:gpt-6-luna` are decision models; anything
   else is Claude.
 - **`grading_model`** is the model for grading, for both methods that use one:

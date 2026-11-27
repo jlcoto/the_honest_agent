@@ -70,7 +70,7 @@ class OpenAIResponsesAgentClient(AgentClient):
         self._model = model
         self._tools = [_mcp_tool_to_responses_schema(t) for t in tools]
         self._max_tool_steps = max_tool_steps
-        # The server's instructions, sent as the system message like a chat client would.
+        # The server's instructions, sent as `instructions` (the Responses API's system message).
         self._optional: dict = {"instructions": instructions} if instructions else {}
         # OpenAI caches a repeated prompt start by itself; one key per run keeps a run's
         # calls on the same cache.
