@@ -110,10 +110,11 @@ targets:
 - **`model`** runs the agent. Without one, honest-agent picks a small, cheap model from
   the key it finds: `claude-haiku-5-5` if `ANTHROPIC_API_KEY` is set, otherwise
   `gpt-5.4-mini`. It prints which one it chose.
-- **OpenAI's GPT-6 models can't be the agent yet.** honest-agent talks to OpenAI through
-  Chat Completions, where GPT-6 models can't think and call tools in one request, so
-  `run` stops before the first call. They can be the grading model, which calls no tools.
-- **The provider comes from the name:** `gpt-*`, `o3`, `o4-mini` and similar are OpenAI;
+- **OpenAI models run on the [Responses API](https://developers.openai.com/api/docs/guides/migrate-to-responses),**
+  as the agent and as the grading model, GPT-5.6 and GPT-6 included. Nothing is stored at
+  OpenAI between steps (`store: false`): each step sends the conversation so far,
+  with the model's reasoning as OpenAI returned it, encrypted.
+- **The provider comes from the name:** `gpt-*`, `o3` and similar are OpenAI;
   `jev-*`, `gemini-decision-*` and `decision:gpt-6-luna` are decision models; anything
   else is Claude.
 - **`grading_model`** is the model for grading, for both methods that use one:

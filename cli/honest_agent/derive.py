@@ -17,8 +17,10 @@ from .eval_loader import EvalDefinition
 from .grading import CUT_OFF_REPLY, Grade, decision_grade, score
 from .llm import (
     DECISION_PROVIDERS,
-    OPENAI,
+    OPENAI_CHAT,
+    OPENAI_RESPONSES,
     decision_answer,
+    function_calls,
     response_cache_tokens,
     response_stop,
     response_text,
@@ -42,7 +44,9 @@ class Derived(NamedTuple):
 
 
 def _wants_tools(event: dict) -> bool:
-    if event["provider"] == OPENAI:
+    if event["provider"] == OPENAI_RESPONSES:
+        return bool(function_calls(event["response"]))
+    if event["provider"] == OPENAI_CHAT:
         return bool(event["response"]["choices"][0]["message"].get("tool_calls"))
     return any(block.get("type") == "tool_use" for block in event["response"].get("content", []))
 
@@ -65,8 +69,25 @@ def _tool_result(event: dict) -> dict:
 
 def _assistant_content(event: dict) -> list[dict]:
     """A model reply in the shared format: Claude's content blocks as they came; OpenAI's
-    message converted to the same text and tool_use blocks."""
-    if event["provider"] != OPENAI:
+    message (Chat Completions) or output items (Responses API) converted to the same text
+    and tool_use blocks. OpenAI's reasoning isn't shown: it comes encrypted."""
+    if event["provider"] == OPENAI_RESPONSES:
+        blocks = []
+        for item in event["response"].get("output") or []:
+            if item.get("type") == "message":
+                parts = item.get("content") or []
+                blocks += [{"type": "text", "text": p["text"]} for p in parts if p.get("type") == "output_text"]
+            elif item.get("type") == "function_call":
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": item["call_id"],
+                        "name": item["name"],
+                        "input": json.loads(item.get("arguments") or "{}"),
+                    }
+                )
+        return blocks
+    if event["provider"] != OPENAI_CHAT:
         return event["response"].get("content", [])
     message = event["response"]["choices"][0]["message"]
     text = [{"type": "text", "text": message["content"]}] if message.get("content") else []
@@ -107,8 +128,10 @@ def step_details(events: list[dict], price: Price | None = None) -> dict:
 def _thinking_tokens(provider: str, response: dict) -> int | None:
     """Output tokens the model spent thinking, when the provider reports them."""
     usage = response.get("usage") or {}
-    details = usage.get("completion_tokens_details" if provider == OPENAI else "output_tokens_details") or {}
-    return details.get("reasoning_tokens" if provider == OPENAI else "thinking_tokens")
+    if provider == OPENAI_CHAT:
+        return (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+    details = usage.get("output_tokens_details") or {}
+    return details.get("reasoning_tokens" if provider == OPENAI_RESPONSES else "thinking_tokens")
 
 
 def grading_details(event: dict | None) -> dict | None:
@@ -162,8 +185,9 @@ def conversation(prompt: str, events: list[dict]) -> list[dict]:
     return trace
 
 
-# Why a reply stopped when the model hit its output cap: Anthropic's and OpenAI's words.
-_CUT_OFF_STOPS = ("max_tokens", "length")
+# Why a reply stopped when the model hit its output cap: Anthropic's and OpenAI's words
+# (Chat Completions, then the Responses API).
+_CUT_OFF_STOPS = ("max_tokens", "length", "max_output_tokens")
 CUT_OFF_ANSWER = "[honest-agent error] The agent's reply was cut off at its token limit"
 
 

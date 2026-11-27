@@ -6,6 +6,18 @@ its notes start with what changed and what to do. A patch version (0.1.0 ->
 
 ## Unreleased
 
+- **OpenAI's GPT-5.6 and GPT-6 models can be the agent.** honest-agent now talks to OpenAI
+  through the Responses API, for the agent and for the grading model. Before, it used
+  Chat Completions, where models that think by default, or are given an `effort`, can't
+  call tools: `run` stopped before the first call for a GPT-6 agent, and GPT-5.6 agents
+  failed on their first call. GPT-5.4 with an `effort` set works now too. Nothing is stored at OpenAI between an eval's steps
+  (`store: false`): each step sends the conversation so far. Without `effort`, nothing is
+  sent and the model's own default applies, as before; `gpt-5.4-mini` still runs without
+  reasoning. Past runs read and rebuild as before: their OpenAI calls stay `openai` in
+  `raw.events`, and new ones are `openai_responses`.
+- **Each run records the API of its agent and grading models** in `raw.runs.settings`
+  (`apis`), for every provider, since the same OpenAI model went to Chat Completions
+  before this release and to the Responses API after.
 - **A decision model can judge `llm_judge` evals.** TypeSafe's Jev (`jev-1.14.0`), OpenAI's
   Decisions API (`decision:gpt-6-luna`) and Google's Gemini Decisions (`gemini-decision-1`)
   answer one yes/no question, whether the answer is correct, with a probability. The eval

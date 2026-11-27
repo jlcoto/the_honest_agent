@@ -16,6 +16,13 @@ from typing import Any, Protocol
 
 ANTHROPIC = "anthropic"
 OPENAI = "openai"
+# What raw.events records an OpenAI model's calls under: the API they went to, since the
+# two return differently shaped responses. Chat Completions came first, so its records
+# kept the provider's name; honest-agent no longer sends OpenAI's own models there, but
+# its stored runs still read, and OpenAI-compatible endpoints speak it. The Responses API
+# runs OpenAI's models, as the agent and as the judge.
+OPENAI_CHAT = "openai"
+OPENAI_RESPONSES = "openai_responses"
 # Decision models: they answer a yes/no question with a probability, never with text, so
 # they can judge an answer (llm_judge) but not pull a value out of it (extract_match).
 TYPESAFE = "typesafe"
@@ -78,13 +85,14 @@ def api_key_name(provider: str) -> str:
 
 # How much a model thinks before it answers, for the agent (`effort`) and the judge
 # (`grading_effort`). The three levels both providers accept on their current models;
-# Anthropic's API calls it `effort`, OpenAI's `reasoning_effort`.
+# Anthropic's API calls it `effort`, OpenAI's `reasoning.effort` (`reasoning_effort` on
+# Chat Completions).
 EFFORTS = ("low", "medium", "high")
 
 # Models known to reject an effort setting, so a run stops before the first call instead
 # of failing in it: Claude Haiku 4.5 and Sonnet 4.5 take only a thinking budget (which
 # honest-agent doesn't send), Claude 3 models neither, and OpenAI's models that don't
-# reason (GPT-4.x, GPT-4o, ChatGPT) have no reasoning_effort.
+# reason (GPT-4.x, GPT-4o, ChatGPT) have no reasoning effort.
 _NO_EFFORT_PREFIXES = ("claude-haiku-4-5", "claude-sonnet-4-5", "claude-3", "gpt-4", "chatgpt-")
 
 
@@ -93,12 +101,14 @@ def effort_unsupported(model: str) -> bool:
     return model.lower().startswith(_NO_EFFORT_PREFIXES)
 
 
-def effort_params(provider: str, effort: str | None) -> dict:
-    """The request parameters that set `effort` for `provider`; none when it's unset, so
-    the provider's default applies."""
+def effort_params(api: str, effort: str | None) -> dict:
+    """The request parameters that set `effort` on `api` (a raw provider value); none when
+    it's unset, so the provider's default applies."""
     if effort is None:
         return {}
-    return {"reasoning_effort": effort} if provider == OPENAI else {"output_config": {"effort": effort}}
+    if api == OPENAI_RESPONSES:
+        return {"reasoning": {"effort": effort}}
+    return {"reasoning_effort": effort} if api == OPENAI_CHAT else {"output_config": {"effort": effort}}
 
 
 class Judge(Protocol):
@@ -134,18 +144,24 @@ class AnthropicJudge:
 
 
 class OpenAIJudge:
+    """GPT as the judge, on the Responses API like the OpenAI agent; its calls are
+    recorded as OPENAI_RESPONSES (recorded_provider)."""
+
     def __init__(self, client: Any = None):
         self._client = client or openai_client()
 
     async def complete(self, prompt: str, model: str, max_tokens: int, schema: dict, effort: str | None = None) -> Any:
+        # Structured output: the reply's text is JSON that matches `schema`.
         # No output cap here: on reasoning models (gpt-5.x, o-series) the cap also
         # counts hidden reasoning tokens, so a small one can leave the answer empty.
         # Grading prompts ask for a one-line JSON object, so the output stays short.
-        return await self._client.chat.completions.create(
+        # Nothing is kept at OpenAI (`store: false`), as for the agent.
+        return await self._client.responses.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_schema", "json_schema": {"name": "grade", "strict": True, "schema": schema}},
-            **effort_params(OPENAI, effort),
+            input=[{"role": "user", "content": prompt}],
+            text={"format": {"type": "json_schema", "name": "grade", "strict": True, "schema": schema}},
+            store=False,
+            **effort_params(OPENAI_RESPONSES, effort),
         )
 
 
@@ -232,7 +248,9 @@ def response_text(provider: str, response: dict) -> str:
     provider; a decision model's answers as JSON, since it writes no text."""
     if provider in DECISION_PROVIDERS:
         return json.dumps(response.get("answers"))
-    if provider == OPENAI:
+    if provider == OPENAI_RESPONSES:
+        return "".join(part.get("text", "") for part in output_texts(response))
+    if provider == OPENAI_CHAT:
         return response["choices"][0]["message"].get("content") or ""
     return "".join(block.get("text", "") for block in response.get("content", []) if block.get("type") == "text")
 
@@ -241,11 +259,11 @@ def response_tokens(provider: str, response: dict) -> tuple[int, int]:
     """(input, output) tokens of a recorded model response, for either provider. Input
     counts every prompt token, cached or not, so runs with and without caching compare."""
     usage = response.get("usage") or {}
-    if provider == OPENAI:
+    if provider == OPENAI_CHAT:
         return usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
     if provider == GOOGLE:
         return usage.get("total_input_tokens") or 0, usage.get("total_output_tokens") or 0
-    if provider in (TYPESAFE, OPENAI_DECISIONS):
+    if provider in (OPENAI_RESPONSES, TYPESAFE, OPENAI_DECISIONS):
         return usage.get("input_tokens") or 0, usage.get("output_tokens") or 0
     # Anthropic's input_tokens leaves out the tokens written to or read from the cache.
     cached = (usage.get("cache_creation_input_tokens") or 0) + (usage.get("cache_read_input_tokens") or 0)
@@ -255,11 +273,15 @@ def response_tokens(provider: str, response: dict) -> tuple[int, int]:
 def response_cache_tokens(provider: str, response: dict) -> tuple[int, int]:
     """(read, written) prompt tokens of a recorded model response that came from or went to
     the provider's cache. Reads cost a fraction of input; Anthropic charges extra for
-    writes, OpenAI doesn't report them (0). Decision calls are priced as plain input."""
+    writes. OpenAI's writes count as 0, so they're priced as plain input: Chat Completions
+    doesn't report them, and the Responses API's `cache_write_tokens` (billed extra from
+    GPT-5.6 on) isn't priced yet. Decision calls are priced as plain input."""
     if provider in DECISION_PROVIDERS:
         return 0, 0
     usage = response.get("usage") or {}
-    if provider == OPENAI:
+    if provider == OPENAI_RESPONSES:
+        return (usage.get("input_tokens_details") or {}).get("cached_tokens") or 0, 0
+    if provider == OPENAI_CHAT:
         return (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0, 0
     return usage.get("cache_read_input_tokens") or 0, usage.get("cache_creation_input_tokens") or 0
 
@@ -267,13 +289,58 @@ def response_cache_tokens(provider: str, response: dict) -> tuple[int, int]:
 def response_stop(provider: str, response: dict) -> str | None:
     """Why a recorded model response stopped, in Anthropic's terms for either provider:
     "tool_use" (it asked for tools), "end_turn" (it answered), or the provider's own reason.
-    None for a decision model: it answers in one step and is never cut off."""
+    None for a decision model: it answers in one step and is never cut off. The Responses
+    API gives no stop reason: a response cut off is `incomplete`, with why (it wins over a
+    tool call in it, whose arguments can be cut off too); else a function_call item in its
+    output means it asked for tools."""
     if provider in DECISION_PROVIDERS:
         return None
-    if provider == OPENAI:
+    if provider == OPENAI_RESPONSES:
+        if response.get("status") == "incomplete":
+            return (response.get("incomplete_details") or {}).get("reason") or "incomplete"
+        if function_calls(response):
+            return "tool_use"
+        return "end_turn" if response.get("status") == "completed" else response.get("status")
+    if provider == OPENAI_CHAT:
         reason = (response.get("choices") or [{}])[0].get("finish_reason")
         return {"tool_calls": "tool_use", "stop": "end_turn"}.get(reason, reason)
     return response.get("stop_reason")
+
+
+def function_calls(response: dict) -> list[dict]:
+    """The tool calls in a recorded Responses API response: its `function_call` items, in order."""
+    return [item for item in response.get("output") or [] if item.get("type") == "function_call"]
+
+
+def output_texts(response: dict) -> list[dict]:
+    """The text parts of a recorded Responses API response's messages, in order. Reasoning
+    items and refusals aren't text."""
+    return [
+        part
+        for item in response.get("output") or []
+        if item.get("type") == "message"
+        for part in item.get("content") or []
+        if part.get("type") == "output_text"
+    ]
+
+
+# The API an LLM provider's calls go to, as a run's settings name it (runner.run_apis).
+# A decision provider has one API, named by the provider.
+_APIS = {ANTHROPIC: "anthropic_messages", OPENAI: OPENAI_RESPONSES}
+
+
+def api_for(model: str) -> str:
+    """The API calls to `model` go to: anthropic_messages, openai_responses, or a decision
+    model's provider."""
+    provider = provider_for(model)
+    return _APIS.get(provider, provider)
+
+
+def recorded_provider(model: str) -> str:
+    """What a call to `model` is recorded under in raw.events: its provider, or for an
+    OpenAI model the API it goes to, the Responses API."""
+    provider = provider_for(model)
+    return OPENAI_RESPONSES if provider == OPENAI else provider
 
 
 def make_judge(provider: str) -> Judge | DecisionJudge:
@@ -294,16 +361,6 @@ def openai_client() -> Any:
 
 # Used when --model isn't given: a small, cheap model from whichever provider has a key.
 DEFAULT_MODELS = {ANTHROPIC: "claude-haiku-5-5", OPENAI: "gpt-5.4-mini"}
-
-# OpenAI's GPT-6 models can't think and call tools in one request on Chat Completions, the
-# API honest-agent uses; they need the Responses API. So they can't be the agent yet. They
-# can grade: grading calls no tools.
-_NO_AGENT_PREFIXES = ("gpt-6",)
-
-
-def agent_unsupported(model: str) -> bool:
-    """Whether `model` can't be the agent yet (see _NO_AGENT_PREFIXES)."""
-    return model.lower().startswith(_NO_AGENT_PREFIXES)
 
 
 # Each SDK's base class for an API error (and, for TypeSafe, for any error it raises).

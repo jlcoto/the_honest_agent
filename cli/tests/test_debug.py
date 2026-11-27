@@ -77,11 +77,11 @@ def test_debug_passes_against_the_demo_server_and_creates_nothing(demo_project):
     assert not Path("honest_agent_results").exists()
 
 
-def test_debug_fails_the_config_check_for_a_gpt6_agent(demo_project):
+def test_debug_passes_the_config_check_for_a_gpt6_agent(demo_project):
     result = _debug("--model", "gpt-6-luna", OPENAI_API_KEY="test")
 
-    assert result.exit_code != 0
-    assert _lines(result.output)["Config"].startswith("FAILED   gpt-6-luna can't be the agent yet")
+    assert result.exit_code == 0, result.output
+    assert _lines(result.output)["Config"].startswith("OK")
 
 
 def test_debug_fails_the_config_check_for_a_decision_model_left_for_extract_match(demo_project):

@@ -26,11 +26,13 @@ from .llm import (
     OPENAI,
     DecisionJudge,
     Judge,
+    api_for,
     effort_unsupported,
     is_decision_model,
     make_judge,
     provider_error,
     provider_for,
+    recorded_provider,
 )
 from .mcp_client import DEFAULT_TOOL_TIMEOUT
 from .prices import PRICES_AS_OF, price_for, usd
@@ -98,7 +100,7 @@ async def eval_loop(
                         request["effort"] = effort
                     await record.call(
                         "grading_call",
-                        provider_for(grader),
+                        recorded_provider(grader),
                         request,
                         judges[grader].complete(
                             prompt,
@@ -197,6 +199,13 @@ def saved_prices(model: str, graders: dict[str, str], custom: dict | None) -> di
         price, source = price_for(name, custom)
         models[name] = {**price.to_dict(), "source": source} if price else None
     return {"as_of": PRICES_AS_OF, "models": models}
+
+
+def run_apis(model: str, graders: dict[str, str]) -> dict[str, str]:
+    """The API of the agent's model and of each method's grading model, which a run saves:
+    the same model can go to another API after an update (OpenAI's moved from Chat
+    Completions to the Responses API), so runs before and after compare."""
+    return {"agent": api_for(model), **{method: api_for(name) for method, name in graders.items()}}
 
 
 def graders_label(graders: dict[str, str]) -> str:
@@ -338,6 +347,7 @@ async def run_evals(
                 "effort": effort,
                 "grading_effort": grading_effort,
                 "grading_models": graders,
+                "apis": run_apis(model, graders),
                 "prices": saved_prices(model, graders, prices),
             },
             tools_offered=tools,
@@ -346,9 +356,11 @@ async def run_evals(
         sql_fields = {tool: field for d in definitions for tool, field in d.sql_fields.items()}
         tool_caller = ReadOnlySQL(connected, sql_fields, ignore_tools, tool_timeout)
         if openai_agent:
-            from .openai_agent_runner import OpenAIMCPAgentClient
+            # The Responses API for every OpenAI model; the Chat Completions client stays
+            # for endpoints that speak only that.
+            from .openai_agent_runner import OpenAIResponsesAgentClient
 
-            agent = OpenAIMCPAgentClient(
+            agent = OpenAIResponsesAgentClient(
                 tool_caller,
                 model=model,
                 tools=tools,

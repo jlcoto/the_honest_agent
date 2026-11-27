@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from honest_agent.config_file import ConfigError, load_config
-from honest_agent.llm import ANTHROPIC, OPENAI
+from honest_agent.llm import ANTHROPIC, OPENAI_CHAT, OPENAI_RESPONSES
 from honest_agent.prices import BUILT_IN, PRICES_AS_OF, Price, call_cost, price_for, usd
 from honest_agent.runner import cost_line, saved_prices
 
@@ -41,7 +41,10 @@ def test_a_long_prompt_is_priced_at_the_long_rate_all_of_it():
 def test_openai_cached_tokens_are_taken_out_of_input_before_pricing():
     luna = BUILT_IN["gpt-6-luna"]
     usage = {"prompt_tokens": 16_100, "completion_tokens": 50, "prompt_tokens_details": {"cached_tokens": 14_000}}
-    assert call_cost(luna, OPENAI, {"usage": usage}) == pytest.approx((2_100 * 0.10 + 14_000 * 0.01 + 50 * 0.50) / 1e6)
+    expected = (2_100 * 0.10 + 14_000 * 0.01 + 50 * 0.50) / 1e6
+    assert call_cost(luna, OPENAI_CHAT, {"usage": usage}) == pytest.approx(expected)
+    usage = {"input_tokens": 16_100, "output_tokens": 50, "input_tokens_details": {"cached_tokens": 14_000}}
+    assert call_cost(luna, OPENAI_RESPONSES, {"usage": usage}) == pytest.approx(expected)
 
 
 def test_a_model_id_with_a_date_gets_its_base_models_price():
