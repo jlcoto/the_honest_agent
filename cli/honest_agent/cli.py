@@ -712,8 +712,10 @@ def debug(
         # The models as written, so the API key check below can still name their keys.
         model = _from_layers(ctx, "model", model, layer) or default_model(os.environ)
         written = _from_layers(ctx, "grading_model", grading_model, layer)
-        chosen = written if isinstance(written, dict) else dict.fromkeys(GRADING_METHODS, written)
-        graders = {m: chosen.get(m) or default_grading_model(model) for m in GRADING_METHODS} if model else {}
+        per_method = written if isinstance(written, dict) else dict.fromkeys(GRADING_METHODS, written)
+        # A decision model as the agent has no default grading model.
+        default = default_grading_model(model) if model and not is_decision_model(model) else None
+        graders = {m: name for m in GRADING_METHODS if (name := per_method.get(m) or default)} if model else {}
         models = Models(model, graders, None, None, True, True)
     else:
         model = models.model
