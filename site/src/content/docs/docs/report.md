@@ -127,7 +127,10 @@ that answer was graded, which tables it read, and the steps it took to get there
 - **Accuracy:** what was expected and what the agent answered, formatted the way the agent
   wrote it in markdown: tables, lists, bold and code. For `extract_match`, the
   value the grader pulled out and the difference, against the tolerance; for
-  `llm_judge`, the judge's score (under the answer) and its reason. "Show the agent's full
+  `llm_judge`, the judge's score (under the answer) and its reason. A
+  [decision model](/docs/writing-evals/#using-a-decision-model-as-the-judge) judge gives no
+  score or reason: the card gives the chance it put on the answer being correct, for example
+  "85% chance it's correct", and the min score that chance has to reach. "Show the agent's full
   reply" shows the whole answer.
 - **Provenance:** each expected source, with the database, schema and table the agent
   read, or "not read".
@@ -144,6 +147,8 @@ that answer was graded, which tables it read, and the steps it took to get there
   opens its full reply, as it came back, and how many tokens it spent thinking. Across from
   the grading method: its tokens, what they cost and how long it took. A reply cut off at
   its token limit shows "Not graded" and why. `contains` calls no model, so the card says so.
+  When the grading model is an alias such as `jev-latest` and the reply names the version
+  that answered, the chip shows both: `jev-latest → jev-1.14.0`.
 
 For the raw records of every call, use
 [`honest-agent logs`](/docs/running-evals/#find-out-why-an-eval-failed).

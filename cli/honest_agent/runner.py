@@ -21,8 +21,17 @@ from .eval_loader import (
     number_format_warnings,
     select_evals,
 )
-from .grading import GRADING_MAX_TOKENS, GRADING_SCHEMAS, NOT_GRADED, grading_prompt
-from .llm import OPENAI, Judge, make_judge, provider_error, provider_for
+from .grading import DECISION_QUESTION, GRADING_MAX_TOKENS, GRADING_SCHEMAS, NOT_GRADED, grading_prompt, judge_state
+from .llm import (
+    OPENAI,
+    DecisionJudge,
+    Judge,
+    effort_unsupported,
+    is_decision_model,
+    make_judge,
+    provider_error,
+    provider_for,
+)
 from .mcp_client import DEFAULT_TOOL_TIMEOUT
 from .prices import PRICES_AS_OF, price_for, usd
 from .progress import Progress
@@ -39,8 +48,8 @@ class RunError(Exception):
 async def eval_loop(
     agent: AgentClient,
     definitions: list[EvalDefinition],
-    judge: Judge,
-    grading_model: str,
+    graders: dict[str, str],
+    judges: dict[str, Judge | DecisionJudge],
     run_id: str,
     recorder: RunRecorder,
     con,
@@ -48,7 +57,8 @@ async def eval_loop(
     tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
 ) -> list[dict]:
     """Runs and grades each eval, recording every call as it returns (raw layer), then
-    derives the eval's results from that record and writes them before the next one."""
+    derives the eval's results from that record and writes them before the next one.
+    `graders` maps each grading method to its model; `judges` each model to its client."""
     rows: list[dict] = []
     async with Progress([d.eval_id for d in definitions]) as progress:
         for definition in definitions:
@@ -63,29 +73,39 @@ async def eval_loop(
                     warnings.append(f"{definition.eval_id} hit the step limit without a final answer.")
                 elif answer.startswith(CUT_OFF_ANSWER):
                     warnings.append(f"{definition.eval_id}: {answer}")
-                prompt = grading_prompt(
-                    definition.grading_method, answer, definition.expected_answer, definition.prompt
-                )
-                if prompt is not None:
-                    schema = GRADING_SCHEMAS[definition.grading_method]
+                method = definition.grading_method
+                grader = graders.get(method)
+                if grader is not None and is_decision_model(grader):
+                    # A decision model answers one yes/no question about the llm_judge
+                    # state; derive.py turns its P(yes) into pass/fail.
+                    state = judge_state(answer, definition.expected_answer, definition.prompt)
+                    await record.call(
+                        "grading_call",
+                        provider_for(grader),
+                        {"model": grader, "state": state, "question": DECISION_QUESTION},
+                        judges[grader].decide(state, DECISION_QUESTION, grader),
+                    )
+                elif prompt := grading_prompt(method, answer, definition.expected_answer, definition.prompt):
+                    schema = GRADING_SCHEMAS[method]
+                    effort = grading_effort_for(grader, grading_effort)
                     request = {
-                        "model": grading_model,
+                        "model": grader,
                         "max_tokens": GRADING_MAX_TOKENS,
                         "prompt": prompt,
                         "schema": schema,
                     }
-                    if grading_effort:
-                        request["effort"] = grading_effort
+                    if effort:
+                        request["effort"] = effort
                     await record.call(
                         "grading_call",
-                        provider_for(grading_model),
+                        provider_for(grader),
                         request,
-                        judge.complete(
+                        judges[grader].complete(
                             prompt,
-                            model=grading_model,
+                            model=grader,
                             max_tokens=GRADING_MAX_TOKENS,
                             schema=schema,
-                            effort=grading_effort,
+                            effort=effort,
                         ),
                     )
                 derived = derive_result(con, result_id)
@@ -128,11 +148,19 @@ def failure_summary(rows: list[dict], failures: list[dict]) -> list[str]:
         for f in below:
             bits = []
             if not f["accuracy_pass"]:
-                bits.append(f"accuracy {f['accuracy_score']:.2f} < {f['accuracy_min_score']}")
+                bits.append(accuracy_shortfall(f))
             if not f["provenance_pass"]:
                 bits.append(f"provenance {f['provenance_score']:.2f} < {f['provenance_min_score']}")
             lines.append(f"  - {f['eval_id']}: {', '.join(bits)}")
     return lines
+
+
+def accuracy_shortfall(row: dict) -> str:
+    """Why accuracy failed: `accuracy 0.40 < 0.8`, or for a decision model, which gives
+    pass/fail, the chance it gave: `accuracy fail, 32% chance it's correct (min 0.8)`."""
+    if row.get("accuracy_confidence") is not None:
+        return f"accuracy fail, {row['accuracy_confidence']:.0%} chance it's correct (min {row['accuracy_min_score']})"
+    return f"accuracy {row['accuracy_score']:.2f} < {row['accuracy_min_score']}"
 
 
 def error_message(exc: BaseException) -> str:
@@ -147,14 +175,37 @@ def with_effort(model: str, effort: str | None) -> str:
     return f"{model} ({effort} effort)" if effort else model
 
 
-def saved_prices(model: str, grading_model: str, custom: dict | None) -> dict:
-    """The prices a run saves for its two models (None for one without a price), so its
-    cost keeps them when the table changes."""
+def grading_effort_for(model: str, effort: str | None) -> str | None:
+    """The effort sent to grading model `model`: none for a model known to reject one, so
+    the default low effort doesn't stop a run whose grading model takes none."""
+    return None if effort_unsupported(model) else effort
+
+
+def grader_shown(model: str, effort: str | None) -> str:
+    """A grading model as the run reports it: with the effort it's sent, or `(decision
+    model)`, which takes none."""
+    if is_decision_model(model):
+        return f"{model} (decision model)"
+    return with_effort(model, grading_effort_for(model, effort))
+
+
+def saved_prices(model: str, graders: dict[str, str], custom: dict | None) -> dict:
+    """The prices a run saves for its models, the agent's and each grading model (None for
+    one without a price), so its cost keeps them when the table changes."""
     models = {}
-    for name in (model, grading_model):
+    for name in (model, *graders.values()):
         price, source = price_for(name, custom)
         models[name] = {**price.to_dict(), "source": source} if price else None
     return {"as_of": PRICES_AS_OF, "models": models}
+
+
+def graders_label(graders: dict[str, str]) -> str:
+    """The grading models as one line: the model, or `extract_match claude-sonnet-5-5 ·
+    llm_judge jev-1.14.0` when the two methods use different ones."""
+    names = set(graders.values())
+    if len(names) == 1:
+        return next(iter(names))
+    return " · ".join(f"{method} {name}" for method, name in graders.items())
 
 
 def cost_line(rows: list[dict], model: str, grading_model: str) -> str:
@@ -202,7 +253,7 @@ async def run_evals(
     default_schema: str | None,
     mcp_cwd: str | None,
     mcp_env: list[str],
-    grading_model: str,
+    graders: dict[str, str],
     effort: str | None = None,
     grading_effort: str | None = None,
     prices: dict[str, dict[str, float]] | None = None,
@@ -226,7 +277,8 @@ async def run_evals(
     from .anthropic_agent_runner import MAX_TOKENS, AnthropicMCPAgentClient
     from .mcp_client import build_mcp_client, describe_connection_error
 
-    judge = make_judge(provider_for(grading_model))
+    judges = {name: make_judge(provider_for(name)) for name in set(graders.values())}
+    grading_model = graders_label(graders)
     run_id = str(uuid.uuid4())
     click.echo(f"Starting eval run {run_id} ({len(definitions)} eval{'' if len(definitions) == 1 else 's'})...")
     for warning in number_format_warnings(definitions):
@@ -270,7 +322,9 @@ async def run_evals(
             agent_name=agent_name,
             target=target,
             model=model,
-            judge_model=grading_model,  # the raw layer's column keeps its first name
+            # The raw layer's column keeps its first name. It's a label for `logs`: each eval's
+            # grading call records the model it used, which is what derive.py reads.
+            judge_model=grading_model,
             settings={
                 "max_tool_steps": max_tool_steps,
                 "tool_timeout": tool_timeout,
@@ -283,7 +337,8 @@ async def run_evals(
                 # None: not sent, so the provider's default applied.
                 "effort": effort,
                 "grading_effort": grading_effort,
-                "prices": saved_prices(model, grading_model, prices),
+                "grading_models": graders,
+                "prices": saved_prices(model, graders, prices),
             },
             tools_offered=tools,
         )
@@ -311,16 +366,17 @@ async def run_evals(
                 instructions=instructions,
                 effort=effort,
             )
-        click.echo(f"Model: {with_effort(model, effort)} · grading model: {with_effort(grading_model, grading_effort)}")
-        rows = await eval_loop(
-            agent, definitions, judge, grading_model, run_id, recorder, con, grading_effort, tool_timeout
-        )
+        shown = {method: grader_shown(name, grading_effort) for method, name in graders.items()}
+        click.echo(f"Model: {with_effort(model, effort)} · grading model: {graders_label(shown)}")
+        rows = await eval_loop(agent, definitions, graders, judges, run_id, recorder, con, grading_effort, tool_timeout)
     finally:
         con.close()
         await mcp_client.__aexit__(None, None, None)
 
     click.echo(f"Wrote {len(rows)} result(s) to {results_path}")
-    click.echo(cost_line(rows, model, grading_model))
+    # The cost line names the grading models without a price, not all of them.
+    unpriced = [name for name in dict.fromkeys(graders.values()) if price_for(name, prices)[0] is None]
+    click.echo(cost_line(rows, model, ", ".join(unpriced) or grading_model))
 
     failures = failing_rows(rows)
     for line in failure_summary(rows, failures):

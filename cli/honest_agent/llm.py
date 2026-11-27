@@ -1,25 +1,79 @@
 """The model providers honest-agent can use, for both the agent under test and the
-grader: Anthropic (Claude) or OpenAI (GPT). The provider is inferred from the model
-name, so a run only needs the API key for the providers its models come from.
+grader: Anthropic (Claude) or OpenAI (GPT), and for llm_judge evals also a decision
+model (TypeSafe's Jev, OpenAI's Decisions API, Google's Gemini Decisions). The provider
+is inferred from the model name, so a run only needs the API key for the providers its
+models come from.
 
-Imports of the `anthropic`/`openai` SDKs stay inside constructors, so neither is
-needed unless a model from that provider is actually used.
+Imports of the providers' SDKs stay inside constructors, so none is needed unless a
+model from that provider is actually used.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any, Protocol
 
 ANTHROPIC = "anthropic"
 OPENAI = "openai"
-API_KEY_ENV = {ANTHROPIC: "ANTHROPIC_API_KEY", OPENAI: "OPENAI_API_KEY"}
+# Decision models: they answer a yes/no question with a probability, never with text, so
+# they can judge an answer (llm_judge) but not pull a value out of it (extract_match).
+TYPESAFE = "typesafe"
+OPENAI_DECISIONS = "openai_decisions"
+GOOGLE = "google"
+DECISION_PROVIDERS = (TYPESAFE, OPENAI_DECISIONS, GOOGLE)
+API_KEY_ENV = {
+    ANTHROPIC: "ANTHROPIC_API_KEY",
+    OPENAI: "OPENAI_API_KEY",
+    TYPESAFE: "TYPESAFE_API_KEY",
+    OPENAI_DECISIONS: "OPENAI_API_KEY",
+    GOOGLE: "GEMINI_API_KEY",
+}
+# Google's SDK also reads GOOGLE_API_KEY (and prefers it when both are set).
+_OTHER_KEY_ENV = {GOOGLE: ("GOOGLE_API_KEY",)}
 _OPENAI_PREFIXES = ("gpt-", "chatgpt-", "o1", "o3", "o4")
+# gpt-6-luna is both a chat model and the Decisions API's model, so the Decisions one is
+# written with this prefix; plain gpt-6-luna stays the chat model.
+OPENAI_DECISIONS_PREFIX = "decision:"
 
 
 def provider_for(model: str) -> str:
-    """OpenAI for GPT/o-series names (gpt-5.4-mini, o4-mini, ...), Anthropic otherwise."""
-    return OPENAI if model.lower().startswith(_OPENAI_PREFIXES) else ANTHROPIC
+    """The provider behind a model name: TypeSafe for jev-*, Google for gemini-decision-*,
+    OpenAI's Decisions API for decision:<model>, OpenAI for GPT/o-series names
+    (gpt-5.4-mini, o4-mini, ...), Anthropic otherwise."""
+    name = model.lower()
+    if name.startswith("jev-"):
+        return TYPESAFE
+    if name.startswith("gemini-decision"):
+        return GOOGLE
+    if name.startswith(OPENAI_DECISIONS_PREFIX):
+        return OPENAI_DECISIONS
+    return OPENAI if name.startswith(_OPENAI_PREFIXES) else ANTHROPIC
+
+
+def is_decision_model(model: str) -> bool:
+    """Whether `model` is a decision model (it answers yes/no with a probability)."""
+    return provider_for(model) in DECISION_PROVIDERS
+
+
+# TypeSafe's aliases move to each new release; jev-1.14.0 and the like stay put.
+_ALIASES = ("jev-latest", "jev-preview")
+
+
+def is_alias(model: str) -> bool:
+    """Whether `model` is a vendor alias whose model can change between runs."""
+    return model.lower() in _ALIASES
+
+
+def api_key_set(provider: str, environ: Mapping[str, str]) -> bool:
+    """Whether a key `provider`'s SDK reads is set."""
+    return any(environ.get(name) for name in (API_KEY_ENV[provider], *_OTHER_KEY_ENV.get(provider, ())))
+
+
+def api_key_name(provider: str) -> str:
+    """The key to name in messages: `GEMINI_API_KEY (or GOOGLE_API_KEY)` for Google."""
+    others = _OTHER_KEY_ENV.get(provider)
+    return f"{API_KEY_ENV[provider]} (or {' or '.join(others)})" if others else API_KEY_ENV[provider]
 
 
 # How much a model thinks before it answers, for the agent (`effort`) and the judge
@@ -95,8 +149,89 @@ class OpenAIJudge:
         )
 
 
+# The one question a decision model answers, under this name, about the llm_judge
+# prompt's question, expected answer and given answer (grading.judge_state).
+DECISION_QUESTION_NAME = "correct"
+
+
+class DecisionJudge(Protocol):
+    """A yes/no question about `state`, answered with a probability. Returns the
+    provider's response object as-is, like Judge: the run records it raw, and derive.py
+    reads the probability back (decision_answer)."""
+
+    async def decide(self, state: str, question: str, model: str) -> Any: ...
+
+
+class TypeSafeDecisionJudge:
+    def __init__(self, client: Any = None):
+        if client is None:
+            import typesafe_sdk
+
+            client = typesafe_sdk.AsyncTypeSafeClient()  # reads TYPESAFE_API_KEY
+        self._client = client
+
+    async def decide(self, state: str, question: str, model: str) -> Any:
+        return await self._client.system_one(
+            state=state,
+            questions={DECISION_QUESTION_NAME: {"type": "noul", "instructions": question}},
+            model=model,
+        )
+
+
+class OpenAIDecisionJudge:
+    def __init__(self, client: Any = None):
+        self._client = client or openai_client()
+
+    async def decide(self, state: str, question: str, model: str) -> Any:
+        return await self._client.decisions.create(
+            model=model.removeprefix(OPENAI_DECISIONS_PREFIX),
+            input=state,
+            questions=[{"type": "predicate", "name": DECISION_QUESTION_NAME, "instructions": question}],
+        )
+
+
+class GeminiDecisionJudge:
+    def __init__(self, client: Any = None):
+        if client is None:
+            from google import genai
+
+            # Decisions are only on the v1beta API; the SDK defaults to v1.
+            client = genai.Client(http_options={"api_version": "v1beta"}).aio
+        self._client = client
+
+    async def decide(self, state: str, question: str, model: str) -> Any:
+        return await self._client.decisions.create(
+            model=model if model.startswith("models/") else f"models/{model}",
+            input=state,
+            questions={DECISION_QUESTION_NAME: {"type": "noul", "instructions": question}},
+        )
+
+
+def decision_answer(provider: str, response: dict) -> tuple[float | None, float | None]:
+    """(P(yes), confidence) from a recorded decision response; confidence only where the
+    provider reports one on a yes/no question (Google). P(yes) is None when the question
+    got no answer, or OpenAI's Decisions API declined it (a `refusal`)."""
+    if provider == OPENAI_DECISIONS:
+        answer = next((a for a in response.get("answers") or [] if a.get("name") == DECISION_QUESTION_NAME), {})
+        return answer.get("probability"), None
+    answer = (response.get("answers") or {}).get(DECISION_QUESTION_NAME) or {}
+    return answer.get("noul"), answer.get("confidence")
+
+
+def served_model(provider: str, response: dict) -> str | None:
+    """The model that answered, named the way the config names it (it can differ from an
+    alias asked for); None when the provider doesn't say (Google). OpenAI's response
+    leaves out our decision: prefix, so it's added back."""
+    if provider == OPENAI_DECISIONS and response.get("model"):
+        return OPENAI_DECISIONS_PREFIX + response["model"]
+    return response.get("model") if provider == TYPESAFE else None
+
+
 def response_text(provider: str, response: dict) -> str:
-    """The text of a recorded model response (the JSON raw.events keeps), for either provider."""
+    """The text of a recorded model response (the JSON raw.events keeps), for any
+    provider; a decision model's answers as JSON, since it writes no text."""
+    if provider in DECISION_PROVIDERS:
+        return json.dumps(response.get("answers"))
     if provider == OPENAI:
         return response["choices"][0]["message"].get("content") or ""
     return "".join(block.get("text", "") for block in response.get("content", []) if block.get("type") == "text")
@@ -108,6 +243,10 @@ def response_tokens(provider: str, response: dict) -> tuple[int, int]:
     usage = response.get("usage") or {}
     if provider == OPENAI:
         return usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+    if provider == GOOGLE:
+        return usage.get("total_input_tokens") or 0, usage.get("total_output_tokens") or 0
+    if provider in (TYPESAFE, OPENAI_DECISIONS):
+        return usage.get("input_tokens") or 0, usage.get("output_tokens") or 0
     # Anthropic's input_tokens leaves out the tokens written to or read from the cache.
     cached = (usage.get("cache_creation_input_tokens") or 0) + (usage.get("cache_read_input_tokens") or 0)
     return (usage.get("input_tokens") or 0) + cached, usage.get("output_tokens", 0)
@@ -116,7 +255,9 @@ def response_tokens(provider: str, response: dict) -> tuple[int, int]:
 def response_cache_tokens(provider: str, response: dict) -> tuple[int, int]:
     """(read, written) prompt tokens of a recorded model response that came from or went to
     the provider's cache. Reads cost a fraction of input; Anthropic charges extra for
-    writes, OpenAI doesn't report them (0)."""
+    writes, OpenAI doesn't report them (0). Decision calls are priced as plain input."""
+    if provider in DECISION_PROVIDERS:
+        return 0, 0
     usage = response.get("usage") or {}
     if provider == OPENAI:
         return (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0, 0
@@ -125,15 +266,24 @@ def response_cache_tokens(provider: str, response: dict) -> tuple[int, int]:
 
 def response_stop(provider: str, response: dict) -> str | None:
     """Why a recorded model response stopped, in Anthropic's terms for either provider:
-    "tool_use" (it asked for tools), "end_turn" (it answered), or the provider's own reason."""
+    "tool_use" (it asked for tools), "end_turn" (it answered), or the provider's own reason.
+    None for a decision model: it answers in one step and is never cut off."""
+    if provider in DECISION_PROVIDERS:
+        return None
     if provider == OPENAI:
         reason = (response.get("choices") or [{}])[0].get("finish_reason")
         return {"tool_calls": "tool_use", "stop": "end_turn"}.get(reason, reason)
     return response.get("stop_reason")
 
 
-def make_judge(provider: str) -> Judge:
-    return OpenAIJudge() if provider == OPENAI else AnthropicJudge()
+def make_judge(provider: str) -> Judge | DecisionJudge:
+    judges = {
+        OPENAI: OpenAIJudge,
+        TYPESAFE: TypeSafeDecisionJudge,
+        OPENAI_DECISIONS: OpenAIDecisionJudge,
+        GOOGLE: GeminiDecisionJudge,
+    }
+    return judges.get(provider, AnthropicJudge)()
 
 
 def openai_client() -> Any:
@@ -156,22 +306,37 @@ def agent_unsupported(model: str) -> bool:
     return model.lower().startswith(_NO_AGENT_PREFIXES)
 
 
+# Each SDK's base class for an API error (and, for TypeSafe, for any error it raises).
+_PROVIDER_ERRORS = (
+    ("anthropic", "APIError"),
+    ("openai", "APIError"),
+    ("typesafe_sdk", "TypeSafeError"),
+    ("google.genai._interactions_errors", "GeminiNextGenAPIClientError"),
+)
+_PROVIDER_NAMES = (("openai", "OpenAI"), ("typesafe_sdk", "TypeSafe"), ("google", "Google"), ("", "Anthropic"))
+
+
 def provider_error(exc: BaseException) -> str | None:
     """A provider's error for a model call (rejected, unauthorized, rate-limited,
     unreachable) as one line, or None when `exc` isn't one."""
+    import importlib
+
     kinds = []
-    for module in ("anthropic", "openai"):
+    for module, kind in _PROVIDER_ERRORS:
         try:
-            kinds.append(__import__(module).APIError)
+            kinds.append(getattr(importlib.import_module(module), kind))
         except ImportError:
             pass
     if not isinstance(exc, tuple(kinds)):
         return None
-    name = "OpenAI" if type(exc).__module__.startswith("openai") else "Anthropic"
+    module = type(exc).__module__
+    name = next(label for prefix, label in _PROVIDER_NAMES if module.startswith(prefix))
     body = getattr(exc, "body", None)
     error = body.get("error", body) if isinstance(body, dict) else None
-    message = error.get("message") if isinstance(error, dict) else None
-    status = getattr(exc, "status_code", None)
+    message = (error.get("message") if isinstance(error, dict) else None) or getattr(exc, "message", None)
+    # TypeSafe's errors call it `status`; Google's `status` is a word, so only an int counts.
+    status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    status = status if isinstance(status, int) else None
     return f"{name} {f'rejected a model call (HTTP {status})' if status else 'could not be reached'}: {message or exc}"
 
 
@@ -205,8 +370,9 @@ def tier(model: str) -> int | None:
 
 
 def looks_less_capable(grading_model: str, model: str) -> bool:
-    """Whether the grading model is from a lower tier than the agent's, same provider."""
-    if provider_for(grading_model) != provider_for(model):
+    """Whether the grading model is from a lower tier than the agent's, same provider.
+    Decision models aren't ranked against the LLMs they grade."""
+    if provider_for(grading_model) != provider_for(model) or is_decision_model(grading_model):
         return False
     judge, agent = tier(grading_model), tier(model)
     return judge is not None and agent is not None and judge < agent

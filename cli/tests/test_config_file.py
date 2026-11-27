@@ -191,7 +191,7 @@ def test_grading_model_in_the_config_grades_and_judge_model_is_no_longer_a_setti
     result, run = _run(fake_run)
 
     assert result.exit_code == 0, result.output
-    assert (run["model"], run["grading_model"]) == ("claude-haiku-4-5", "claude-sonnet-5")
+    assert (run["model"], run["graders"]["llm_judge"]) == ("claude-haiku-4-5", "claude-sonnet-5")
     config.write_text(config.read_text().replace("grading_model:", "judge_model:"))
     with pytest.raises(ConfigError, match="Unknown setting.*judge_model"):
         load_config(config)

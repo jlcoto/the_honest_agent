@@ -216,9 +216,9 @@ one-sentence reason. It's the only method with partial credit.
 
 ### Choosing the grading model
 
-Both `extract_match` and `llm_judge` use the same model, the grading model. By default
-it's a stronger model than the default agent, from the agent's provider, so one API key
-is enough:
+`extract_match` and `llm_judge` use the grading model. By default it's one model for
+both, stronger than the default agent and from the agent's provider, so one API key is
+enough:
 
 | Agent's provider | Default agent model | Default grading model |
 |---|---|---|
@@ -242,6 +242,59 @@ below Opus, or Luna below Sol below Astra.
 
 Keep the grading model the same across runs you compare, so a change in scores comes from
 the agent, not the grading.
+
+To grade each method with its own model, give `grading_model` one per method in the
+config file. A method you leave out gets the default:
+
+```yaml
+grading_model:
+  extract_match: claude-sonnet-5-5
+  llm_judge: claude-opus-5-5
+```
+
+### Using a decision model as the judge
+
+A decision model answers a yes/no question with a probability instead of writing text.
+honest-agent can use one to judge `llm_judge` evals: it asks whether the given answer is
+correct and equivalent to the expected answer, with the same rules as the LLM judge. It
+can't grade `extract_match`, which needs a value pulled out of the answer.
+
+So set it for `llm_judge` only, with the per-method form in the config file.
+`extract_match` keeps an LLM: the one you name, or the default grading model when you
+leave it out:
+
+```yaml
+grading_model:
+  llm_judge: jev-1.14.0   # extract_match gets the default grading model
+```
+
+A decision model given as one model for both methods (`grading_model: jev-1.14.0`,
+`--grading-model` or `HONEST_AGENT_GRADING_MODEL`) stops `run` and `debug` before the
+first eval, with the config to use instead. This holds even when none of your evals use
+`extract_match`, so a config that works keeps working when one is added.
+
+| Model | Provider | API key |
+|---|---|---|
+| `jev-1.14.0`, `jev-1.13.0` | [TypeSafe](https://docs.typesafe.ai/models.md) | `TYPESAFE_API_KEY` |
+| `decision:gpt-6-luna` | [OpenAI's Decisions API](https://developers.openai.com/api/docs/guides/decisions.md) | `OPENAI_API_KEY` |
+| `gemini-decision-1` | [Gemini Decisions API](https://aistudio.google.com/docs/decisions-api) | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
+
+- **Pass or fail, no partial credit.** With a decision model, `min_score` is measured
+  against P(yes), the model's probability that the answer is correct, not against a
+  partial-credit score. The eval passes when P(yes) reaches `min_score` (0.8 by default,
+  so the model must give the answer at least an 80% chance of being correct). Its
+  `accuracy_score` is then 1 or 0, and P(yes) is stored in `accuracy_confidence`.
+- **No reason.** A decision model gives no rationale, so the result shows only the
+  verdict and the chance the model gave.
+- **Pin a version.** `jev-latest` and `jev-preview` are aliases that move to each new
+  release, so grades can change between runs with nothing changed on your side. `run`
+  warns when the judge is an alias.
+- **`decision:gpt-6-luna`** is written with the prefix because `gpt-6-luna` is also a chat
+  model: plain `gpt-6-luna` stays the chat model.
+- **Gemini needs Python 3.11** or later, as Google's SDK for its Decisions API does.
+- **Keep `min_score` below 1.0.** Gemini's probabilities stop at 0.99, and Jev gave 0.99
+  for a clearly correct answer in our tests, so with `min_score: 1.0` they fail answers
+  they judge correct.
 
 ## Checking provenance
 

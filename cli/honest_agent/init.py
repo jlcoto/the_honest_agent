@@ -89,6 +89,9 @@ def config_text(answers: Answers) -> str:
     lines += [
         "# model: claude-haiku-5-5   # optional; without it, the model follows the API key in .env",
         "# grading_model: claude-sonnet-5-5   # optional; see the docs on choosing it",
+        "# grading_model:                     # or one per method; llm_judge can be a decision model",
+        "#   extract_match: claude-sonnet-5-5",
+        "#   llm_judge: jev-1.14.0             # needs TYPESAFE_API_KEY",
         "# effort: medium   # optional: low, medium or high; without it, the provider's default",
         "",
         "targets:",

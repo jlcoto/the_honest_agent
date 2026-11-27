@@ -31,7 +31,7 @@ def test_grade_contains():
 
 def test_contains_needs_no_prompt_or_reply():
     assert grading_prompt("contains", "The answer is 4.", "4", "What is 2+2?") is None
-    assert score("contains", "The answer is 4.", "4", None) == (1.0, None, None)
+    assert score("contains", "The answer is 4.", "4", None) == (1.0, None, None, None)
 
 
 def test_an_unknown_method_is_refused():
@@ -42,7 +42,7 @@ def test_an_unknown_method_is_refused():
 
 
 def test_extract_match_compares_the_extracted_value():
-    assert score("extract_match", "The capital is Paris.", "Paris", _extracted("Paris")) == (1.0, None, "Paris")
+    assert score("extract_match", "The capital is Paris.", "Paris", _extracted("Paris")) == (1.0, None, "Paris", None)
     assert score("extract_match", "It's London.", "Paris", _extracted("London")).score == 0.0
 
 
@@ -126,7 +126,7 @@ def test_an_unreadable_reply_fails_the_eval_instead_of_the_run(method, reply):
 
 def test_llm_judge_takes_the_models_score_and_rationale():
     reply = json.dumps({"score": 0.0, "rationale": "Off by an order of magnitude."})
-    assert score("llm_judge", "40", "4", reply) == (0.0, "Off by an order of magnitude.", None)
+    assert score("llm_judge", "40", "4", reply) == (0.0, "Off by an order of magnitude.", None, None)
 
 
 def test_extract_match_within_tolerance_still_scores_full():

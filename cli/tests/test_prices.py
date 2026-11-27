@@ -78,7 +78,7 @@ def test_prices_in_the_config_file_are_checked(tmp_path: Path):
 
 
 def test_a_run_saves_the_prices_of_its_models_and_none_for_a_model_without_one():
-    saved = saved_prices("claude-haiku-5-5", "my-proxy-model", None)
+    saved = saved_prices("claude-haiku-5-5", {"extract_match": "my-proxy-model", "llm_judge": "my-proxy-model"}, None)
 
     assert saved["as_of"] == PRICES_AS_OF
     assert saved["models"]["claude-haiku-5-5"]["input"] == 0.10

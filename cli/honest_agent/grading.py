@@ -12,6 +12,8 @@ class Grade(NamedTuple):
     rationale: str | None
     # The value extract_match pulled from the answer and compared (extract_match only).
     extracted_answer: str | None
+    # A decision model's P(yes) that the answer is correct (llm_judge with one only).
+    confidence: float | None = None
 
 
 def grade_contains(answer: str, expected_answer: str) -> float:
@@ -152,10 +154,7 @@ def grading_prompt(method: str, answer: str, expected_answer: str, prompt: str) 
     if method == "llm_judge":
         return (
             "You are grading whether an AI-generated answer is correct.\n\n"
-            f"{_DATA_NOTE}"
-            f"Question: {prompt}\n"
-            f"Expected answer: {expected_answer}\n"
-            f"Given answer:\n{_as_data(answer)}\n\n"
+            f"{judge_state(answer, expected_answer, prompt)}\n\n"
             "Score the given answer from 0.0 (completely wrong) to 1.0 (fully correct "
             "and equivalent to the expected answer). Minor wording/formatting "
             "differences that don't change the meaning should still score 1.0. An answer "
@@ -165,6 +164,32 @@ def grading_prompt(method: str, answer: str, expected_answer: str, prompt: str) 
             'Respond with ONLY a JSON object: {"score": <float 0-1>, "rationale": "<one sentence>"}'
         )
     raise ValueError(f"Unknown grading method: {method!r}")
+
+
+def judge_state(answer: str, expected_answer: str, prompt: str) -> str:
+    """The question, the expected answer and the given answer, as llm_judge grades them:
+    the body of its prompt, and all a decision model is given besides DECISION_QUESTION."""
+    return f"{_DATA_NOTE}Question: {prompt}\nExpected answer: {expected_answer}\nGiven answer:\n{_as_data(answer)}"
+
+
+# The yes/no question a decision model answers about judge_state, with the same rules as
+# llm_judge's prompt for what counts as correct.
+DECISION_QUESTION = (
+    "The given answer is correct and equivalent to the expected answer. Minor wording or "
+    "formatting differences that don't change the meaning still count as correct. An answer "
+    "that contradicts itself, offers several candidate values, or doesn't commit to one final "
+    "value is not correct, even if one of those values matches the expected answer."
+)
+
+
+def decision_grade(probability: float | None, min_score: float) -> Grade:
+    """A decision model's verdict as pass/fail: 1.0 when its P(yes) that the answer is
+    correct reaches the eval's min_score, else 0.0, with P(yes) kept as the confidence.
+    It gives no rationale, and no partial credit: P(yes) is the chance the answer is correct, not how much
+    of the answer is right."""
+    if probability is None:
+        return Grade(0.0, f"{NOT_GRADED} the decision model gave no answer to the question", None)
+    return Grade(1.0 if probability >= min_score else 0.0, None, None, probability)
 
 
 # The rationales recorded when an eval can't be graded; `run` warns about any of them.

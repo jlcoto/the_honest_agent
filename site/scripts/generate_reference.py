@@ -45,8 +45,10 @@ SETTINGS = {
     "grading_model": (
         "both",
         "The model for grading: it pulls the value out for `extract_match` and judges the answer for "
-        "`llm_judge` (`contains` uses none). Default: `claude-sonnet-5-5` for a Claude agent, `gpt-6.1-sol` "
-        "for an OpenAI one. See [Choosing the grading model](/docs/writing-evals/#choosing-the-grading-model).",
+        "`llm_judge` (`contains` uses none). One model for both, or one per method: `{extract_match: ..., "
+        "llm_judge: ...}`, where `llm_judge` can be a decision model. Default: `claude-sonnet-5-5` for a Claude "
+        "agent, `gpt-6.1-sol` for an OpenAI one. See [Choosing the grading model]"
+        "(/docs/writing-evals/#choosing-the-grading-model).",
     ),
     "effort": (
         "both",
@@ -55,8 +57,9 @@ SETTINGS = {
     ),
     "grading_effort": (
         "both",
-        "How much the grading model thinks: `low`, `medium` or `high`. Default: `low` for the default "
-        "grading model; the provider's default for one you choose.",
+        "How much the grading model thinks, for both `extract_match` and `llm_judge`: `low`, `medium` or "
+        "`high`. Default: `low`, for the default grading model and one you choose. Models that take no "
+        "effort setting, and decision models, get none.",
     ),
     "max_tool_steps": (
         "both",

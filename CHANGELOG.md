@@ -4,6 +4,29 @@ honest-agent is in alpha: a minor version (0.1 -> 0.2) can break things, and
 its notes start with what changed and what to do. A patch version (0.1.0 ->
 0.1.1) only fixes bugs.
 
+## Unreleased
+
+- **A decision model can judge `llm_judge` evals.** TypeSafe's Jev (`jev-1.14.0`), OpenAI's
+  Decisions API (`decision:gpt-6-luna`) and Google's Gemini Decisions (`gemini-decision-1`)
+  answer one yes/no question, whether the answer is correct, with a probability. The eval
+  passes when that probability reaches its `min_score`: `accuracy_score` is 1 or 0, and
+  the probability is in the new `accuracy_confidence` column. They give no reason, and
+  can't grade `extract_match`, so they're set for `llm_judge` only
+  (`grading_model: {llm_judge: jev-1.14.0}`); `run` stops if one would grade both methods.
+  Each needs its provider's API key; Gemini also needs Python 3.11.
+- **`grading_model` can name one model per method** in the config file:
+  `grading_model: {extract_match: ..., llm_judge: ...}`. A method left out gets the
+  default. A single model, and `--grading-model`, still set both, so existing configs
+  grade as before.
+- **`grading_effort` now defaults to `low` for a grading model you choose too**, not only
+  for the default one, and for both methods. Before, naming any grading model, even only
+  the `llm_judge` one, sent no effort, so the provider's default applied: earlier runs
+  with a named grading model were graded at that default. Models that take no effort
+  setting still get none, and each result records the effort its grading call sent.
+- **Each result records the model that graded it**, read from its own grading call, so a
+  run with two grading models labels and prices every result right.
+- `openai` is now `>=3.27`, for its Decisions API.
+
 ## v0.5.0 (alpha) — 2026-11-07
 
 - **An eval that errors no longer stops the run.** When a provider call fails (overloaded,

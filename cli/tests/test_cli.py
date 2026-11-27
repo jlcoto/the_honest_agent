@@ -16,7 +16,7 @@ import honest_agent.cli as cli_mod
 from honest_agent.cli import main
 from honest_agent.grading import UNREADABLE_REPLY
 from honest_agent.raw import RunRecorder, read_records
-from honest_agent.runner import eval_loop, failure_summary, resolve_agent_name
+from honest_agent.runner import eval_loop, failure_summary, grader_shown, grading_effort_for, resolve_agent_name
 from honest_agent.sql_guard import TIMED_OUT
 from honest_agent.storage import connect, read_all_results, read_traces, write_run_results
 from honest_agent.thresholds import EVAL_ERROR, failing_rows
@@ -200,7 +200,9 @@ def _run_capturing_models(fake_run, args: list[str]):
     )
     assert result.exit_code == 0, result.output
     fake_run["output"] = result.output
-    return {"model": fake_run["model"], "grading_model": fake_run["grading_model"]}
+    graders = fake_run["graders"]
+    assert graders["extract_match"] == graders["llm_judge"]  # one --grading-model sets both methods
+    return {"model": fake_run["model"], "grading_model": graders["llm_judge"]}
 
 
 def test_the_default_grading_model_is_a_stronger_one_at_low_effort(fake_run, in_tmp_dir):
@@ -216,11 +218,25 @@ def test_the_default_grading_model_is_a_stronger_one_at_low_effort(fake_run, in_
     assert "WARNING" not in fake_run["output"]
 
 
-def test_a_chosen_grading_model_runs_at_its_providers_default_effort(fake_run, in_tmp_dir):
+def test_a_chosen_grading_model_also_runs_at_low_effort(fake_run, in_tmp_dir):
     _run_capturing_models(fake_run, ["--model", "claude-haiku-5-5", "--grading-model", "claude-opus-5-5"])
 
-    assert fake_run["grading_effort"] is None
+    assert fake_run["grading_effort"] == "low"
     assert "No --grading-model given" not in fake_run["output"]
+
+
+def test_the_default_grading_effort_skips_a_model_that_takes_none(fake_run, in_tmp_dir):
+    Path("evals").mkdir()
+    result = CliRunner().invoke(
+        main,
+        ["run", "--evals-dir", "evals", "--mcp-command", "x", "--model", "gpt-5.4-mini", "--grading-model", "gpt-4o"],
+        env={"OPENAI_API_KEY": "test", "HONEST_AGENT_GRADING_EFFORT": ""},
+    )
+
+    # Not an error, unlike an effort set for it: low is only the default, and gpt-4o gets none.
+    assert result.exit_code == 0, result.output
+    assert grading_effort_for("gpt-4o", fake_run["grading_effort"]) is None
+    assert grader_shown("gpt-4o", fake_run["grading_effort"]) == "gpt-4o"
 
 
 def test_efforts_can_be_set_for_both_models(fake_run, in_tmp_dir):
@@ -245,7 +261,7 @@ def test_an_agent_grading_itself_gets_a_warning(fake_run, in_tmp_dir):
     # The default judge for a Claude agent is claude-sonnet-5-5, so this agent grades itself.
     _run_capturing_models(fake_run, ["--model", "claude-sonnet-5-5"])
 
-    assert fake_run["grading_model"] == "claude-sonnet-5-5"
+    assert fake_run["graders"]["llm_judge"] == "claude-sonnet-5-5"
     assert "WARNING: The agent and the grading model are both claude-sonnet-5-5." in fake_run["output"]
     assert "#choosing-the-grading-model" in fake_run["output"]
 
@@ -308,6 +324,10 @@ async def _returns(value):
     return value
 
 
+# Both grading methods graded by one model, as `--grading-model claude-judge` would set.
+_GRADERS = {"extract_match": "claude-judge", "llm_judge": "claude-judge"}
+
+
 def _run_loop(path: str, agent, judge, definitions, prices: dict | None = None) -> list[dict]:
     con = connect(path)
     try:
@@ -321,7 +341,7 @@ def _run_loop(path: str, agent, judge, definitions, prices: dict | None = None) 
             settings={"max_tool_steps": 5, "max_tokens": 1024, "mcp": {}, "ignore_tools": [], "prices": prices},
             tools_offered=[],
         )
-        return asyncio.run(eval_loop(agent, definitions, judge, "claude-judge", "run_1", recorder, con))
+        return asyncio.run(eval_loop(agent, definitions, _GRADERS, {"claude-judge": judge}, "run_1", recorder, con))
     finally:
         con.close()
 
@@ -366,7 +386,7 @@ def test_the_grading_effort_is_sent_recorded_and_stored(tmp_path: Path):
             tools_offered=[],
         )
         evals = [definition(grading_method="llm_judge", expected_answer="2297")]
-        (row,) = asyncio.run(eval_loop(agent, evals, judge, "claude-judge", "run_1", recorder, con, "low"))
+        (row,) = asyncio.run(eval_loop(agent, evals, _GRADERS, {"claude-judge": judge}, "run_1", recorder, con, "low"))
     finally:
         con.close()
 

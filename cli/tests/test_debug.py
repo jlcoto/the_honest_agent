@@ -84,6 +84,24 @@ def test_debug_fails_the_config_check_for_a_gpt6_agent(demo_project):
     assert _lines(result.output)["Config"].startswith("FAILED   gpt-6-luna can't be the agent yet")
 
 
+def test_debug_fails_the_config_check_for_a_decision_model_left_for_extract_match(demo_project):
+    result = _debug("--grading-model", "jev-1.14.0", TYPESAFE_API_KEY="test")
+
+    assert result.exit_code == 1, result.output
+    lines = _lines(result.output)
+    assert lines["Config"].startswith("FAILED   jev-1.14.0 is a decision model: it can't extract a value")
+    assert lines["MCP server"] == "OK       honest_agent_demo over stdio, 1 tool"
+
+
+def test_debug_fails_the_config_check_for_a_decision_model_as_the_agent(demo_project):
+    result = _debug("--model", "jev-1.14.0", TYPESAFE_API_KEY="test")
+
+    assert result.exit_code == 1, result.output
+    lines = _lines(result.output)
+    assert lines["Config"].startswith("FAILED   jev-1.14.0 is a decision model: it answers yes/no questions")
+    assert lines["Variables"] == "OK       TYPESAFE_API_KEY set; model jev-1.14.0"
+
+
 def test_debug_opens_existing_results_read_only(demo_project):
     con = duckdb.connect("results.duckdb")
     con.execute("create table results (result_id varchar)")
