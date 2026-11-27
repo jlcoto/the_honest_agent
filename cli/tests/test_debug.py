@@ -99,7 +99,7 @@ def test_debug_fails_the_config_check_for_a_decision_model_as_the_agent(demo_pro
     assert result.exit_code == 1, result.output
     lines = _lines(result.output)
     assert lines["Config"].startswith("FAILED   jev-1.14.0 is a decision model: it answers yes/no questions")
-    assert lines["Variables"].startswith("OK       TYPESAFE_API_KEY set; model jev-1.14.0")
+    assert lines["Variables"] == "OK       TYPESAFE_API_KEY set; model jev-1.14.0"
 
 
 def test_debug_opens_existing_results_read_only(demo_project):

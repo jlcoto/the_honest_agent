@@ -752,10 +752,10 @@ def debug(
     if missing:
         report.failed("Variables", _not_set(missing))
     else:
+        # No grading model when the agent is a decision model, which the Config check refuses.
+        graders = f", grading model {models.graders_shown()}" if models.graders else ""
         report.ok(
-            "Variables",
-            f"{', '.join(dict.fromkeys(needed))} set; model {with_effort(model, models.effort)}, "
-            f"grading model {models.graders_shown()}",
+            "Variables", f"{', '.join(dict.fromkeys(needed))} set; model {with_effort(model, models.effort)}{graders}"
         )
 
     if model is not None:
