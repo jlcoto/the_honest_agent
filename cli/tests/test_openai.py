@@ -26,6 +26,7 @@ from honest_agent.llm import (
     OpenAIJudge,
     provider_error,
     provider_for,
+    recorded_provider,
     response_cache_tokens,
     response_stop,
     response_text,
@@ -61,23 +62,50 @@ def _fake_openai(*responses):
 
 
 def test_the_openai_judge_returns_the_response_as_is_and_it_reads_back():
-    client = _fake_openai(_completion('{"score": 1.0}', prompt_tokens=30, completion_tokens=8))
+    reply = {
+        "output": [
+            {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "gAAAA"},
+            {
+                "type": "message",
+                "id": "msg_1",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": '{"score": 1.0}', "annotations": []}],
+            },
+        ],
+        "status": "completed",
+        "usage": {"input_tokens": 30, "output_tokens": 8, "output_tokens_details": {"reasoning_tokens": 4}},
+    }
+    client = NS(responses=_FakeCompletions([reply]))
 
     schema = GRADING_SCHEMAS["llm_judge"]
     judge = OpenAIJudge(client)
     response = asyncio.run(judge.complete("grade this", model="gpt-5.4-mini", max_tokens=200, schema=schema))
     recorded = to_jsonable(response)
 
-    (call,) = client.chat.completions.calls
-    assert "reasoning_effort" not in call  # none set: the provider's default
-    assert call["response_format"] == {
-        "type": "json_schema",
-        "json_schema": {"name": "grade", "strict": True, "schema": schema},
-    }
+    (call,) = client.responses.calls
+    assert call["input"] == [{"role": "user", "content": "grade this"}]
+    assert "reasoning" not in call  # none set: the model's default
+    assert call["text"] == {"format": {"type": "json_schema", "name": "grade", "strict": True, "schema": schema}}
+    assert call["store"] is False
+
+    assert response_text(OPENAI_RESPONSES, recorded) == '{"score": 1.0}'
+    assert response_tokens(OPENAI_RESPONSES, recorded) == (30, 8)
+    assert response_stop(OPENAI_RESPONSES, recorded) == "end_turn"
+    assert response_tokens(ANTHROPIC, {"usage": {"input_tokens": 12, "output_tokens": 3}}) == (12, 3)
+
+
+def test_an_old_chat_completions_grading_reply_still_reads():
+    recorded = to_jsonable(_completion('{"score": 1.0}', prompt_tokens=30, completion_tokens=8))
 
     assert response_text(OPENAI_CHAT, recorded) == '{"score": 1.0}'
     assert response_tokens(OPENAI_CHAT, recorded) == (30, 8)
-    assert response_tokens(ANTHROPIC, {"usage": {"input_tokens": 12, "output_tokens": 3}}) == (12, 3)
+
+
+def test_grading_calls_are_recorded_under_the_api_they_go_to():
+    assert recorded_provider("gpt-6.1-sol") == OPENAI_RESPONSES
+    assert recorded_provider("claude-sonnet-5-5") == ANTHROPIC
+    assert recorded_provider("decision:gpt-6-luna") == "openai_decisions"
 
 
 class _FakeMCP:
@@ -299,12 +327,14 @@ def test_input_tokens_count_cached_ones_and_the_cache_split_is_kept():
     assert response_cache_tokens(ANTHROPIC, {"usage": {"input_tokens": 1, "output_tokens": 1}}) == (0, 0)
 
 
-def test_the_openai_judge_and_chat_agent_send_their_effort_as_reasoning_effort():
-    client = _fake_openai(_completion('{"score": 1.0}'))
+def test_the_openai_judge_sends_its_effort_under_reasoning():
+    client = NS(responses=_FakeCompletions([{"output": [], "status": "completed"}]))
     schema = GRADING_SCHEMAS["llm_judge"]
     asyncio.run(OpenAIJudge(client).complete("grade", model="gpt-6.1-sol", max_tokens=200, schema=schema, effort="low"))
-    assert client.chat.completions.calls[0]["reasoning_effort"] == "low"
+    assert client.responses.calls[0]["reasoning"] == {"effort": "low"}
 
+
+def test_the_chat_agent_sends_its_effort_as_reasoning_effort():
     openai, recorder = _fake_openai(_completion("2297")), _Recorder()
     agent = OpenAIMCPAgentClient(_FakeMCP(), model="gpt-5.4-mini", tools=[], effort="high", client=openai)
     asyncio.run(agent.run("How many?", recorder))

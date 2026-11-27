@@ -31,6 +31,7 @@ from .llm import (
     make_judge,
     provider_error,
     provider_for,
+    recorded_provider,
 )
 from .mcp_client import DEFAULT_TOOL_TIMEOUT
 from .prices import PRICES_AS_OF, price_for, usd
@@ -98,7 +99,7 @@ async def eval_loop(
                         request["effort"] = effort
                     await record.call(
                         "grading_call",
-                        provider_for(grader),
+                        recorded_provider(grader),
                         request,
                         judges[grader].complete(
                             prompt,

@@ -383,6 +383,31 @@ def test_the_grading_call_is_kept_for_the_report(tmp_path: Path):
     assert details["duration_ms"] is not None
 
 
+def test_an_openai_responses_grading_call_is_scored_and_kept_for_the_report(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    reply = _responses_reply(
+        _reasoning_item("rs_1"),
+        _message_item('{"extracted_answer": "2297"}'),
+        input_tokens=741,
+        output_tokens=60,
+        reasoning=43,
+    )
+    grading = ("grading_call", "openai_responses", {"model": "gpt-6.1-sol", "max_tokens": 2048, "prompt": "..."}, reply)
+    record(
+        path,
+        [model_call(claude_reply(text("It was 2297."))), grading],
+        eval_definition=definition(grading_method="extract_match", expected_answer="2297"),
+    )
+
+    row = _derive(path)
+    details = json.loads(row["grading_call"])
+
+    assert (row["accuracy_score"], row["extracted_answer"]) == (1.0, "2297")
+    assert details["reply"] == '{"extracted_answer": "2297"}'
+    assert details["stop_reason"] == "end_turn"
+    assert (details["input_tokens"], details["output_tokens"], details["thinking_tokens"]) == (741, 60, 43)
+
+
 def test_contains_keeps_no_grading_call(tmp_path: Path):
     path = str(tmp_path / "results.duckdb")
     record(path, [model_call(claude_reply(text("It was 2297.")))], eval_definition=definition(expected_answer="2297"))

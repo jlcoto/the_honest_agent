@@ -144,18 +144,24 @@ class AnthropicJudge:
 
 
 class OpenAIJudge:
+    """GPT as the judge, on the Responses API like the OpenAI agent; its calls are
+    recorded as OPENAI_RESPONSES (recorded_provider)."""
+
     def __init__(self, client: Any = None):
         self._client = client or openai_client()
 
     async def complete(self, prompt: str, model: str, max_tokens: int, schema: dict, effort: str | None = None) -> Any:
+        # Structured output: the reply's text is JSON that matches `schema`.
         # No output cap here: on reasoning models (gpt-5.x, o-series) the cap also
         # counts hidden reasoning tokens, so a small one can leave the answer empty.
         # Grading prompts ask for a one-line JSON object, so the output stays short.
-        return await self._client.chat.completions.create(
+        # Nothing is kept at OpenAI (`store: false`), as for the agent.
+        return await self._client.responses.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_schema", "json_schema": {"name": "grade", "strict": True, "schema": schema}},
-            **effort_params(OPENAI_CHAT, effort),
+            input=[{"role": "user", "content": prompt}],
+            text={"format": {"type": "json_schema", "name": "grade", "strict": True, "schema": schema}},
+            store=False,
+            **effort_params(OPENAI_RESPONSES, effort),
         )
 
 
@@ -316,6 +322,13 @@ def output_texts(response: dict) -> list[dict]:
         for part in item.get("content") or []
         if part.get("type") == "output_text"
     ]
+
+
+def recorded_provider(model: str) -> str:
+    """What a call to `model` is recorded under in raw.events: its provider, or for an
+    OpenAI model the API it goes to, the Responses API."""
+    provider = provider_for(model)
+    return OPENAI_RESPONSES if provider == OPENAI else provider
 
 
 def make_judge(provider: str) -> Judge | DecisionJudge:
