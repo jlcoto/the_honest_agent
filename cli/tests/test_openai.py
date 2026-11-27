@@ -33,6 +33,7 @@ from honest_agent.llm import (
     response_tokens,
 )
 from honest_agent.openai_agent_runner import OpenAIMCPAgentClient, OpenAIResponsesAgentClient
+from honest_agent.runner import run_apis
 
 
 def test_provider_is_inferred_from_the_model_name():
@@ -100,6 +101,20 @@ def test_an_old_chat_completions_grading_reply_still_reads():
 
     assert response_text(OPENAI_CHAT, recorded) == '{"score": 1.0}'
     assert response_tokens(OPENAI_CHAT, recorded) == (30, 8)
+
+
+def test_a_run_saves_the_api_of_its_agent_and_each_grading_model():
+    graders = {"extract_match": "gpt-6.1-sol", "llm_judge": "jev-1.14.0"}
+    assert run_apis("gpt-5.4-mini", graders) == {
+        "agent": "openai_responses",
+        "extract_match": "openai_responses",
+        "llm_judge": "typesafe",
+    }
+    assert run_apis("claude-haiku-5-5", {"extract_match": "claude-sonnet-5-5", "llm_judge": "gpt-4o"}) == {
+        "agent": "anthropic_messages",
+        "extract_match": "anthropic_messages",
+        "llm_judge": "openai_responses",
+    }
 
 
 def test_grading_calls_are_recorded_under_the_api_they_go_to():

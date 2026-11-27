@@ -26,6 +26,7 @@ from .llm import (
     OPENAI,
     DecisionJudge,
     Judge,
+    api_for,
     effort_unsupported,
     is_decision_model,
     make_judge,
@@ -200,6 +201,13 @@ def saved_prices(model: str, graders: dict[str, str], custom: dict | None) -> di
     return {"as_of": PRICES_AS_OF, "models": models}
 
 
+def run_apis(model: str, graders: dict[str, str]) -> dict[str, str]:
+    """The API of the agent's model and of each method's grading model, which a run saves:
+    the same model can go to another API after an update (OpenAI's moved from Chat
+    Completions to the Responses API), so runs before and after compare."""
+    return {"agent": api_for(model), **{method: api_for(name) for method, name in graders.items()}}
+
+
 def graders_label(graders: dict[str, str]) -> str:
     """The grading models as one line: the model, or `extract_match claude-sonnet-5-5 ·
     llm_judge jev-1.14.0` when the two methods use different ones."""
@@ -339,6 +347,7 @@ async def run_evals(
                 "effort": effort,
                 "grading_effort": grading_effort,
                 "grading_models": graders,
+                "apis": run_apis(model, graders),
                 "prices": saved_prices(model, graders, prices),
             },
             tools_offered=tools,

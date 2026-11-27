@@ -324,6 +324,18 @@ def output_texts(response: dict) -> list[dict]:
     ]
 
 
+# The API an LLM provider's calls go to, as a run's settings name it (runner.run_apis).
+# A decision provider has one API, named by the provider.
+_APIS = {ANTHROPIC: "anthropic_messages", OPENAI: OPENAI_RESPONSES}
+
+
+def api_for(model: str) -> str:
+    """The API calls to `model` go to: anthropic_messages, openai_responses, or a decision
+    model's provider."""
+    provider = provider_for(model)
+    return _APIS.get(provider, provider)
+
+
 def recorded_provider(model: str) -> str:
     """What a call to `model` is recorded under in raw.events: its provider, or for an
     OpenAI model the API it goes to, the Responses API."""
