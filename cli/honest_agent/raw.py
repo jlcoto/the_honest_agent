@@ -60,7 +60,7 @@ _RAW_TABLES = {
         ("result_id", "varchar"),
         ("seq", "integer"),  # 0-based order within the eval
         ("kind", "varchar"),  # model_call | tool_call | grading_call | eval_error
-        ("provider", "varchar"),  # anthropic | openai | mcp; NULL for eval_error
+        ("provider", "varchar"),  # anthropic | openai_responses | openai | mcp | ... (llm.py); NULL for eval_error
         ("started_at", "timestamp"),
         ("duration_ms", "integer"),
         ("request", "varchar"),  # JSON as sent (a model call's without the earlier history)

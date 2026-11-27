@@ -106,7 +106,8 @@ def test_a_step_has_no_cost_when_the_run_saved_no_price(tmp_path: Path):
     assert step["cost_usd"] is None  # unknown, not $0
 
 
-def test_an_openai_run_is_converted_to_the_same_conversation_format(tmp_path: Path):
+def test_an_openai_chat_completions_run_is_converted_to_the_same_conversation_format(tmp_path: Path):
+    # Runs before the Responses API: they still read.
     path = str(tmp_path / "results.duckdb")
     call = {
         "id": "c1",
@@ -144,6 +145,91 @@ def test_an_openai_run_is_converted_to_the_same_conversation_format(tmp_path: Pa
         "role": "assistant",
         "content": [{"type": "tool_use", "id": "c1", "name": "query_warehouse", "input": {"sql": SQL}}],
     }
+
+
+def _responses_reply(*output: dict, input_tokens: int, output_tokens: int, reasoning: int = 0, **rest) -> dict:
+    return {
+        "output": list(output),
+        "status": "completed",
+        "usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "input_tokens_details": {"cached_tokens": 0},
+            "output_tokens_details": {"reasoning_tokens": reasoning},
+        },
+        **rest,
+    }
+
+
+def _reasoning_item(item_id: str) -> dict:
+    return {"type": "reasoning", "id": item_id, "summary": [], "encrypted_content": "gAAAA"}
+
+
+def _message_item(words: str) -> dict:
+    content = [{"type": "output_text", "text": words, "annotations": []}]
+    return {"type": "message", "id": "msg_1", "role": "assistant", "status": "completed", "content": content}
+
+
+def test_an_openai_responses_run_is_converted_to_the_same_conversation_format(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    call = {
+        "type": "function_call",
+        "id": "fc_1",
+        "call_id": "call_1",
+        "name": "query_warehouse",
+        "arguments": json.dumps({"sql": SQL}),
+        "status": "completed",
+    }
+    record(
+        path,
+        [
+            model_call(
+                _responses_reply(
+                    _reasoning_item("rs_1"), _message_item("Let me check."), call, input_tokens=100, output_tokens=20
+                ),
+                provider="openai_responses",
+            ),
+            tool_call("call_1", "query_warehouse", {"sql": SQL}, mcp_result("4")),
+            model_call(
+                _responses_reply(_reasoning_item("rs_2"), _message_item("4"), input_tokens=150, output_tokens=3),
+                provider="openai_responses",
+            ),
+        ],
+    )
+
+    row = _derive(path)
+
+    assert row["agent_answer"] == "4"
+    assert [s["stop_reason"] for s in json.loads(row["step_details"])["steps"]] == ["tool_use", "end_turn"]
+    assert (row["agent_input_tokens"], row["agent_output_tokens"]) == (250, 23)
+    trace = json.loads(row["agent_trace"])
+    # Reasoning isn't shown; the tool call goes by its call_id, which its result answers.
+    assert trace[1] == {
+        "role": "assistant",
+        "content": [
+            {"type": "text", "text": "Let me check."},
+            {"type": "tool_use", "id": "call_1", "name": "query_warehouse", "input": {"sql": SQL}},
+        ],
+    }
+    assert trace[2]["content"][0]["tool_use_id"] == "call_1"
+    assert row["tools_used"] == ["query_warehouse"]
+
+
+def test_an_openai_responses_reply_cut_off_is_reported_too(tmp_path: Path):
+    path = str(tmp_path / "results.duckdb")
+    reply = _responses_reply(
+        _message_item("Revenue"),
+        input_tokens=10,
+        output_tokens=5,
+        status="incomplete",
+        incomplete_details={"reason": "max_output_tokens"},
+    )
+    record(path, [model_call(reply, provider="openai_responses")])
+
+    row = _derive(path)
+
+    assert row["agent_answer"].startswith(CUT_OFF_ANSWER)
+    assert json.loads(row["step_details"])["steps"][0]["stop_reason"] == "max_output_tokens"
 
 
 def test_a_last_reply_still_asking_for_tools_means_the_agent_ran_out_of_steps(tmp_path: Path):

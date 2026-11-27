@@ -346,9 +346,11 @@ async def run_evals(
         sql_fields = {tool: field for d in definitions for tool, field in d.sql_fields.items()}
         tool_caller = ReadOnlySQL(connected, sql_fields, ignore_tools, tool_timeout)
         if openai_agent:
-            from .openai_agent_runner import OpenAIMCPAgentClient
+            # The Responses API for every OpenAI model; the Chat Completions client stays
+            # for endpoints that speak only that.
+            from .openai_agent_runner import OpenAIResponsesAgentClient
 
-            agent = OpenAIMCPAgentClient(
+            agent = OpenAIResponsesAgentClient(
                 tool_caller,
                 model=model,
                 tools=tools,
